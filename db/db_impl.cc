@@ -135,7 +135,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   has_imm_.Release_Store(NULL);
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
-  const int table_cache_size = options.max_open_files - 10;
+  const int table_cache_size = options_.max_open_files - 10;
   table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
