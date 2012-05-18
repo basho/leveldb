@@ -26,4 +26,23 @@ Options::Options()
 }
 
 
+void
+Options::Dump(
+    Logger * log) const
+{
+    Log(log,"            Options.comparator: %p", comparator);
+    Log(log,"     Options.create_if_missing: %d", create_if_missing);
+    Log(log,"       Options.error_if_exists: %d", error_if_exists);
+    Log(log,"       Options.paranoid_checks: %d", paranoid_checks);
+    Log(log,"                   Options.env: %p", env);
+    Log(log,"              Options.info_log: %p", info_log);
+    Log(log,"     Options.write_buffer_size: %zd", write_buffer_size);
+    Log(log,"        Options.max_open_files: %d", max_open_files);
+    Log(log,"           Options.block_cache: %p", block_cache);
+    Log(log,"            Options.block_size: %d", block_size);
+    Log(log,"Options.block_restart_interval: %d", block_restart_interval);
+    Log(log,"         Options.filter_policy: %p", filter_policy);
+
+}   // Options::Dump
+
 }  // namespace leveldb

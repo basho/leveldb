@@ -137,6 +137,8 @@ struct Options {
 
   // Create an Options object with default values for all fields.
   Options();
+
+  void Dump(Logger * log) const;
 };
 
 // Options that control read operations
