@@ -123,7 +123,8 @@ class Env {
   // serialized.
   virtual void Schedule(
       void (*function)(void* arg),
-      void* arg) = 0;
+      void* arg,
+      int state=0) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
@@ -205,7 +206,7 @@ class WritableFile {
   virtual ~WritableFile();
 
   virtual Status Append(const Slice& data) = 0;
-  virtual Status Close() = 0;
+  virtual Status Close(bool async=true) = 0;
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;
 

@@ -450,8 +450,16 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   Status s;
   {
+    Options local_options;
+
     mutex_.Unlock();
-    s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+
+    // want the data slammed to disk as fast as possible,
+    //  no compression for level 0.
+    local_options=options_;
+    local_options.compression=kNoCompression;
+    s = BuildTable(dbname_, env_, local_options, table_cache_, iter, &meta);
+
     mutex_.Lock();
   }
 
@@ -586,7 +594,40 @@ Status DBImpl::TEST_CompactMemTable() {
 
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
-  if (bg_compaction_scheduled_) {
+
+  int state;
+  bool push;
+
+  // decide which background thread gets the compaction job
+  state=0;
+  push=false;
+
+  // writing of memory to disk: high priority
+  if (NULL!=imm_)
+      push=true;
+
+  if (!push)
+  {
+      Compaction * c_ptr;
+      c_ptr=versions_->PickCompaction();
+
+      // compaction of level 0 files:  high priority
+      if (NULL!=c_ptr && c_ptr->level()==0)
+          push=true;
+      delete c_ptr;
+  }   // if
+
+  if (push)
+  {
+      // is something else already on background work queue
+      if (bg_compaction_scheduled_)
+          state=2;
+      else
+          state=1;
+  }   // if
+
+
+  if (bg_compaction_scheduled_ && NULL==imm_) {
     // Already scheduled
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
@@ -596,7 +637,7 @@ void DBImpl::MaybeScheduleCompaction() {
     // No work to be done
   } else {
     bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this);
+    env_->Schedule(&DBImpl::BGWork, this, state);
   }
 }
 
@@ -1070,7 +1111,8 @@ Status DBImpl::Get(const ReadOptions& options,
   }
 
   if (have_stat_update && current->UpdateStats(stats)) {
-    MaybeScheduleCompaction();
+      // no compactions initiated by reads, takes too long
+      // MaybeScheduleCompaction();
   }
   mem->Unref();
   if (imm != NULL) imm->Unref();

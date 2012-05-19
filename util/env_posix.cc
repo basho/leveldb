@@ -25,6 +25,10 @@
 #include "util/logging.h"
 #include "util/posix_logger.h"
 
+#if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
+#define HAVE_FADVISE
+#endif
+
 namespace leveldb {
 
 namespace {
@@ -32,6 +36,25 @@ namespace {
 static Status IOError(const std::string& context, int err_number) {
   return Status::IOError(context, strerror(err_number));
 }
+
+// background routines to close and/or unmap files
+static void BGFileCloser(void* file_info);
+static void BGFileCloser2(void* file_info);
+static void BGFileUnmapper(void* file_info);
+static void BGFileUnmapper2(void* file_info);
+
+// data needed by background routines for close/unmap
+struct BGCloseInfo
+{
+    int fd_;
+    void * base_;
+    size_t offset_;
+    size_t length_;
+    size_t unused_;
+
+    BGCloseInfo(int fd, void * base, size_t offset, size_t length, size_t unused)
+        : fd_(fd), base_(base), offset_(offset), length_(length), unused_(unused) {};
+};
 
 class PosixSequentialFile: public SequentialFile {
  private:
@@ -96,12 +119,22 @@ class PosixMmapReadableFile: public RandomAccessFile {
   std::string filename_;
   void* mmapped_region_;
   size_t length_;
+  int fd_;
 
  public:
   // base[0,length-1] contains the mmapped contents of the file.
-  PosixMmapReadableFile(const std::string& fname, void* base, size_t length)
-      : filename_(fname), mmapped_region_(base), length_(length) { }
-  virtual ~PosixMmapReadableFile() { munmap(mmapped_region_, length_); }
+  PosixMmapReadableFile(const std::string& fname, void* base, size_t length, int fd)
+      : filename_(fname), mmapped_region_(base), length_(length), fd_(fd)
+  {
+#if defined(HAVE_FADVISE)
+    posix_fadvise(fd_, 0, length_, POSIX_FADV_RANDOM);
+#endif
+  }
+  virtual ~PosixMmapReadableFile()
+  {
+    BGCloseInfo * ptr=new BGCloseInfo(fd_, mmapped_region_, 0, length_, 0);
+    Env::Default()->Schedule(&BGFileCloser, ptr, 4);
+  };
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
@@ -146,16 +179,25 @@ class PosixMmapFile : public WritableFile {
     return s;
   }
 
-  bool UnmapCurrentRegion() {
+  bool UnmapCurrentRegion(bool and_close=false) {
     bool result = true;
     if (base_ != NULL) {
       if (last_sync_ < limit_) {
         // Defer syncing this data until next Sync() call, if any
         pending_sync_ = true;
       }
-      if (munmap(base_, limit_ - base_) != 0) {
-        result = false;
-      }
+
+      BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_, limit_-dst_);
+      if (and_close)
+      {
+          Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
+          fd_=-1;
+      }   // if
+      else
+      {
+          Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
+      }   // else
+
       file_offset_ += limit_ - base_;
       base_ = NULL;
       limit_ = NULL;
@@ -232,23 +274,33 @@ class PosixMmapFile : public WritableFile {
     return Status::OK();
   }
 
-  virtual Status Close() {
+  virtual Status Close(bool async=true) {
     Status s;
     size_t unused = limit_ - dst_;
-    if (!UnmapCurrentRegion()) {
-      s = IOError(filename_, errno);
-    } else if (unused > 0) {
-      // Trim the extra space at the end of the file
-      if (ftruncate(fd_, file_offset_ - unused) < 0) {
-        s = IOError(filename_, errno);
-      }
-    }
 
-    if (close(fd_) < 0) {
-      if (s.ok()) {
-        s = IOError(filename_, errno);
-      }
-    }
+    if (!async)
+    {
+        if (!UnmapCurrentRegion()) {
+            s = IOError(filename_, errno);
+        } else if (unused > 0) {
+            // Trim the extra space at the end of the file
+            if (ftruncate(fd_, file_offset_ - unused) < 0) {
+                s = IOError(filename_, errno);
+            }
+        }
+
+        if (close(fd_) < 0) {
+            if (s.ok()) {
+                s = IOError(filename_, errno);
+            }
+        }
+    }   // if
+    else
+    {
+        if (!UnmapCurrentRegion(true)) {
+            s = IOError(filename_, errno);
+        }
+    }   // else
 
     fd_ = -1;
     base_ = NULL;
@@ -336,12 +388,12 @@ class PosixEnv : public Env {
       if (s.ok()) {
         void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
         if (base != MAP_FAILED) {
-          *result = new PosixMmapReadableFile(fname, base, size);
+            *result = new PosixMmapReadableFile(fname, base, size, fd);
         } else {
           s = IOError(fname, errno);
+          close(fd);
         }
       }
-      close(fd);
     } else {
       *result = new PosixRandomAccessFile(fname, fd);
     }
@@ -452,7 +504,7 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual void Schedule(void (*function)(void*), void* arg);
+  virtual void Schedule(void (*function)(void*), void* arg, int state=0);
 
   virtual void StartThread(void (*function)(void* arg), void* arg);
 
@@ -517,12 +569,16 @@ class PosixEnv : public Env {
   pthread_mutex_t mu_;
   pthread_cond_t bgsignal_;
   pthread_t bgthread_;
+  pthread_t bgthread2_;
+  pthread_t bgthread3_;
   bool started_bgthread_;
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); };
   typedef std::deque<BGItem> BGQueue;
   BGQueue queue_;
+  BGQueue queue2_;
+  BGQueue queue3_;
 };
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
@@ -531,42 +587,125 @@ PosixEnv::PosixEnv() : page_size_(getpagesize()),
   PthreadCall("cvar_init", pthread_cond_init(&bgsignal_, NULL));
 }
 
-void PosixEnv::Schedule(void (*function)(void*), void* arg) {
+// state: 0 - legacy/default, 4 - close/unmap, 2 - test for queue switch, 1 - imm/high priority
+void PosixEnv::Schedule(void (*function)(void*), void* arg, int state) {
   PthreadCall("lock", pthread_mutex_lock(&mu_));
 
   // Start background thread if necessary
   if (!started_bgthread_) {
     started_bgthread_ = true;
+
+    // future, set SCHED_FIFO ... assume application at priority 50
+    /// legacy compaction thread priority 45, 5 points lower
     PthreadCall(
         "create thread",
         pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this));
+
+    /// imm->level0 or level0 compaction, speed thread priority 60
+    PthreadCall(
+        "create thread 2",
+        pthread_create(&bgthread2_, NULL,  &PosixEnv::BGThreadWrapper, this));
+
+    /// close / unmap thread priority 47, higher than compaction but lower than application
+    PthreadCall(
+        "create thread 3",
+        pthread_create(&bgthread3_, NULL,  &PosixEnv::BGThreadWrapper, this));
+
   }
 
   // If the queue is currently empty, the background thread may currently be
   // waiting.
-  if (queue_.empty()) {
-    PthreadCall("signal", pthread_cond_signal(&bgsignal_));
+  if (queue_.empty() || queue2_.empty()) {
+    PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
   }
 
-  // Add to priority queue
-  queue_.push_back(BGItem());
-  queue_.back().function = function;
-  queue_.back().arg = arg;
+  if (0 != state)
+  {
+      BGQueue::iterator it;
+      bool found;
+
+      // close / unmap memory mapped files
+      if (4==state)
+      {
+          if (queue3_.empty())
+              PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
+
+          queue3_.push_back(BGItem());
+          queue3_.back().function = function;
+          queue3_.back().arg = arg;
+      }   // if
+
+      // only "switch" lists if found waiting on slow compaction list
+      else if (2==state)
+      {
+          for (found=false, it=queue_.begin(); queue_.end()!=it && !found; ++it)
+          {
+              found= (it->arg == arg);
+              if (found)
+              {
+                  BGQueue::iterator del_it;
+
+                  del_it=it;
+                  ++it;
+
+                  queue_.erase(del_it);
+                  queue2_.push_back(BGItem());
+                  queue2_.back().function = function;
+                  queue2_.back().arg = arg;
+              }   // if
+          }   // for
+      }   // if
+
+      // state 1, imm_ only
+      else
+      {
+          queue2_.push_back(BGItem());
+          queue2_.back().function = function;
+          queue2_.back().arg = arg;
+      }   // else
+  }   // if
+  else
+  {
+      // low priority compaction (not imm, not level0)
+      queue_.push_back(BGItem());
+      queue_.back().function = function;
+      queue_.back().arg = arg;
+  }   // else
 
   PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 }
 
 void PosixEnv::BGThread() {
+  BGQueue * queue_ptr;
+
+  // pick source of thread's work
+  if (bgthread3_==pthread_self())
+      queue_ptr=&queue3_;
+  else if (bgthread2_==pthread_self())
+      queue_ptr=&queue2_;
+  else
+      queue_ptr=&queue_;
+
+  struct timeval now, wait;
+  struct timespec end;
+
+  wait.tv_sec=0;
+  wait.tv_usec=1000;
+
   while (true) {
     // Wait until there is an item that is ready to run
+      gettimeofday(&now, NULL);
     PthreadCall("lock", pthread_mutex_lock(&mu_));
-    while (queue_.empty()) {
-      PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
+    while (queue_ptr->empty()) {
+//      PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
+        timeradd(&now, &wait, &now);
+        TIMEVAL_TO_TIMESPEC(&now, &end);
+        pthread_cond_timedwait(&bgsignal_, &mu_, &end);
     }
 
-    void (*function)(void*) = queue_.front().function;
-    void* arg = queue_.front().arg;
-    queue_.pop_front();
+    void (*function)(void*) = queue_ptr->front().function;
+    void* arg = queue_ptr->front().arg;
+    queue_ptr->pop_front();
 
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
     (*function)(arg);
@@ -595,15 +734,113 @@ void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
               pthread_create(&t, NULL,  &StartThreadWrapper, state));
 }
 
+// this was a reference file:  unmap, purge page cache, close
+void BGFileCloser(void * arg)
+{
+    BGCloseInfo * file_ptr;
+
+    file_ptr=(BGCloseInfo *)arg;
+
+    munmap(file_ptr->base_, file_ptr->length_);
+
+#if defined(HAVE_FADVISE)
+    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+#endif
+
+    if (0 != file_ptr->unused_)
+        ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+
+    close(file_ptr->fd_);
+    delete file_ptr;
+
+    return;
+
+}   // BGFileCloser
+
+// this was a new file:  unmap, hold in page cache, close
+void BGFileCloser2(void * arg)
+{
+    BGCloseInfo * file_ptr;
+
+    file_ptr=(BGCloseInfo *)arg;
+
+    munmap(file_ptr->base_, file_ptr->length_);
+
+#if defined(HAVE_FADVISE)
+    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+#endif
+
+    if (0 != file_ptr->unused_)
+        ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+
+    close(file_ptr->fd_);
+    delete file_ptr;
+
+    return;
+
+}   // BGFileCloser2
+
+// this was a reference file:  unmap, purge page cache
+void BGFileUnmapper(void * arg)
+{
+    BGCloseInfo * file_ptr;
+
+    file_ptr=(BGCloseInfo *)arg;
+
+    munmap(file_ptr->base_, file_ptr->length_);
+
+#if defined(HAVE_FADVISE)
+    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+#endif
+
+    delete file_ptr;
+
+    return;
+
+}   // BGFileUnmapper
+
+// this was a new file:  unmap, hold in page cache
+void BGFileUnmapper2(void * arg)
+{
+    BGCloseInfo * file_ptr;
+
+    file_ptr=(BGCloseInfo *)arg;
+
+    munmap(file_ptr->base_, file_ptr->length_);
+
+#if defined(HAVE_FADVISE)
+    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+#endif
+
+    delete file_ptr;
+
+    return;
+
+}   // BGFileUnmapper2
+
 }  // namespace
 
+// how many blocks of 3 priority background threads/queues
+/// for riak, make sure this is an odd number (and especially not 4)
+#define THREAD_BLOCKS 7
+
 static pthread_once_t once = PTHREAD_ONCE_INIT;
-static Env* default_env;
-static void InitDefaultEnv() { default_env = new PosixEnv; }
+static Env* default_env[THREAD_BLOCKS];
+static unsigned count=0;
+static void InitDefaultEnv()
+{
+    int loop;
+
+    for (loop=0; loop<THREAD_BLOCKS; ++loop)
+    {
+        default_env[loop]=new PosixEnv;
+    }   // for
+}
 
 Env* Env::Default() {
   pthread_once(&once, InitDefaultEnv);
-  return default_env;
+  ++count;
+  return default_env[count % THREAD_BLOCKS];
 }
 
 }  // namespace leveldb
