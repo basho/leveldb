@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
 #include "leveldb/cache.h"
 #include "port/port.h"
@@ -32,6 +33,7 @@ struct LRUHandle {
   size_t key_length;
   uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
+  struct timeval last_access;
   char key_data[1];   // Beginning of key
 
   Slice key() const {
@@ -133,20 +135,48 @@ class HandleTable {
 };
 
 // A single shard of sharded cache.
-class LRUCache {
+class LRUCache : public Cache {
  public:
   LRUCache();
   ~LRUCache();
 
+  static inline uint32_t HashSlice(const Slice& s) {
+    return Hash(s.data(), s.size(), 0);
+  }
   // Separate from constructor so caller can easily make an array of LRUCache
   void SetCapacity(size_t capacity) { capacity_ = capacity; }
+
+  size_t GetCapacity() const {return(capacity_);};
+  size_t GetUsage() const {return(usage_);};
+
+  // Cache methods to allow direct use for single shard
+  virtual Cache::Handle* Insert(const Slice& key,
+                        void* value, size_t charge,
+                        void (*deleter)(const Slice& key, void* value))
+        {return(Insert(key, HashSlice(key), value, charge, deleter));};
+
+  virtual Cache::Handle* Lookup(const Slice& key)
+        {return(Lookup(key, HashSlice(key)));};
+
+  virtual void Release(Cache::Handle* handle);
+  virtual void Erase(const Slice& key)
+       {Erase(key, HashSlice(key));};
+  virtual void* Value(Handle* handle) {
+    return reinterpret_cast<LRUHandle*>(handle)->value;
+  }
+
+  virtual uint64_t NewId() {
+    return (++last_id_);
+  }
+
+  virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
 
   // Like Cache methods, but with an extra "hash" parameter.
   Cache::Handle* Insert(const Slice& key, uint32_t hash,
                         void* value, size_t charge,
                         void (*deleter)(const Slice& key, void* value));
   Cache::Handle* Lookup(const Slice& key, uint32_t hash);
-  void Release(Cache::Handle* handle);
+
   void Erase(const Slice& key, uint32_t hash);
 
  private:
@@ -158,9 +188,10 @@ class LRUCache {
   size_t capacity_;
 
   // mutex_ protects the following state.
-  port::Mutex mutex_;
+  port::RWMutex mutex_;
+
   size_t usage_;
-  uint64_t last_id_;
+  volatile uint64_t last_id_;
 
   // Dummy head of LRU list.
   // lru.prev is newest entry, lru.next is oldest entry.
@@ -210,25 +241,26 @@ void LRUCache::LRU_Append(LRUHandle* e) {
 }
 
 Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
-  MutexLock l(&mutex_);
-  LRUHandle* e = table_.Lookup(key, hash);
+  LRUHandle* e;
+  {
+    ReadLock l(&mutex_);
+    e = table_.Lookup(key, hash);
+  }
   if (e != NULL) {
     e->refs++;
-    LRU_Remove(e);
-    LRU_Append(e);
+    gettimeofday(&e->last_access, NULL);
   }
   return reinterpret_cast<Cache::Handle*>(e);
 }
 
 void LRUCache::Release(Cache::Handle* handle) {
-  MutexLock l(&mutex_);
+  WriteLock l(&mutex_);
   Unref(reinterpret_cast<LRUHandle*>(handle));
 }
 
 Cache::Handle* LRUCache::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
-  MutexLock l(&mutex_);
 
   LRUHandle* e = reinterpret_cast<LRUHandle*>(
       malloc(sizeof(LRUHandle)-1 + key.size()));
@@ -238,7 +270,10 @@ Cache::Handle* LRUCache::Insert(
   e->key_length = key.size();
   e->hash = hash;
   e->refs = 2;  // One from LRUCache, one for the returned handle
+  gettimeofday(&e->last_access, NULL);
   memcpy(e->key_data, key.data(), key.size());
+
+  WriteLock l(&mutex_);
   LRU_Append(e);
   usage_ += charge;
 
@@ -249,17 +284,27 @@ Cache::Handle* LRUCache::Insert(
   }
 
   while (usage_ > capacity_ && lru_.next != &lru_) {
-    LRUHandle* old = lru_.next;
-    LRU_Remove(old);
-    table_.Remove(old->key(), old->hash);
-    Unref(old);
+    LRUHandle * low_ptr, * cursor;
+
+    // sequential scan when over capacity is overall faster
+    //  than requiring write lock to rearrange LRU on every read
+    low_ptr=lru_.next;
+    for (cursor=lru_.next;
+         cursor!=&lru_; cursor=cursor->next)
+    {
+        if (timercmp(&cursor->last_access, &low_ptr->last_access, <))
+            low_ptr=cursor;
+    }   // for
+    LRU_Remove(low_ptr);
+    table_.Remove(low_ptr->key(), low_ptr->hash);
+    Unref(low_ptr);
   }
 
   return reinterpret_cast<Cache::Handle*>(e);
 }
 
 void LRUCache::Erase(const Slice& key, uint32_t hash) {
-  MutexLock l(&mutex_);
+  WriteLock l(&mutex_);
   LRUHandle* e = table_.Remove(key, hash);
   if (e != NULL) {
     LRU_Remove(e);
@@ -274,7 +319,7 @@ class ShardedLRUCache : public Cache {
  private:
   LRUCache shard_[kNumShards];
   port::Mutex id_mutex_;
-  uint64_t last_id_;
+  volatile uint64_t last_id_;
 
   static inline uint32_t HashSlice(const Slice& s) {
     return Hash(s.data(), s.size(), 0);
@@ -314,15 +359,23 @@ class ShardedLRUCache : public Cache {
     return reinterpret_cast<LRUHandle*>(handle)->value;
   }
   virtual uint64_t NewId() {
-    MutexLock l(&id_mutex_);
-    return ++(last_id_);
+      return (++last_id_);
   }
+  virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
 };
+
 
 }  // end anonymous namespace
 
 Cache* NewLRUCache(size_t capacity) {
   return new ShardedLRUCache(capacity);
+}
+
+Cache* NewLRUCache2(size_t capacity) {
+    LRUCache * cache;
+    cache=new LRUCache();
+    cache->SetCapacity(capacity);
+    return cache;
 }
 
 }  // namespace leveldb
