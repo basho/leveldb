@@ -30,9 +30,6 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
-#include <syslog.h>
-#include "leveldb/perf_count.h"
-
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -42,6 +39,10 @@ namespace leveldb {
 pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
 
+// always have something active in gPerfCounters, eliminates
+//  need to test for "is shared object attached yet"
+static PerformanceCounters LocalStartupCounters;
+PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
 namespace {
 

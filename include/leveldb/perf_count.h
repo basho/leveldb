@@ -158,6 +158,7 @@ struct PerformanceCounters
 
 };  // struct PerformanceCounters
 
+extern PerformanceCounters * gPerfCounters;
 
 }  // namespace leveldb
 
