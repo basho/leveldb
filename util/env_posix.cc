@@ -28,6 +28,7 @@
 #include "util/logging.h"
 #include "util/posix_logger.h"
 #include "db/dbformat.h"
+#include "leveldb/perf_count.h"
 
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
@@ -37,6 +38,7 @@ namespace leveldb {
 
 pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
+
 
 namespace {
 
@@ -133,6 +135,8 @@ class PosixMmapReadableFile: public RandomAccessFile {
   PosixMmapReadableFile(const std::string& fname, void* base, size_t length, int fd)
       : filename_(fname), mmapped_region_(base), length_(length), fd_(fd)
   {
+    ++gPerfCounters->m_ROFileOpen;
+
 #if defined(HAVE_FADVISE)
     posix_fadvise(fd_, 0, length_, POSIX_FADV_RANDOM);
 #endif
@@ -265,6 +269,7 @@ class PosixMmapFile : public WritableFile {
         file_offset_(file_offset),
         pending_sync_(false) {
     assert((page_size & (page_size - 1)) == 0);
+    ++gPerfCounters->m_RWFileOpen;
   }
 
 
@@ -845,8 +850,17 @@ void PosixEnv::BGThread()
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
+
+        if (bgthread3_==pthread_self())
+            ++gPerfCounters->m_BGCloseUnmap;
+        else if (bgthread2_==pthread_self())
+            ++gPerfCounters->m_BGCompactImm;
+        else
+            ++gPerfCounters->m_BGNormal;
+
         (*function)(arg);
-    }   // while(true)
+    }   // while
+
 }
 
 namespace {
@@ -889,6 +903,7 @@ void BGFileCloser(void * arg)
 
     close(file_ptr->fd_);
     delete file_ptr;
+    ++gPerfCounters->m_ROFileClose;
 
     return;
 
@@ -913,6 +928,8 @@ void BGFileCloser2(void * arg)
     close(file_ptr->fd_);
     delete file_ptr;
 
+    ++gPerfCounters->m_RWFileClose;
+
     return;
 
 }   // BGFileCloser2
@@ -931,6 +948,7 @@ void BGFileUnmapper(void * arg)
 #endif
 
     delete file_ptr;
+    ++gPerfCounters->m_ROFileUnmap;
 
     return;
 
@@ -950,6 +968,7 @@ void BGFileUnmapper2(void * arg)
 #endif
 
     delete file_ptr;
+    ++gPerfCounters->m_RWFileUnmap;
 
     return;
 
@@ -968,7 +987,7 @@ static Env* default_env[THREAD_BLOCKS];
 static unsigned count=0;
 static void InitDefaultEnv()
 {
-    int loop;
+    int loop, fd;
 
     for (loop=0; loop<THREAD_BLOCKS; ++loop)
     {

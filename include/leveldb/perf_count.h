@@ -97,6 +97,11 @@ public:
 
 extern struct PerformanceCounters * gPerfCounters;
 
+=======
+
+namespace leveldb {
+
+>>>>>>> First pass at shared memory performance counters.
 struct PerformanceCounters
 {
     enum
@@ -158,53 +163,9 @@ struct PerformanceCounters
 
     void Dump();
 
-#if 0
-    // there is no CloseSharedMemFile at this time.
-    //  --> really need a Manager object that holds pointer, static struct,
-    //      and fd for process
-    static bool
-    OpenSharedMemFile(
-        const char * FileName)
-        {
-            bool good;
-            int fd;
-
-            good=false;
-            fd = open(FileName, O_CREAT | O_RDWR, 0644);
-            if (-1!=fd)
-            {
-                void * base;
-                int ret_val;
-
-                base=MAP_FAILED;
-
-                ret_val=ftruncate(fd, sizeof(PerformanceCounters));
-                if (-1 != ret_val)
-                {
-                    base=mmap(NULL, sizeof(PerformanceCounters),
-                              PROT_READ | PROT_WRITE, MAP_SHARED,
-                              fd, 0);
-                }   // if
-
-                if (MAP_FAILED != base)
-                {
-                    PerformanceCounters * perf;
-
-                    perf=(PerformanceCounters *)base;
-                    if (!perf->VersionTest())
-                        perf->Init();
-
-                    gPerfCounters=perf;
-                    good=true;
-                }   // if
-            }   // if
-
-            return(good);
-
-        };  // OpenSharedMemFile
-#endif
 };  // struct PerformanceCounters
 
+extern PerformanceCounters * gPerfCounters;
 
 }  // namespace leveldb
 
