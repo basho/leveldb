@@ -24,12 +24,20 @@
 #include "port/port.h"
 #include "util/logging.h"
 #include "util/posix_logger.h"
+#include "leveldb/perf_count.h"
+
+#include <syslog.h>
 
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
 
 namespace leveldb {
+
+// always have something active in gPerfCounters, eliminates
+//  need to test for "is shared object attached yet"
+static PerformanceCounters LocalStartupCounters;
+PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
 namespace {
 
@@ -126,6 +134,8 @@ class PosixMmapReadableFile: public RandomAccessFile {
   PosixMmapReadableFile(const std::string& fname, void* base, size_t length, int fd)
       : filename_(fname), mmapped_region_(base), length_(length), fd_(fd)
   {
+    ++gPerfCounters->m_ROFileOpen;
+
 #if defined(HAVE_FADVISE)
     posix_fadvise(fd_, 0, length_, POSIX_FADV_RANDOM);
 #endif
@@ -190,7 +200,8 @@ class PosixMmapFile : public WritableFile {
       BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_, limit_-dst_);
       if (and_close)
       {
-          Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
+//          Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
+          BGFileCloser2(ptr);
           fd_=-1;
       }   // if
       else
@@ -242,6 +253,7 @@ class PosixMmapFile : public WritableFile {
         file_offset_(0),
         pending_sync_(false) {
     assert((page_size & (page_size - 1)) == 0);
+    ++gPerfCounters->m_RWFileOpen;
   }
 
 
@@ -708,6 +720,14 @@ void PosixEnv::BGThread() {
     queue_ptr->pop_front();
 
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+
+  if (bgthread3_==pthread_self())
+      ++gPerfCounters->m_BGCloseUnmap;
+  else if (bgthread2_==pthread_self())
+      ++gPerfCounters->m_BGCompactImm;
+  else
+      ++gPerfCounters->m_BGNormal;
+
     (*function)(arg);
   }
 }
@@ -752,6 +772,7 @@ void BGFileCloser(void * arg)
 
     close(file_ptr->fd_);
     delete file_ptr;
+    ++gPerfCounters->m_ROFileClose;
 
     return;
 
@@ -776,6 +797,8 @@ void BGFileCloser2(void * arg)
     close(file_ptr->fd_);
     delete file_ptr;
 
+    ++gPerfCounters->m_RWFileClose;
+
     return;
 
 }   // BGFileCloser2
@@ -794,6 +817,7 @@ void BGFileUnmapper(void * arg)
 #endif
 
     delete file_ptr;
+    ++gPerfCounters->m_ROFileUnmap;
 
     return;
 
@@ -813,6 +837,7 @@ void BGFileUnmapper2(void * arg)
 #endif
 
     delete file_ptr;
+    ++gPerfCounters->m_RWFileUnmap;
 
     return;
 
@@ -829,12 +854,52 @@ static Env* default_env[THREAD_BLOCKS];
 static unsigned count=0;
 static void InitDefaultEnv()
 {
-    int loop;
+    int loop, fd;
 
     for (loop=0; loop<THREAD_BLOCKS; ++loop)
     {
         default_env[loop]=new PosixEnv;
     }   // for
+
+    // open shared file of performance counters,
+    //  create or reformat as necessary
+    fd = open("/home/mmaszewski/riak2/riak_ee/rel/riak/log/perf_counters.bin", O_CREAT | O_RDWR, 0644);
+    if (-1!=fd)
+    {
+        void * base;
+        int ret_val;
+
+        base=MAP_FAILED;
+
+        ret_val=ftruncate(fd, sizeof(PerformanceCounters));
+        if (-1 != ret_val)
+        {
+            base=mmap(NULL, sizeof(PerformanceCounters),
+                      PROT_READ | PROT_WRITE, MAP_SHARED,
+                      fd, 0);
+        }   // if
+
+        syslog(LOG_WARNING, "mapped to %p", base);
+
+        if (MAP_FAILED != base)
+        {
+            PerformanceCounters * perf;
+
+            perf=(PerformanceCounters *)base;
+            if (!perf->VersionTest())
+                perf->Init();
+
+
+            syslog(LOG_WARNING, "before %p", &gPerfCounters->m_WriteError);
+            gPerfCounters=perf;
+            syslog(LOG_WARNING, "after %p", &gPerfCounters->m_WriteError);
+        }   // if
+
+    }   // if
+    else
+    {
+        syslog(LOG_WARNING, "file failed to open %d", errno);
+    }   // else
 }
 
 Env* Env::Default() {

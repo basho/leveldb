@@ -8,6 +8,7 @@
 #include "leveldb/env.h"
 #include "leveldb/table.h"
 #include "util/coding.h"
+#include "leveldb/perf_count.h"
 
 namespace leveldb {
 
@@ -68,8 +69,13 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       tf->file = file;
       tf->table = table;
       *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
+      ++gPerfCounters->m_TableOpened;
     }
   }
+  else
+  {
+      ++gPerfCounters->m_TableCached;
+  }   // else
   return s;
 }
 
