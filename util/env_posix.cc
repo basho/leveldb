@@ -30,6 +30,9 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
+#include <syslog.h>
+#include "leveldb/perf_count.h"
+
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -849,7 +852,6 @@ void PosixEnv::BGThread()
         bg_backlog_=queue4_.size()+queue2_.size()+queue_.size();
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-
 
         if (bgthread3_==pthread_self())
             __sync_add_and_fetch(&gPerfCounters->m_BGCloseUnmap, 1);

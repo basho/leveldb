@@ -95,13 +95,6 @@ public:
 };  // class SstCounters
 
 
-extern struct PerformanceCounters * gPerfCounters;
-
-=======
-
-namespace leveldb {
-
->>>>>>> First pass at shared memory performance counters.
 struct PerformanceCounters
 {
     enum
