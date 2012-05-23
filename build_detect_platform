@@ -59,6 +59,7 @@ case "$TARGET_OS" in
         PLATFORM=OS_SOLARIS
         COMMON_FLAGS="-fno-builtin-memcmp -D_REENTRANT -DOS_SOLARIS"
         PLATFORM_LDFLAGS="-lpthread -lrt"
+        PLATFORM_SHARED_EXT=""
         PORT_FILE=port/port_posix.cc
         ;;
     FreeBSD)
