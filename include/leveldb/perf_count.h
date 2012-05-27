@@ -51,6 +51,11 @@ struct PerformanceCounters
     volatile uint64_t m_BGCompactImm;   //!< PosixEnv::BGThreaed started compaction of Imm or Level0
     volatile uint64_t m_BGNormal;       //!< PosixEnv::BGThreaed started normal compaction job
 
+    volatile uint64_t m_BlockFiltered;  //!< Table::BlockReader search stopped due to filter
+    volatile uint64_t m_BlockCached;    //!< Table::BlockReader found block in cache
+    volatile uint64_t m_BlockRead;      //!< Table::BlockReader read block from disk
+    volatile uint64_t m_BlockFilterRead;//!< Table::ReadMeta filter loaded from file
+
     //!< does executable's idea of version match shared object?
     bool VersionTest()
         {return(sizeof(PerformanceCounters)==m_StructSize && eVersion==m_Version);};
@@ -88,7 +93,7 @@ struct PerformanceCounters
             m_SearchLevel[3]=0;
             m_SearchLevel[4]=0;
             m_SearchLevel[5]=0;
-            m_SearchLevel[7]=0;
+            m_SearchLevel[6]=0;
 
             m_TableCached=0;
             m_TableOpened=0;
@@ -96,6 +101,11 @@ struct PerformanceCounters
             m_BGCloseUnmap=0;
             m_BGCompactImm=0;
             m_BGNormal=0;
+
+            m_BlockFiltered=0;
+            m_BlockCached=0;
+            m_BlockRead=0;
+            m_BlockFilterRead=0;
         };
 };  // struct PerformanceCounters
 
