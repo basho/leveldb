@@ -688,21 +688,11 @@ void PosixEnv::BGThread() {
   else
       queue_ptr=&queue_;
 
-  struct timeval now, wait;
-  struct timespec end;
-
-  wait.tv_sec=0;
-  wait.tv_usec=1000;
-
   while (true) {
     // Wait until there is an item that is ready to run
-      gettimeofday(&now, NULL);
     PthreadCall("lock", pthread_mutex_lock(&mu_));
     while (queue_ptr->empty()) {
-//      PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
-        timeradd(&now, &wait, &now);
-        TIMEVAL_TO_TIMESPEC(&now, &end);
-        pthread_cond_timedwait(&bgsignal_, &mu_, &end);
+        PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
     }
 
     void (*function)(void*) = queue_ptr->front().function;
