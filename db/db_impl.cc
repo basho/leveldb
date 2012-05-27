@@ -627,7 +627,7 @@ void DBImpl::MaybeScheduleCompaction() {
   }   // if
 
 
-  if (bg_compaction_scheduled_ && NULL==imm_) {
+  if (bg_compaction_scheduled_ && !push) {
     // Already scheduled
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions

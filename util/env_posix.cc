@@ -190,7 +190,9 @@ class PosixMmapFile : public WritableFile {
       BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_, limit_-dst_);
       if (and_close)
       {
-          Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
+          // do this in foreground unfortunately, bug where file not
+          //  closed fast enough for reopen
+          BGFileCloser2(ptr);
           fd_=-1;
       }   // if
       else
@@ -822,7 +824,7 @@ void BGFileUnmapper2(void * arg)
 
 // how many blocks of 3 priority background threads/queues
 /// for riak, make sure this is an odd number (and especially not 4)
-#define THREAD_BLOCKS 7
+#define THREAD_BLOCKS 3
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 static Env* default_env[THREAD_BLOCKS];
