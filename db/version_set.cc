@@ -359,7 +359,7 @@ Status Version::Get(const ReadOptions& options,
     }
 
     if (0!=num_files)
-        ++gPerfCounters->m_SearchLevel[level];
+        __sync_add_and_fetch(&gPerfCounters->m_SearchLevel[level], 1);
 
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != NULL && stats->seek_file == NULL) {
