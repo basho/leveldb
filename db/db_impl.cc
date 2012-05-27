@@ -1132,14 +1132,14 @@ Status DBImpl::Get(const ReadOptions& options,
     LookupKey lkey(key, snapshot);
     if (mem->Get(lkey, value, &s)) {
       // Done
-        ++gPerfCounters->m_GetMem;
+        __sync_add_and_fetch(&gPerfCounters->m_GetMem, 1);
     } else if (imm != NULL && imm->Get(lkey, value, &s)) {
       // Done
-        ++gPerfCounters->m_GetImm;
+        __sync_add_and_fetch(&gPerfCounters->m_GetImm, 1);
     } else {
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
-        ++gPerfCounters->m_GetVersion;
+      __sync_add_and_fetch(&gPerfCounters->m_GetVersion, 1);
     }
     mutex_.Lock();
   }
@@ -1152,7 +1152,7 @@ Status DBImpl::Get(const ReadOptions& options,
   if (imm != NULL) imm->Unref();
   current->Unref();
 
-  ++gPerfCounters->m_ApiGet;
+  __sync_add_and_fetch(&gPerfCounters->m_ApiGet, 1);
 
   return s;
 }
@@ -1246,7 +1246,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     writers_.front()->cv.Signal();
   }
 
-  ++gPerfCounters->m_ApiWrite;
+  __sync_add_and_fetch(&gPerfCounters->m_ApiWrite, 1);
 
   return status;
 }
@@ -1317,7 +1317,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   while (true) {
     if (!bg_error_.ok()) {
       // Yield previous error
-      ++gPerfCounters->m_WriteError;
+        __sync_add_and_fetch(&gPerfCounters->m_WriteError, 1);
       s = bg_error_;
       break;
     } else if (
@@ -1332,28 +1332,29 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
-      ++gPerfCounters->m_WriteSleep;
+      __sync_add_and_fetch(&gPerfCounters->m_WriteSleep, 1);
       mutex_.Lock();
     } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
+      __sync_add_and_fetch(&gPerfCounters->m_WriteNoWait, 1);
       break;
     } else if (imm_ != NULL) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
-      ++gPerfCounters->m_WriteWaitImm;
+      __sync_add_and_fetch(&gPerfCounters->m_WriteWaitImm, 1);
       bg_cv_.Wait();
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "waiting...\n");
-      ++gPerfCounters->m_WriteWaitLevel0;
+      __sync_add_and_fetch(&gPerfCounters->m_WriteWaitLevel0, 1);
       bg_cv_.Wait();
     } else {
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = NULL;
-      ++gPerfCounters->m_WriteNewMem;
+      __sync_add_and_fetch(&gPerfCounters->m_WriteNewMem, 1);
       s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
       if (!s.ok()) {
         break;
@@ -1502,7 +1503,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
     delete impl;
   }
 
-  ++gPerfCounters->m_ApiOpen;
+  __sync_add_and_fetch(&gPerfCounters->m_ApiOpen, 1);
 
   return s;
 }

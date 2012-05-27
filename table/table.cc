@@ -9,6 +9,7 @@
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "leveldb/perf_count.h"
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -105,6 +106,7 @@ void Table::ReadMeta(const Footer& footer) {
   iter->Seek(key);
   if (iter->Valid() && iter->key() == Slice(key)) {
     ReadFilter(iter->value());
+    __sync_add_and_fetch(&gPerfCounters->m_BlockFilterRead, 1);
   }
   delete iter;
   delete meta;
@@ -175,8 +177,10 @@ Iterator* Table::BlockReader(void* arg,
       cache_handle = block_cache->Lookup(key);
       if (cache_handle != NULL) {
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
+        __sync_add_and_fetch(&gPerfCounters->m_BlockCached, 1);
       } else {
         s = ReadBlock(table->rep_->file, options, handle, &contents);
+        __sync_add_and_fetch(&gPerfCounters->m_BlockRead, 1);
         if (s.ok()) {
           block = new Block(contents);
           if (contents.cachable && options.fill_cache) {
@@ -229,6 +233,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
         handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
+        __sync_add_and_fetch(&gPerfCounters->m_BlockFiltered, 1);
     } else {
       Slice handle = iiter->value();
       Iterator* block_iter = BlockReader(this, options, iiter->value());

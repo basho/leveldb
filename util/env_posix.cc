@@ -28,8 +28,6 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
-#include <syslog.h>
-
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -139,7 +137,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
   PosixMmapReadableFile(const std::string& fname, void* base, size_t length, int fd)
       : filename_(fname), mmapped_region_(base), length_(length), fd_(fd)
   {
-    ++gPerfCounters->m_ROFileOpen;
+      __sync_add_and_fetch(&gPerfCounters->m_ROFileOpen, 1);
 
 #if defined(HAVE_FADVISE)
     posix_fadvise(fd_, 0, length_, POSIX_FADV_RANDOM);
@@ -273,7 +271,7 @@ class PosixMmapFile : public WritableFile {
         file_offset_(file_offset),
         pending_sync_(false) {
     assert((page_size & (page_size - 1)) == 0);
-    ++gPerfCounters->m_RWFileOpen;
+    __sync_add_and_fetch(&gPerfCounters->m_RWFileOpen, 1);
   }
 
 
@@ -879,11 +877,11 @@ void PosixEnv::BGThread()
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
         if (bgthread3_==pthread_self())
-            ++gPerfCounters->m_BGCloseUnmap;
+            __sync_add_and_fetch(&gPerfCounters->m_BGCloseUnmap, 1);
         else if (bgthread2_==pthread_self())
-            ++gPerfCounters->m_BGCompactImm;
+            __sync_add_and_fetch(&gPerfCounters->m_BGCompactImm, 1);
         else
-            ++gPerfCounters->m_BGNormal;
+            __sync_add_and_fetch(&gPerfCounters->m_BGNormal, 1);
 
         (*function)(arg);
     }   // while
@@ -929,7 +927,7 @@ void BGFileCloser(void * arg)
 
     close(file_ptr->fd_);
     delete file_ptr;
-    ++gPerfCounters->m_ROFileClose;
+    __sync_add_and_fetch(&gPerfCounters->m_ROFileClose, 1);
 
     return;
 
@@ -954,7 +952,7 @@ void BGFileCloser2(void * arg)
     close(file_ptr->fd_);
     delete file_ptr;
 
-    ++gPerfCounters->m_RWFileClose;
+    __sync_add_and_fetch(&gPerfCounters->m_RWFileClose, 1);
 
     return;
 
@@ -974,7 +972,7 @@ void BGFileUnmapper(void * arg)
 #endif
 
     delete file_ptr;
-    ++gPerfCounters->m_ROFileUnmap;
+    __sync_add_and_fetch(&gPerfCounters->m_ROFileUnmap, 1);
 
     return;
 
@@ -994,7 +992,7 @@ void BGFileUnmapper2(void * arg)
 #endif
 
     delete file_ptr;
-    ++gPerfCounters->m_RWFileUnmap;
+    __sync_add_and_fetch(&gPerfCounters->m_RWFileUnmap, 1);
 
     return;
 
@@ -1039,8 +1037,6 @@ static void InitDefaultEnv()
                       fd, 0);
         }   // if
 
-        syslog(LOG_WARNING, "mapped to %p", base);
-
         if (MAP_FAILED != base)
         {
             PerformanceCounters * perf;
@@ -1049,16 +1045,13 @@ static void InitDefaultEnv()
             if (!perf->VersionTest())
                 perf->Init();
 
-
-            syslog(LOG_WARNING, "before %p", &gPerfCounters->m_WriteError);
             gPerfCounters=perf;
-            syslog(LOG_WARNING, "after %p", &gPerfCounters->m_WriteError);
         }   // if
 
     }   // if
     else
     {
-        syslog(LOG_WARNING, "file failed to open %d", errno);
+//        syslog(LOG_WARNING, "file failed to open %d", errno);
     }   // else
 }
 
