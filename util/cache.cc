@@ -283,8 +283,13 @@ Cache::Handle* LRUCache::Insert(
     Unref(old);
   }
 
-  while (usage_ > capacity_ && lru_.next != &lru_) {
+  bool one_removed;
+
+  one_removed=true;
+  while (usage_ > capacity_ && lru_.next != &lru_ && one_removed) {
     LRUHandle * low_ptr, * cursor;
+
+    one_removed=false;
 
     // sequential scan when over capacity is overall faster
     //  than requiring write lock to rearrange LRU on every read
@@ -292,13 +297,20 @@ Cache::Handle* LRUCache::Insert(
     for (cursor=lru_.next;
          cursor!=&lru_; cursor=cursor->next)
     {
-        if (timercmp(&cursor->last_access, &low_ptr->last_access, <))
+        if (timercmp(&cursor->last_access, &low_ptr->last_access, <) && cursor->refs <= 1)
             low_ptr=cursor;
     }   // for
-    LRU_Remove(low_ptr);
-    table_.Remove(low_ptr->key(), low_ptr->hash);
-    Unref(low_ptr);
-  }
+    // removing item that still has active references is
+    //  quite harmful since the removal does not change
+    //  usage.  Result can be accidental flush of entire cache.
+    if (low_ptr->refs <= 1)
+    {
+        one_removed=true;
+        LRU_Remove(low_ptr);
+        table_.Remove(low_ptr->key(), low_ptr->hash);
+        Unref(low_ptr);
+    }   // if
+  }   // while
 
   return reinterpret_cast<Cache::Handle*>(e);
 }
