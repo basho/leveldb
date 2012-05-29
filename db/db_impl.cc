@@ -86,7 +86,7 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
   if (static_cast<V>(*ptr) < minvalue) *ptr = minvalue;
 }
 
-Options DBImpl::SanitizeOptions(const std::string& dbname,
+Options SanitizeOptions(const std::string& dbname,
                         const InternalKeyComparator* icmp,
                         const InternalFilterPolicy* ipolicy,
                         const Options& src) {
@@ -120,7 +120,7 @@ Options DBImpl::SanitizeOptions(const std::string& dbname,
       new_name=dbname;
       new_name+="/lost";
       src.env->CreateDir(new_name);
-      new_name+="BLOCKS.bad";
+      new_name+="/BLOCKS.bad";
 
       s=src.env->NewAppendableFile(new_name, &bad_file);
       if (s.ok())

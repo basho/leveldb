@@ -143,14 +143,10 @@ struct Options {
   Options();
 
 
+  // accessors
   log::Writer * GetBadBlocks() const {return(bad_blocks);};
 
   // These items below are internal options, not for external manipulation.
-  //  They are populated by VersionSet::MakeInputIterator only during compaction operations
-
-private:
-  friend class DBImpl;
-
   log::Writer * bad_blocks;
 };
 
