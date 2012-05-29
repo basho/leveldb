@@ -1134,6 +1134,9 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   ReadOptions options;
   options.verify_checksums = options_->paranoid_checks;
   options.fill_cache = false;
+  options.is_compaction = true;
+  options.info_log = options_->info_log;
+  options.bad_blocks = options_->GetBadBlocks();
 
   // Level-0 files have to be merged together.  For other levels,
   // we will make a concatenating iterator per level.
