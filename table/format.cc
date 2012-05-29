@@ -9,6 +9,7 @@
 #include "table/block.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "db/log_writer.h"
 
 namespace leveldb {
 
@@ -66,7 +67,14 @@ Status Footer::DecodeFrom(Slice* input) {
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
                  const BlockHandle& handle,
-                 BlockContents* result) {
+                 BlockContents* result)
+{
+  char * buf, * ubuf;
+  const char * data;
+
+  buf=NULL;
+  ubuf=NULL;
+  data=NULL;
   result->data = Slice();
   result->cachable = false;
   result->heap_allocated = false;
@@ -74,72 +82,106 @@ Status ReadBlock(RandomAccessFile* file,
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size());
-  char* buf = new char[n + kBlockTrailerSize];
+  buf = new char[n + kBlockTrailerSize];
   Slice contents;
   Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
-  if (!s.ok()) {
-    delete[] buf;
-    return s;
-  }
-  if (contents.size() != n + kBlockTrailerSize) {
-    delete[] buf;
-    return Status::Corruption("truncated block read");
-  }
+  if (s.ok())
+  {
+      if (contents.size() != n + kBlockTrailerSize) {
+          s=Status::Corruption("truncated block read");
+      }
+  }   // if
 
   // Check the crc of the type and the block contents
-  const char* data = contents.data();    // Pointer to where Read put the data
-  if (options.verify_checksums) {
-    const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
-    const uint32_t actual = crc32c::Value(data, n + 1);
-    if (actual != crc) {
-      delete[] buf;
-      s = Status::Corruption("block checksum mismatch");
-      return s;
-    }
-  }
+  if (s.ok())
+  {
+      data = contents.data();    // Pointer to where Read put the data
+      if (options.verify_checksums) {
+          const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
+          const uint32_t actual = crc32c::Value(data, n + 1);
+          if (actual != crc) {
+              s = Status::Corruption("block checksum mismatch");
+          }   // if
+      }   // if
+  }   // if
 
-  switch (data[n]) {
-    case kNoCompression:
-      if (data != buf) {
-        // File implementation gave us pointer to some other data.
-        // Use it directly under the assumption that it will be live
-        // while the file is open.
-        delete[] buf;
-        result->data = Slice(data, n);
-        result->heap_allocated = false;
-        result->cachable = false;  // Do not double-cache
-      } else {
-        result->data = Slice(buf, n);
-        result->heap_allocated = true;
-        result->cachable = true;
-      }
+  if (s.ok())
+  {
+      switch (data[n]) {
+          case kNoCompression:
+              if (data != buf) {
+                  // File implementation gave us pointer to some other data.
+                  // Use it directly under the assumption that it will be live
+                  // while the file is open.
+                  delete[] buf;
+                  buf=NULL;
+                  result->data = Slice(data, n);
+                  result->heap_allocated = false;
+                  result->cachable = false;  // Do not double-cache
+              } else {
+                  result->data = Slice(buf, n);
+                  result->heap_allocated = true;
+                  result->cachable = true;
+              }   // else
+              // Ok
+              break;
 
-      // Ok
-      break;
-    case kSnappyCompression: {
-      size_t ulength = 0;
-      if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
-        delete[] buf;
-        return Status::Corruption("corrupted compressed block contents");
-      }
-      char* ubuf = new char[ulength];
-      if (!port::Snappy_Uncompress(data, n, ubuf)) {
-        delete[] buf;
-        delete[] ubuf;
-        return Status::Corruption("corrupted compressed block contents");
-      }
-      delete[] buf;
-      result->data = Slice(ubuf, ulength);
-      result->heap_allocated = true;
-      result->cachable = true;
-      break;
-    }
-    default:
-      delete[] buf;
-      return Status::Corruption("bad block type");
-  }
+          case kSnappyCompression: {
+              size_t ulength = 0;
+              if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
+                  s = Status::Corruption("corrupted compressed block contents");
+              }
 
-  return Status::OK();
+              if (s.ok())
+              {
+                  ubuf = new char[ulength];
+                  if (!port::Snappy_Uncompress(data, n, ubuf)) {
+                      s=Status::Corruption("corrupted compressed block contents");
+                  }
+              }   // if
+
+              if (s.ok())
+              {
+                  delete[] buf;
+                  buf=NULL;
+                  result->data = Slice(ubuf, ulength);
+                  result->heap_allocated = true;
+                  result->cachable = true;
+              }   // if
+              break;
+          }
+
+          default:
+              s=Status::Corruption("bad block type");
+              break;
+      }   // switch
+  }   // if
+
+  // clean up error and decide what to do with it
+  if (!s.ok())
+  {
+      if (options.IsCompaction() && NULL!=options.GetBadBlocks())
+      {
+          if (NULL!=data)
+          {
+              options.GetBadBlocks()->AddRecord(Slice(data, n));
+              Log(options.GetInfoLog(),"Moving corrupted block to lost/BLOCKS.bad (size %zd)", n);
+          }   // if
+
+          // lie to the upper layers to keep compaction from going into an infinite loop
+          s = Status::OK();
+      }   // if
+
+      delete [] buf;
+      delete [] ubuf;
+
+      // this is redundant today, but safety first
+      result->data = Slice();
+      result->cachable = false;
+      result->heap_allocated = false;
+  }   // if
+
+  return s;
 }
 
 }  // namespace leveldb

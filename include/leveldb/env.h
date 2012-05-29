@@ -27,6 +27,7 @@ class RandomAccessFile;
 class SequentialFile;
 class Slice;
 class WritableFile;
+class AppendableFile;
 
 class Env {
  public:
@@ -68,6 +69,16 @@ class Env {
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) = 0;
+
+  // Derived from NewWritableFile.  One change: if the file exists,
+  // move to the end of the file and continue writing.
+  // new file.  On success, stores a pointer to the open file in
+  // *result and returns OK.  On failure stores NULL in *result and
+  // returns non-OK.
+  //
+  // The returned file will only be accessed by one thread at a time.
+  virtual Status NewAppendableFile(const std::string& fname,
+                                   WritableFile** result) = 0;
 
   // Returns true iff the named file exists.
   virtual bool FileExists(const std::string& fname) = 0;
@@ -215,6 +226,18 @@ class WritableFile {
   void operator=(const WritableFile&);
 };
 
+// A file abstraction for sequential writing at end of existing file.
+class AppendableFile: public WritableFile {
+ public:
+  AppendableFile() { }
+  virtual ~AppendableFile();
+
+ private:
+  // No copying allowed
+  AppendableFile(const AppendableFile&);
+  void operator=(const AppendableFile&);
+};
+
 // An interface for writing log messages.
 class Logger {
  public:
@@ -278,6 +301,9 @@ class EnvWrapper : public Env {
   }
   Status NewWritableFile(const std::string& f, WritableFile** r) {
     return target_->NewWritableFile(f, r);
+  }
+  Status NewAppendableFile(const std::string& f, WritableFile** r) {
+    return target_->NewAppendableFile(f, r);
   }
   bool FileExists(const std::string& f) { return target_->FileExists(f); }
   Status GetChildren(const std::string& dir, std::vector<std::string>* r) {
