@@ -6,6 +6,7 @@
 
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
+#include "leveldb/filter_policy.h"
 
 namespace leveldb {
 
@@ -30,7 +31,7 @@ void
 Options::Dump(
     Logger * log) const
 {
-    Log(log,"            Options.comparator: %p", comparator);
+    Log(log,"            Options.comparator: %s", comparator->Name());
     Log(log,"     Options.create_if_missing: %d", create_if_missing);
     Log(log,"       Options.error_if_exists: %d", error_if_exists);
     Log(log,"       Options.paranoid_checks: %d", paranoid_checks);
@@ -39,9 +40,9 @@ Options::Dump(
     Log(log,"     Options.write_buffer_size: %zd", write_buffer_size);
     Log(log,"        Options.max_open_files: %d", max_open_files);
     Log(log,"           Options.block_cache: %p", block_cache);
-    Log(log,"            Options.block_size: %d", block_size);
+    Log(log,"            Options.block_size: %zd", block_size);
     Log(log,"Options.block_restart_interval: %d", block_restart_interval);
-    Log(log,"         Options.filter_policy: %p", filter_policy);
+    Log(log,"         Options.filter_policy: %s", filter_policy == NULL ? "NULL" : filter_policy->Name());
 
 }   // Options::Dump
 
