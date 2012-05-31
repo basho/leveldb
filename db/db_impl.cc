@@ -140,6 +140,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
+
+  options_.Dump(options_.info_log);
 }
 
 DBImpl::~DBImpl() {
