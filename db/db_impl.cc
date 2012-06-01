@@ -195,6 +195,7 @@ DBImpl::~DBImpl() {
   if (owns_cache_) {
     delete options_.block_cache;
   }
+  if (NULL != options_.bad_blocks) options_.bad_blocks->Close();
   delete options_.bad_blocks;
 }
 
