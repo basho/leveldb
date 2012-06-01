@@ -13,6 +13,13 @@
 
 namespace leveldb {
 
+static struct
+{
+    uint32_t filler_;  //!< don't know and don't care
+    uint32_t zero_restarts_;  //!< path to an EmptyIterator
+} gEmptyBlock={0,0};
+
+
 void BlockHandle::EncodeTo(std::string* dst) const {
   // Sanity check that all fields have been set
   assert(offset_ != ~static_cast<uint64_t>(0));
@@ -175,8 +182,7 @@ Status ReadBlock(RandomAccessFile* file,
       delete [] buf;
       delete [] ubuf;
 
-      // this is redundant today, but safety first
-      result->data = Slice();
+      result->data = Slice((char *)&gEmptyBlock, sizeof(gEmptyBlock));
       result->cachable = false;
       result->heap_allocated = false;
   }   // if
