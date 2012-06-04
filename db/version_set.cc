@@ -958,6 +958,11 @@ void VersionSet::Finalize(Version* v) {
       // overwrites/deletions).
       score = v->files_[level].size() /
           static_cast<double>(config::kL0_CompactionTrigger);
+
+      // don't screw around ... get data written to disk!
+      if (config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
+          score*=10.0;
+
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
@@ -1169,6 +1174,9 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
 Compaction* VersionSet::PickCompaction() {
   Compaction* c;
   int level;
+
+  // current_ could be really stale compared to state of files, recompute
+  Finalize(current_);
 
   // We prefer compactions triggered by too much data in a level over
   // the compactions triggered by seeks.
