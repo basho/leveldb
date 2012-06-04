@@ -99,6 +99,27 @@ class CondVar {
   Mutex* mu_;
 };
 
+
+class RWMutex {
+ public:
+  RWMutex();
+  ~RWMutex();
+
+  void ReadLock();
+  void WriteLock();
+  void Unlock();
+  void AssertHeld() { }
+
+ private:
+  pthread_rwlock_t mu_;
+
+  // No copying
+  RWMutex(const RWMutex&);
+  void operator=(const RWMutex&);
+
+};
+
+
 inline bool Snappy_Compress(const char* input, size_t length,
                             ::std::string* output) {
 #ifdef SNAPPY

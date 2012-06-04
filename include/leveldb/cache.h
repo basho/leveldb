@@ -28,6 +28,7 @@ class Cache;
 // Create a new cache with a fixed size capacity.  This implementation
 // of Cache uses a least-recently-used eviction policy.
 extern Cache* NewLRUCache(size_t capacity);
+extern Cache* NewLRUCache2(size_t capacity);
 
 class Cache {
  public:
@@ -80,6 +81,10 @@ class Cache {
   // client will allocate a new id at startup and prepend the id to
   // its cache keys.
   virtual uint64_t NewId() = 0;
+
+  // Return size, if any, of per entry overhead for item placed in cache.
+  // Allows more accurate tracking of "charge" against each cache item.
+  virtual size_t EntryOverheadSize() {return(0);};
 
  private:
   void LRU_Remove(Handle* e);
