@@ -188,7 +188,8 @@ class PosixMmapFile : public WritableFile {
   }
 
  public:
-  PosixMmapFile(const std::string& fname, int fd, size_t page_size)
+  PosixMmapFile(const std::string& fname, int fd,
+                size_t page_size, size_t file_offset=0L)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
@@ -197,7 +198,7 @@ class PosixMmapFile : public WritableFile {
         limit_(NULL),
         dst_(NULL),
         last_sync_(NULL),
-        file_offset_(0),
+        file_offset_(file_offset),
         pending_sync_(false) {
     assert((page_size & (page_size - 1)) == 0);
   }
@@ -360,6 +361,32 @@ class PosixEnv : public Env {
     }
     return s;
   }
+
+  virtual Status NewAppendableFile(const std::string& fname,
+                                   WritableFile** result) {
+    Status s;
+    const int fd = open(fname.c_str(), O_CREAT | O_RDWR, 0644);
+    if (fd < 0) {
+      *result = NULL;
+      s = IOError(fname, errno);
+    } else
+    {
+      uint64_t size;
+      s = GetFileSize(fname, &size);
+      if (s.ok())
+      {
+          *result = new PosixMmapFile(fname, fd, page_size_, size);
+      }   // if
+      else
+      {
+          s = IOError(fname, errno);
+          close(fd);
+      }   // else
+    }   // else
+    return s;
+  }
+
+
 
   virtual bool FileExists(const std::string& fname) {
     return access(fname.c_str(), F_OK) == 0;

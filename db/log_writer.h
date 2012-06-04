@@ -9,10 +9,9 @@
 #include "db/log_format.h"
 #include "leveldb/slice.h"
 #include "leveldb/status.h"
+#include "leveldb/env.h"
 
 namespace leveldb {
-
-class WritableFile;
 
 namespace log {
 
@@ -25,6 +24,8 @@ class Writer {
   ~Writer();
 
   Status AddRecord(const Slice& slice);
+
+  void Close() {delete dest_; dest_=NULL;};
 
  private:
   WritableFile* dest_;
