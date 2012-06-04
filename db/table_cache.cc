@@ -35,7 +35,12 @@ TableCache::TableCache(const std::string& dbname,
     : env_(options->env),
       dbname_(dbname),
       options_(options),
-      cache_(NewLRUCache(entries)) {
+
+      // convert file handle limit into a size limit
+      //  based upon historical kTargetFileSize from version_set.cc
+//      cache_(NewLRUCache2(entries * (2*1048576)))
+      cache_(NewLRUCache2(entries))
+{
 }
 
 TableCache::~TableCache() {
@@ -67,6 +72,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
       tf->table = table;
+
+//      *handle = cache_->Insert(key, tf, file_size, &DeleteEntry);
       *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
     }
   }
