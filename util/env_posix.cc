@@ -237,7 +237,7 @@ class PosixMmapFile : public WritableFile {
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
-        map_size_(Roundup(65536, page_size)),
+        map_size_(Roundup(20 * 1048576, page_size)),
         base_(NULL),
         limit_(NULL),
         dst_(NULL),
@@ -384,6 +384,10 @@ class PosixEnv : public Env {
     int fd = open(fname.c_str(), O_RDONLY);
     if (fd < 0) {
       s = IOError(fname, errno);
+#if 0
+      // going to let page cache tune the file
+      //  system reads instead of hoping to better
+      //  manage through memory mapped files.
     } else if (sizeof(void*) >= 8) {
       // Use mmap when virtual address-space is plentiful.
       uint64_t size;
@@ -397,6 +401,7 @@ class PosixEnv : public Env {
           close(fd);
         }
       }
+#endif
     } else {
       *result = new PosixRandomAccessFile(fname, fd);
     }
