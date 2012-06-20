@@ -31,6 +31,9 @@
 
 namespace leveldb {
 
+pthread_rwlock_t gThreadLock0;
+pthread_rwlock_t gThreadLock1;
+
 namespace {
 
 static Status IOError(const std::string& context, int err_number) {
@@ -859,6 +862,10 @@ static void InitDefaultEnv()
     {
         default_env[loop]=new PosixEnv;
     }   // for
+
+    pthread_rwlock_init(&gThreadLock0, NULL);
+    pthread_rwlock_init(&gThreadLock1, NULL);
+
 }
 
 Env* Env::Default() {
