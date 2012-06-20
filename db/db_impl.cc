@@ -692,7 +692,9 @@ void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
   if (imm_ != NULL) {
+    pthread_rwlock_rdlock(&gThreadLock0);
     CompactMemTable();
+    pthread_rwlock_unlock(&gThreadLock0);
     return;
   }
 
@@ -907,6 +909,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
+  if (0 == compact->compaction->level())
+      pthread_rwlock_rdlock(&gThreadLock1);
+
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
   Status status;
@@ -920,12 +925,28 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       const uint64_t imm_start = env_->NowMicros();
       mutex_.Lock();
       if (imm_ != NULL) {
+        if (0 == compact->compaction->level())
+          pthread_rwlock_unlock(&gThreadLock1);
+        pthread_rwlock_rdlock(&gThreadLock0);
         CompactMemTable();
+        pthread_rwlock_unlock(&gThreadLock0);
+        if (0 == compact->compaction->level())
+          pthread_rwlock_rdlock(&gThreadLock1);
         bg_cv_.SignalAll();  // Wakeup MakeRoomForWrite() if necessary
       }
       mutex_.Unlock();
       imm_micros += (env_->NowMicros() - imm_start);
     }
+
+    // pause to potentially hand off disk to
+    //  memtable threads
+    pthread_rwlock_wrlock(&gThreadLock0);
+    pthread_rwlock_unlock(&gThreadLock0);
+    if (0 != compact->compaction->level())
+    {
+        pthread_rwlock_wrlock(&gThreadLock1);
+        pthread_rwlock_unlock(&gThreadLock1);
+    }   // if
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&
@@ -1030,6 +1051,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
+
+  if (0 == compact->compaction->level())
+      pthread_rwlock_unlock(&gThreadLock1);
 
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
