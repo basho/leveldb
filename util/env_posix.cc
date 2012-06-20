@@ -538,7 +538,7 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual void Schedule(void (*function)(void*), void* arg, int state=0);
+  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false);
 
   virtual void StartThread(void (*function)(void* arg), void* arg);
 
@@ -602,17 +602,19 @@ class PosixEnv : public Env {
   size_t page_size_;
   pthread_mutex_t mu_;
   pthread_cond_t bgsignal_;
-  pthread_t bgthread_;
-  pthread_t bgthread2_;
-  pthread_t bgthread3_;
+  pthread_t bgthread_;     // normal compactions
+  pthread_t bgthread2_;    // level 0 to level 1 compactions
+  pthread_t bgthread3_;    // background unmap / close
+  pthread_t bgthread4_;    // imm_ to level 0 compactions
   bool started_bgthread_;
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); };
   typedef std::deque<BGItem> BGQueue;
-  BGQueue queue_;
-  BGQueue queue2_;
-  BGQueue queue3_;
+  BGQueue queue_;     //normal compactions
+  BGQueue queue2_;    // level 0 to level 1 compactions
+  BGQueue queue3_;    //background unmap / close
+  BGQueue queue4_;    // imm_ to level 0 compactions
 };
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
@@ -622,118 +624,172 @@ PosixEnv::PosixEnv() : page_size_(getpagesize()),
 }
 
 // state: 0 - legacy/default, 4 - close/unmap, 2 - test for queue switch, 1 - imm/high priority
-void PosixEnv::Schedule(void (*function)(void*), void* arg, int state) {
-  PthreadCall("lock", pthread_mutex_lock(&mu_));
-
-  // Start background thread if necessary
-  if (!started_bgthread_) {
-    started_bgthread_ = true;
-
-    // future, set SCHED_FIFO ... assume application at priority 50
-    /// legacy compaction thread priority 45, 5 points lower
-    PthreadCall(
-        "create thread",
-        pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this));
-
-    /// imm->level0 or level0 compaction, speed thread priority 60
-    PthreadCall(
-        "create thread 2",
-        pthread_create(&bgthread2_, NULL,  &PosixEnv::BGThreadWrapper, this));
-
-    /// close / unmap thread priority 47, higher than compaction but lower than application
-    PthreadCall(
-        "create thread 3",
-        pthread_create(&bgthread3_, NULL,  &PosixEnv::BGThreadWrapper, this));
-
-  }
-
-  // If the queue is currently empty, the background thread may currently be
-  // waiting.
-  if (queue_.empty() || queue2_.empty()) {
-    PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
-  }
-
-  if (0 != state)
-  {
-      BGQueue::iterator it;
-      bool found;
-
-      // close / unmap memory mapped files
-      if (4==state)
-      {
-          if (queue3_.empty())
-              PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
-
-          queue3_.push_back(BGItem());
-          queue3_.back().function = function;
-          queue3_.back().arg = arg;
-      }   // if
-
-      // only "switch" lists if found waiting on slow compaction list
-      else if (2==state)
-      {
-          for (found=false, it=queue_.begin(); queue_.end()!=it && !found; ++it)
-          {
-              found= (it->arg == arg);
-              if (found)
-              {
-                  BGQueue::iterator del_it;
-
-                  del_it=it;
-                  ++it;
-
-                  queue_.erase(del_it);
-                  queue2_.push_back(BGItem());
-                  queue2_.back().function = function;
-                  queue2_.back().arg = arg;
-              }   // if
-          }   // for
-      }   // if
-
-      // state 1, imm_ only
-      else
-      {
-          queue2_.push_back(BGItem());
-          queue2_.back().function = function;
-          queue2_.back().arg = arg;
-      }   // else
-  }   // if
-  else
-  {
-      // low priority compaction (not imm, not level0)
-      queue_.push_back(BGItem());
-      queue_.back().function = function;
-      queue_.back().arg = arg;
-  }   // else
-
-  PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-}
-
-void PosixEnv::BGThread() {
-  BGQueue * queue_ptr;
-
-  // pick source of thread's work
-  if (bgthread3_==pthread_self())
-      queue_ptr=&queue3_;
-  else if (bgthread2_==pthread_self())
-      queue_ptr=&queue2_;
-  else
-      queue_ptr=&queue_;
-
-  while (true) {
-    // Wait until there is an item that is ready to run
+void
+PosixEnv::Schedule(
+    void (*function)(void*),
+    void* arg,
+    int state,
+    bool imm_flag)
+{
     PthreadCall("lock", pthread_mutex_lock(&mu_));
-    while (queue_ptr->empty()) {
-        PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
+
+    // Start background thread if necessary
+    if (!started_bgthread_) {
+        started_bgthread_ = true;
+
+        // future, set SCHED_FIFO ... assume application at priority 50
+        /// legacy compaction thread priority 45, 5 points lower
+        PthreadCall(
+            "create thread",
+            pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this));
+
+        /// level0 compaction, speed thread priority 60
+        PthreadCall(
+            "create thread 2",
+            pthread_create(&bgthread2_, NULL,  &PosixEnv::BGThreadWrapper, this));
+
+        /// close / unmap thread priority 47, higher than compaction but lower than application
+        PthreadCall(
+            "create thread 3",
+            pthread_create(&bgthread3_, NULL,  &PosixEnv::BGThreadWrapper, this));
+
+        /// imm->level0 dump
+        PthreadCall(
+            "create thread 4",
+            pthread_create(&bgthread4_, NULL,  &PosixEnv::BGThreadWrapper, this));
     }
 
-    void (*function)(void*) = queue_ptr->front().function;
-    void* arg = queue_ptr->front().arg;
-    queue_ptr->pop_front();
+    // If the queue is currently empty, the background thread may currently be
+    // waiting.
+    if (queue_.empty() || queue2_.empty()) {
+        PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
+    }
+
+    if (0 != state)
+    {
+        BGQueue::iterator it;
+        bool found;
+
+        // close / unmap memory mapped files
+        if (4==state)
+        {
+            if (queue3_.empty())
+                PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
+
+            queue3_.push_back(BGItem());
+            queue3_.back().function = function;
+            queue3_.back().arg = arg;
+        }   // if
+
+        // only "switch" lists if found waiting on a lower priority compaction list
+        else if (2==state)
+        {
+            for (found=false, it=queue_.begin(); queue_.end()!=it && !found; ++it)
+            {
+                found= (it->arg == arg);
+                if (found)
+                {
+                    BGQueue::iterator del_it;
+
+                    del_it=it;
+                    ++it;
+
+                    queue_.erase(del_it);
+                    if (imm_flag)
+                    {
+                        queue4_.push_back(BGItem());
+                        queue4_.back().function = function;
+                        queue4_.back().arg = arg;
+                    }   // if
+                    else
+                    {
+                        queue2_.push_back(BGItem());
+                        queue2_.back().function = function;
+                        queue2_.back().arg = arg;
+                    }   // else
+                }   // if
+            }   // for
+
+            if (!found && imm_flag)
+            {
+                for (found=false, it=queue2_.begin(); queue2_.end()!=it && !found; ++it)
+                {
+                    found= (it->arg == arg);
+                    if (found)
+                    {
+                        BGQueue::iterator del_it;
+
+                        del_it=it;
+                        ++it;
+
+                        queue2_.erase(del_it);
+
+                        queue4_.push_back(BGItem());
+                        queue4_.back().function = function;
+                        queue4_.back().arg = arg;
+                    }   // if
+                }   // for
+            }   // if
+        }   // if
+
+        // state 1, adding imm_ or level 0 (nothing already scheduled)
+        else
+        {
+            if (imm_flag)
+            {
+                queue4_.push_back(BGItem());
+                queue4_.back().function = function;
+                queue4_.back().arg = arg;
+            }   // if
+            else
+            {
+                queue2_.push_back(BGItem());
+                queue2_.back().function = function;
+                queue2_.back().arg = arg;
+            }   // else
+        }   // else
+    }   // if
+    else
+    {
+        // low priority compaction (not imm, not level0)
+        queue_.push_back(BGItem());
+        queue_.back().function = function;
+        queue_.back().arg = arg;
+    }   // else
 
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-    (*function)(arg);
-  }
+}
+
+void PosixEnv::BGThread()
+{
+    BGQueue * queue_ptr;
+
+    // pick source of thread's work
+    if (bgthread4_==pthread_self())
+        queue_ptr=&queue4_;
+    else if (bgthread3_==pthread_self())
+        queue_ptr=&queue3_;
+    else if (bgthread2_==pthread_self())
+        queue_ptr=&queue2_;
+    else
+        queue_ptr=&queue_;
+
+    while (true)
+    {
+        // Wait until there is an item that is ready to run
+        PthreadCall("lock", pthread_mutex_lock(&mu_));
+        while (queue_ptr->empty()) {
+            PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
+        }
+
+        void (*function)(void*) = queue_ptr->front().function;
+        void* arg = queue_ptr->front().arg;
+        queue_ptr->pop_front();
+
+        PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+
+        (*function)(arg);
+    }   // while(true)
 }
 
 namespace {
@@ -844,9 +900,9 @@ void BGFileUnmapper2(void * arg)
 
 }  // namespace
 
-// how many blocks of 3 priority background threads/queues
+// how many blocks of 4 priority background threads/queues
 /// for riak, make sure this is an odd number (and especially not 4)
-#define THREAD_BLOCKS 3
+#define THREAD_BLOCKS 5
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 static Env* default_env[THREAD_BLOCKS];

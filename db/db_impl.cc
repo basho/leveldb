@@ -633,9 +633,12 @@ void DBImpl::MaybeScheduleCompaction() {
 
   // writing of memory to disk: high priority
   if (NULL!=imm_)
+  {
       push=true;
+  }   // if
 
-  if (!push)
+  // merge level 0s to level 1
+  else
   {
       Compaction * c_ptr;
       c_ptr=versions_->PickCompaction();
@@ -666,7 +669,7 @@ void DBImpl::MaybeScheduleCompaction() {
     // No work to be done
   } else {
     bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this, state);
+    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_));
   }
 }
 

@@ -135,7 +135,8 @@ class Env {
   virtual void Schedule(
       void (*function)(void* arg),
       void* arg,
-      int state=0) = 0;
+      int state=0,
+      bool imm_flag=false) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
