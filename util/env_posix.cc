@@ -584,6 +584,21 @@ class PosixEnv : public Env {
     usleep(micros);
   }
 
+  virtual void WriteThrottle()
+  {
+      int pause;
+
+      PthreadCall("lock", pthread_mutex_lock(&mu_));
+      // imm_ flush, cost is 75ms
+      pause=queue4_.size() * 75000;
+
+      // level 0 merge, cost 75ms
+      pause+=queue2_.size() * 75000;
+
+      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+      SleepForMicroseconds(pause);
+  }   // WriteThrottle
+
  private:
   void PthreadCall(const char* label, int result) {
     if (result != 0) {

@@ -157,6 +157,10 @@ class Env {
   // Sleep/delay the thread for the perscribed number of micro-seconds.
   virtual void SleepForMicroseconds(int micros) = 0;
 
+  // Simple adaptive write throttle to pace incoming data against
+  //  hardware write throughput
+  virtual void WriteThrottle() {return;};
+
  private:
   // No copying allowed
   Env(const Env&);
