@@ -633,9 +633,12 @@ void DBImpl::MaybeScheduleCompaction() {
 
   // writing of memory to disk: high priority
   if (NULL!=imm_)
+  {
       push=true;
+  }   // if
 
-  if (!push)
+  // merge level 0s to level 1
+  else
   {
       Compaction * c_ptr;
       c_ptr=versions_->PickCompaction();
@@ -1301,10 +1304,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.Unlock();
   /// slowing things down
   // shared thread block throttle
-  env_->WriteThrottle();
-  // personal throttle (additive)
-  if (NULL != imm_)
-      env_->WriteThrottle();
+  env_->WriteThrottle(versions_->NumLevelFiles(0));
   mutex_.Lock();
 
   while (true) {
@@ -1322,8 +1322,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
-      //env_->SleepForMicroseconds(1000);
-      env_->WriteThrottle();
+      env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&

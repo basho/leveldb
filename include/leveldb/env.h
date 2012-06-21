@@ -159,7 +159,7 @@ class Env {
 
   // Simple adaptive write throttle to pace incoming data against
   //  hardware write throughput
-  virtual void WriteThrottle() {return;};
+  virtual void WriteThrottle(int level0_count) {return;};
 
  private:
   // No copying allowed
