@@ -603,7 +603,7 @@ class PosixEnv : public Env {
 
       // imm_ flush queue, cost is 0.4ms
       /// (assumes need 0.6 seconds with 1,500 write/ps)
-      pause=+queue4_.size() * 400;
+      pause+=queue4_.size() * 400;
 
       // level 0 merge queue, cost 22.5ms
       /// (assumes need 15 seconds with 666 write/ps)
@@ -613,7 +613,7 @@ class PosixEnv : public Env {
       //  (assumes 3 seconds additional per file with 666 write/ps)
       //  (progressive slow down of this database as more build up)
       if (config::kL0_CompactionTrigger < level0_count)
-          pause=+(level0_count-config::kL0_CompactionTrigger) * 4500;
+          pause+=(level0_count-config::kL0_CompactionTrigger) * 4500;
 
       // level 1+ work backlog, cost 4ms
       //  (assumes need 6 seconds with 1,500 write/ps)
