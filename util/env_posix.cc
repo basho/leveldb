@@ -589,9 +589,12 @@ class PosixEnv : public Env {
       int level0_count)       //!< database specific count
   {
       int pause;
-      static volatile unsigned global_pause=0;
+      static volatile int global_pause=0;
+      static pthread_mutex_t global_pause_mutex=PTHREAD_MUTEX_INITIALIZER;
+
 
       pause=0;
+      // lock access to the queueX_ variables
       PthreadCall("lock", pthread_mutex_lock(&mu_));
 
       // write time assumptions:  The server is going to be
@@ -602,37 +605,47 @@ class PosixEnv : public Env {
       //  Per thread block calculations cancel out in the math, hence ignored.
 
       // imm_ flush queue, cost is 0.4ms
-      /// (assumes need 0.6 seconds with 1,500 write/ps)
-      pause+=queue4_.size() * 400;
+      /// (assumes need 0.5 seconds with 1,500 write/ps)
+      pause+=queue4_.size() * 333;
 
-      // level 0 merge queue, cost 22.5ms
-      /// (assumes need 15 seconds with 666 write/ps)
-      pause+=queue2_.size() * 22500;
+      // level 0 merge queue, cost 10.0ms
+      /// (assumes need 15 seconds with 1,500 write/ps)
+      pause+=queue2_.size() * 10000;
 
       // 4.5 ms for each level 0 file above compaction trigger point
-      //  (assumes 3 seconds additional per file with 666 write/ps)
-      //  (progressive slow down of this database as more build up)
+      //  (assumes 3 seconds additional per file with 1,500 write/ps)
+      //  Either there are too many Level 0 compaction already, or this
+      //  vnode is in the middle of a Level 1+ compaction.  Progressive
+      //  slow down as time passes.
       if (config::kL0_CompactionTrigger < level0_count)
-          pause+=(level0_count-config::kL0_CompactionTrigger) * 4500;
+          pause+=(level0_count-config::kL0_CompactionTrigger) * 2000;
 
-      // level 1+ work backlog, cost 4ms
-      //  (assumes need 6 seconds with 1,500 write/ps)
-      pause+=queue_.size() * 4000;
+      // level 1+ work backlog
+      //  just acknowledge that work is pending, but this work is
+      //  not essential to write volume ... unless it blocks Level 0
+      //  of same vnode and above equation addresses that scenario.
+      if (0!=queue_.size())
+          pause+=1000;
 
+      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
+      PthreadCall("lock", pthread_mutex_lock(&global_pause_mutex));
       // want to impact all threads to slow down writes.
       //  there is no easy way today to know when to "turn off"
       //  the pause globally, so use --global_pause as proxy
+      //  (this param is touchy)
       if (global_pause<pause)
-          global_pause=pause;
-      else if (5<global_pause)
-          global_pause-=5;
+          global_pause+=(pause-global_pause)/7; // 5 good
+      else if (10<global_pause)  // was 5, 50 too much
+          global_pause-=10;
       else
           global_pause=0;
 
-      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-      if (0<global_pause)
-          SleepForMicroseconds(global_pause);
+      pause=global_pause;
+      PthreadCall("unlock", pthread_mutex_unlock(&global_pause_mutex));
+
+      if (0<pause)
+          SleepForMicroseconds(pause);
 
   }   // WriteThrottle
 
