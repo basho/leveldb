@@ -24,6 +24,7 @@
 #include "port/port.h"
 #include "util/logging.h"
 #include "util/posix_logger.h"
+#include "db/dbformat.h"
 
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
@@ -586,6 +587,57 @@ class PosixEnv : public Env {
   virtual void SleepForMicroseconds(int micros) {
     usleep(micros);
   }
+
+  virtual void WriteThrottle(
+      int level0_count)       //!< database specific count
+  {
+      int pause;
+      static volatile unsigned global_pause=0;
+
+      pause=0;
+      PthreadCall("lock", pthread_mutex_lock(&mu_));
+
+      // write time assumptions:  The server is going to be
+      //  relatively fast when starting imm_ or level 1+
+      //  compactions, hence 1,500 write operation pace.
+      //  The server is going to be busy when level 0 to 1
+      //  are falling behind, hence 666 write operations per second.
+      //  Per thread block calculations cancel out in the math, hence ignored.
+
+      // imm_ flush queue, cost is 0.4ms
+      /// (assumes need 0.6 seconds with 1,500 write/ps)
+      pause+=queue4_.size() * 400;
+
+      // level 0 merge queue, cost 22.5ms
+      /// (assumes need 15 seconds with 666 write/ps)
+      pause+=queue2_.size() * 22500;
+
+      // 4.5 ms for each level 0 file above compaction trigger point
+      //  (assumes 3 seconds additional per file with 666 write/ps)
+      //  (progressive slow down of this database as more build up)
+      if (config::kL0_CompactionTrigger < level0_count)
+          pause+=(level0_count-config::kL0_CompactionTrigger) * 4500;
+
+      // level 1+ work backlog, cost 4ms
+      //  (assumes need 6 seconds with 1,500 write/ps)
+      pause+=queue_.size() * 4000;
+
+
+      // want to impact all threads to slow down writes.
+      //  there is no easy way today to know when to "turn off"
+      //  the pause globally, so use --global_pause as proxy
+      if (global_pause<pause)
+          global_pause=pause;
+      else if (5<global_pause)
+          global_pause-=5;
+      else
+          global_pause=0;
+
+      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+      if (0<global_pause)
+          SleepForMicroseconds(global_pause);
+
+  }   // WriteThrottle
 
  private:
   void PthreadCall(const char* label, int result) {

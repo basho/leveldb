@@ -1324,6 +1324,13 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   assert(!writers_.empty());
   bool allow_delay = !force;
   Status s;
+
+  mutex_.Unlock();
+  /// slowing things down
+  // shared thread block throttle
+  env_->WriteThrottle(versions_->NumLevelFiles(0));
+  mutex_.Lock();
+
   while (true) {
     if (!bg_error_.ok()) {
       // Yield previous error
