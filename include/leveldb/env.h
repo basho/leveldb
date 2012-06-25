@@ -345,6 +345,9 @@ class EnvWrapper : public Env {
   Env* target_;
 };
 
+extern pthread_rwlock_t gThreadLock0;
+extern pthread_rwlock_t gThreadLock1;
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_ENV_H_
