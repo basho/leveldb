@@ -44,6 +44,7 @@ Options::Dump(
     Log(log,"           Options.block_cache: %p", block_cache);
     Log(log,"            Options.block_size: %zd", block_size);
     Log(log,"Options.block_restart_interval: %d", block_restart_interval);
+    Log(log,"           Options.compression: %d", compression);
     Log(log,"         Options.filter_policy: %s", filter_policy == NULL ? "NULL" : filter_policy->Name());
 
 }   // Options::Dump
