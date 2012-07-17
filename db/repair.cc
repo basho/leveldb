@@ -52,6 +52,7 @@ class Repairer {
         options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
+        db_lock_(NULL),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
     table_cache_ = new TableCache(dbname_, &options_, 10);
@@ -68,25 +69,33 @@ class Repairer {
   }
 
   Status Run() {
-    Status status = FindFiles();
+    Status status;
+
+    status = env_->LockFile(LockFileName(dbname_), &db_lock_);
     if (status.ok()) {
-      ConvertLogFilesToTables();
-      ExtractMetaData();
-      status = WriteDescriptor();
-    }
-    if (status.ok()) {
-      unsigned long long bytes = 0;
-      for (size_t i = 0; i < tables_.size(); i++) {
-        bytes += tables_[i].meta.file_size;
+      status = FindFiles();
+      if (status.ok()) {
+        ConvertLogFilesToTables();
+        ExtractMetaData();
+        status = WriteDescriptor();
       }
-      Log(options_.info_log,
-          "**** Repaired leveldb %s; "
-          "recovered %d files; %llu bytes. "
-          "Some data may have been lost. "
-          "****",
-          dbname_.c_str(),
-          static_cast<int>(tables_.size()),
-          bytes);
+      if (status.ok()) {
+        unsigned long long bytes = 0;
+        for (size_t i = 0; i < tables_.size(); i++) {
+          bytes += tables_[i].meta.file_size;
+        }
+        Log(options_.info_log,
+            "**** Repaired leveldb %s; "
+            "recovered %d files; %llu bytes. "
+            "Some data may have been lost. "
+            "****",
+            dbname_.c_str(),
+            static_cast<int>(tables_.size()),
+            bytes);
+      }
+      if (db_lock_ != NULL) {
+        env_->UnlockFile(db_lock_);
+      }
     }
     return status;
   }
@@ -104,6 +113,7 @@ class Repairer {
   Options const options_;
   bool owns_info_log_;
   bool owns_cache_;
+  FileLock* db_lock_;
   TableCache* table_cache_;
   VersionEdit edit_;
 
