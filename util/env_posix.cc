@@ -288,9 +288,8 @@ class PosixMmapFile : public WritableFile {
     return Status::OK();
   }
 
-  virtual Status Close(bool async=true) {
+  virtual Status Close() {
     Status s;
-    size_t unused = limit_ - dst_;
 
     if (!UnmapCurrentRegion(true)) {
         s = IOError(filename_, errno);
@@ -331,6 +330,16 @@ class PosixMmapFile : public WritableFile {
     return s;
   }
 };
+
+
+// matthewv July 17, 2012 ... riak was overlapping activity on the
+//  same database directory due to the incorrect assumption that the
+//  code below worked within the riak process space.  The fix leads to a choice:
+// fcntl() only locks against external processes, not multiple locks from
+//  same process.  But it has worked great with NFS forever
+// flock() locks against both external processes and multiple locks from
+//  same process.  It does not with NFS until Linux 2.6.12 ... other OS may vary
+// Pick the fcntl() or flock() below as appropriate for your environment / needs.
 
 static int LockOrUnlock(int fd, bool lock) {
 #if 0
