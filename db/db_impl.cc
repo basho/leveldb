@@ -178,10 +178,6 @@ DBImpl::~DBImpl() {
   }
   mutex_.Unlock();
 
-  if (db_lock_ != NULL) {
-    env_->UnlockFile(db_lock_);
-  }
-
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
@@ -198,6 +194,10 @@ DBImpl::~DBImpl() {
   }
   if (NULL != options_.bad_blocks) options_.bad_blocks->Close();
   delete options_.bad_blocks;
+
+  if (db_lock_ != NULL) {
+    env_->UnlockFile(db_lock_);
+  }
 }
 
 Status DBImpl::NewDB() {

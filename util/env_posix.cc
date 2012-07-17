@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/file.h>
 #include <time.h>
 #include <unistd.h>
 #if defined(LEVELDB_PLATFORM_ANDROID)
@@ -215,6 +216,12 @@ class PosixMmapFile : public WritableFile {
         map_size_ *= 2;
       }
     }
+    else if (and_close && -1!=fd_)
+    {
+        close(fd_);
+        fd_=-1;
+    }   // else if
+
     return result;
   }
 
@@ -285,29 +292,9 @@ class PosixMmapFile : public WritableFile {
     Status s;
     size_t unused = limit_ - dst_;
 
-    if (!async)
-    {
-        if (!UnmapCurrentRegion()) {
-            s = IOError(filename_, errno);
-        } else if (unused > 0) {
-            // Trim the extra space at the end of the file
-            if (ftruncate(fd_, file_offset_ - unused) < 0) {
-                s = IOError(filename_, errno);
-            }
-        }
-
-        if (close(fd_) < 0) {
-            if (s.ok()) {
-                s = IOError(filename_, errno);
-            }
-        }
-    }   // if
-    else
-    {
-        if (!UnmapCurrentRegion(true)) {
-            s = IOError(filename_, errno);
-        }
-    }   // else
+    if (!UnmapCurrentRegion(true)) {
+        s = IOError(filename_, errno);
+    }
 
     fd_ = -1;
     base_ = NULL;
@@ -346,6 +333,9 @@ class PosixMmapFile : public WritableFile {
 };
 
 static int LockOrUnlock(int fd, bool lock) {
+#if 0
+    // works with NFS, but fails if same process attempts second access to
+    //  db, i.e. makes second DB object to same directory
   errno = 0;
   struct flock f;
   memset(&f, 0, sizeof(f));
@@ -354,6 +344,10 @@ static int LockOrUnlock(int fd, bool lock) {
   f.l_start = 0;
   f.l_len = 0;        // Lock/unlock entire file
   return fcntl(fd, F_SETLK, &f);
+#else
+  // does NOT work with NFS, but DOES work within same process
+  return flock(fd, (lock ? LOCK_EX : LOCK_UN));
+#endif
 }
 
 class PosixFileLock : public FileLock {
