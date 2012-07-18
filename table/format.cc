@@ -167,12 +167,44 @@ Status ReadBlock(RandomAccessFile* file,
   // clean up error and decide what to do with it
   if (!s.ok())
   {
-      if (options.IsCompaction() && NULL!=options.GetBadBlocks())
+      if (options.IsCompaction() && 0!=options.GetDBName().length())
       {
+          // this process is slow.  assumption is that it does not happen often.
           if (NULL!=data)
           {
-              options.GetBadBlocks()->AddRecord(Slice(data, n));
-              Log(options.GetInfoLog(),"Moving corrupted block to lost/BLOCKS.bad (size %zd)", n);
+              std::string new_name;
+              WritableFile *bad_file;
+              log::Writer *bad_logger;
+              Status s2;
+
+              bad_file=NULL;
+              bad_logger=NULL;
+
+              // potentially create the "lost" directory.  It might already exist.
+              new_name=options.GetDBName();
+              new_name+="/lost";
+              options.GetEnv()->CreateDir(new_name);
+
+              // create / append file to hold removed blocks
+              new_name+="/BLOCKS.bad";
+              s2=options.GetEnv()->NewAppendableFile(new_name, &bad_file);
+              if (s2.ok())
+              {
+                  // need a try/catch
+                  bad_logger=new log::Writer(bad_file);
+                  bad_logger->AddRecord(Slice(data, n));
+                  Log(options.GetInfoLog(),"Moving corrupted block to lost/BLOCKS.bad (size %zd)", n);
+
+                  // Close also deletes bad_file
+                  bad_logger->Close();
+                  delete bad_logger;
+                  bad_logger=NULL;
+                  bad_file=NULL;
+              }   // if
+              else
+              {
+                  Log(options.GetInfoLog(), "Unable to create file for bad/corrupted blocks: %s", new_name.c_str());
+              }   // else
           }   // if
 
           // lie to the upper layers to keep compaction from going into an infinite loop

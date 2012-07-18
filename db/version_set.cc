@@ -1144,7 +1144,8 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   options.fill_cache = false;
   options.is_compaction = true;
   options.info_log = options_->info_log;
-  options.bad_blocks = options_->GetBadBlocks();
+  options.dbname = dbname_;
+  options.env = env_;
 
   // Level-0 files have to be merged together.  For other levels,
   // we will make a concatenating iterator per level.

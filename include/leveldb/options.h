@@ -6,6 +6,7 @@
 #define STORAGE_LEVELDB_INCLUDE_OPTIONS_H_
 
 #include <stddef.h>
+#include <string>
 
 namespace leveldb {
 
@@ -144,11 +145,6 @@ struct Options {
 
   void Dump(Logger * log) const;
 
-  // accessors
-  log::Writer * GetBadBlocks() const {return(bad_blocks);};
-
-  // These items below are internal options, not for external manipulation.
-  log::Writer * bad_blocks;
 };
 
 // Options that control read operations
@@ -175,7 +171,7 @@ struct ReadOptions {
       fill_cache(true),
       snapshot(NULL),
       is_compaction(false),
-      bad_blocks(NULL),
+      env(NULL),
       info_log(NULL)
   {
   }
@@ -184,10 +180,11 @@ struct ReadOptions {
   // accessors to the private data
   bool IsCompaction() const {return(is_compaction);};
 
-  log::Writer * GetBadBlocks() const {return(bad_blocks);};
-
   Logger * GetInfoLog() const {return(info_log);};
 
+  const std::string & GetDBName() const {return(dbname);};
+
+  Env * GetEnv() const {return(env);};
 
   // The items below are internal options, not for external manipulation.
   //  They are populated by VersionSet::MakeInputIterator only during compaction operations
@@ -197,9 +194,11 @@ private:
   // true when used on background compaction
   bool is_compaction;
 
-  // File to receive corrupted blocks found during compaction.
-  // Only valid when is_compation==true
-  log::Writer * bad_blocks;
+  // Database name for potential creation of bad blocks file
+  std::string dbname;
+
+  // Needed for file operations if creating bad blocks file
+  Env * env;
 
   // Open log file for error notifications
   // Only valid when is_compation==true

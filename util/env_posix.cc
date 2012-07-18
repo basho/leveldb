@@ -219,6 +219,13 @@ class PosixMmapFile : public WritableFile {
   }
 
   bool MapNewRegion() {
+    size_t offset_adjust;
+
+    // append mode file might not have file_offset_ on a page boundry
+    offset_adjust=file_offset_ % page_size_;
+    if (0!=offset_adjust)
+        file_offset_-=offset_adjust;
+
     assert(base_ == NULL);
     if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
       return false;
@@ -230,7 +237,7 @@ class PosixMmapFile : public WritableFile {
     }
     base_ = reinterpret_cast<char*>(ptr);
     limit_ = base_ + map_size_;
-    dst_ = base_;
+    dst_ = base_ + offset_adjust;
     last_sync_ = base_;
     return true;
   }
