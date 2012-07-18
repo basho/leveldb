@@ -110,29 +110,6 @@ Options SanitizeOptions(const std::string& dbname,
     result.block_cache = NewLRUCache(8 << 20);
   }
 
-  if (NULL==result.bad_blocks)
-  {
-      std::string new_name;
-      WritableFile *bad_file;
-      Status s;
-
-      bad_file=NULL;
-      new_name=dbname;
-      new_name+="/lost";
-      src.env->CreateDir(new_name);
-      new_name+="/BLOCKS.bad";
-
-      s=src.env->NewAppendableFile(new_name, &bad_file);
-      if (s.ok())
-      {
-          result.bad_blocks=new log::Writer(bad_file);
-      }   // if
-      else
-      {
-          Log(result.info_log, "Unable to create file for bad/corrupted blocks: %s", new_name.c_str());
-      }   // else
-  }   // if
-
   return result;
 }
 
@@ -196,8 +173,6 @@ DBImpl::~DBImpl() {
   if (owns_cache_) {
     delete options_.block_cache;
   }
-  if (NULL != options_.bad_blocks) options_.bad_blocks->Close();
-  delete options_.bad_blocks;
 }
 
 Status DBImpl::NewDB() {
