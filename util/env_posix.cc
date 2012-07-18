@@ -355,7 +355,7 @@ static int LockOrUnlock(int fd, bool lock) {
   return fcntl(fd, F_SETLK, &f);
 #else
   // does NOT work with NFS, but DOES work within same process
-  return flock(fd, (lock ? LOCK_EX : LOCK_UN));
+  return flock(fd, (lock ? LOCK_EX : LOCK_UN) | LOCK_NB);
 #endif
 }
 
