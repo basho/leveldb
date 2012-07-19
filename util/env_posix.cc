@@ -338,11 +338,12 @@ class PosixMmapFile : public WritableFile {
 // fcntl() only locks against external processes, not multiple locks from
 //  same process.  But it has worked great with NFS forever
 // flock() locks against both external processes and multiple locks from
-//  same process.  It does not with NFS until Linux 2.6.12 ... other OS may vary
+//  same process.  It does not with NFS until Linux 2.6.12 ... other OS may vary.
+//  SmartOS/Solaris do not appear to support flock() though there is a man page.
 // Pick the fcntl() or flock() below as appropriate for your environment / needs.
 
 static int LockOrUnlock(int fd, bool lock) {
-#if 0
+#ifndef LOCK_UN
     // works with NFS, but fails if same process attempts second access to
     //  db, i.e. makes second DB object to same directory
   errno = 0;
