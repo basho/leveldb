@@ -876,18 +876,16 @@ void PosixEnv::BGThread()
         void* arg = queue_ptr->front().arg;
         queue_ptr->pop_front();
 
-        PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-
 
         if (bgthread3_==pthread_self())
-            ++gPerfCounters->m_BGCloseUnmap;
+            __sync_add_and_fetch(&gPerfCounters->m_BGCloseUnmap, 1);
         else if (bgthread2_==pthread_self())
-            ++gPerfCounters->m_BGCompactImm;
+            __sync_add_and_fetch(&gPerfCounters->m_BGCompactImm, 1);
         else
-            ++gPerfCounters->m_BGNormal;
+            __sync_add_and_fetch(&gPerfCounters->m_BGNormal, 1);
 
         (*function)(arg);
-    }   // while(true)
+    }
 }
 
 namespace {
@@ -1056,7 +1054,6 @@ static void InitDefaultEnv()
     {
 //        syslog(LOG_WARNING, "file failed to open %d", errno);
     }   // else
-
 }
 
 Env* Env::Default() {
