@@ -221,7 +221,7 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
 
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
                           void* arg,
-                          void (*saver)(void*, const Slice&, const Slice&)) {
+                          bool (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
@@ -239,7 +239,11 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {
-        (*saver)(arg, block_iter->key(), block_iter->value());
+        bool match;
+        match=(*saver)(arg, block_iter->key(), block_iter->value());
+        if (!match && NULL!=filter)
+            __sync_add_and_fetch(&gPerfCounters->m_BlockFilterFalse, 1);
+
       }
       s = block_iter->status();
       delete block_iter;

@@ -32,6 +32,8 @@ extern std::string NumberToString(uint64_t num);
 // Escapes any non-printable characters found in "value".
 extern std::string EscapeString(const Slice& value);
 
+extern std::string HexString(const Slice & value);
+
 // If *in starts with "c", advances *in past the first character and
 // returns true.  Otherwise, returns false.
 extern bool ConsumeChar(Slice* in, char c);
