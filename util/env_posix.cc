@@ -853,6 +853,7 @@ void PosixEnv::BGThread()
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
+        PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
         if (bgthread3_==pthread_self())
             __sync_add_and_fetch(&gPerfCounters->m_BGCloseUnmap, 1);

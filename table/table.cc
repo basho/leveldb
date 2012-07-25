@@ -316,6 +316,8 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       if (block_iter->Valid()) {
         bool match;
         match=(*saver)(arg, block_iter->key(), block_iter->value());
+        if (!match && NULL!=filter)
+            __sync_add_and_fetch(&gPerfCounters->m_BlockFilterFalse, 1);
       }
 
       s = block_iter->status();
