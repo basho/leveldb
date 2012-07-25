@@ -45,6 +45,21 @@ std::string EscapeString(const Slice& value) {
   return r;
 }
 
+std::string
+HexString(const Slice& value)
+{
+  std::string str;
+  for (size_t i = 0; i < value.size(); i++) {
+    char c = value[i];
+    char buf[10];
+    snprintf(buf, sizeof(buf), "%02x",
+             static_cast<unsigned int>(c) & 0xff);
+    str.append(buf);
+  }  // for
+  return(str);
+}  // HexString
+
+
 bool ConsumeChar(Slice* in, char c) {
   if (!in->empty() && (*in)[0] == c) {
     in->remove_prefix(1);

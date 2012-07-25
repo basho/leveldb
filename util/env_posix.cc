@@ -876,6 +876,7 @@ void PosixEnv::BGThread()
         void* arg = queue_ptr->front().arg;
         queue_ptr->pop_front();
 
+        PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
         if (bgthread3_==pthread_self())
             __sync_add_and_fetch(&gPerfCounters->m_BGCloseUnmap, 1);
@@ -1022,7 +1023,7 @@ static void InitDefaultEnv()
 
     // open shared file of performance counters,
     //  create or reformat as necessary
-    fd = open("/home/mmaszewski/riak2/riak_ee/rel/riak/log/perf_counters.bin", O_CREAT | O_RDWR, 0644);
+    fd = open("/home/mmaszewski/perf_counters.bin", O_CREAT | O_RDWR, 0644);
     if (-1!=fd)
     {
         void * base;
