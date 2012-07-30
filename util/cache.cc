@@ -31,9 +31,9 @@ struct LRUHandle {
   LRUHandle* prev;
   size_t charge;      // TODO(opt): Only allow uint32_t?
   size_t key_length;
-  uint32_t refs;
+  volatile uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
-  struct timeval last_access;
+   struct timeval last_access;
   char key_data[1];   // Beginning of key
 
   Slice key() const {
@@ -263,7 +263,8 @@ Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
   e = table_.Lookup(key, hash);
 
   if (e != NULL) {
-    e->refs++;
+    __sync_add_and_fetch(&e->refs, 1);
+    // was ... e->refs++;
     gettimeofday(&e->last_access, NULL);
   }
 
