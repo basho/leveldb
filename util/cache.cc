@@ -31,9 +31,9 @@ struct LRUHandle {
   LRUHandle* prev;
   size_t charge;      // TODO(opt): Only allow uint32_t?
   size_t key_length;
-  uint32_t refs;
+  volatile uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
-  struct timeval last_access;
+   struct timeval last_access;
   char key_data[1];   // Beginning of key
 
   Slice key() const {
@@ -74,6 +74,7 @@ class HandleTable {
         Resize();
       }
     }
+    else old->next_hash=old;
     return old;
   }
 
@@ -83,6 +84,8 @@ class HandleTable {
     if (result != NULL) {
       *ptr = result->next_hash;
       --elems_;
+      // debug aid
+      result->next_hash=result;
     }
     return result;
   }
@@ -221,15 +224,28 @@ void LRUCache::Unref(LRUHandle* e) {
   assert(e->refs > 0);
   e->refs--;
   if (e->refs <= 0) {
-    usage_ -= e->charge;
-    (*e->deleter)(e->key(), e->value);
-    free(e);
+
+    // sign that it is off the list
+    if (e->next_hash==e)
+    {
+        usage_ -= e->charge;
+        (*e->deleter)(e->key(), e->value);
+        free(e);
+    }   // if
+    else
+    {
+        // hack to keep object alive until bug figured out
+        ++e->refs;
+    }   // els
   }
 }
 
 void LRUCache::LRU_Remove(LRUHandle* e) {
   e->next->prev = e->prev;
   e->prev->next = e->next;
+  // debug aid
+  e->next=NULL;
+  e->prev=NULL;
 }
 
 void LRUCache::LRU_Append(LRUHandle* e) {
@@ -242,14 +258,16 @@ void LRUCache::LRU_Append(LRUHandle* e) {
 
 Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
   LRUHandle* e;
-  {
-    ReadLock l(&mutex_);
-    e = table_.Lookup(key, hash);
-  }
+  ReadLock l(&mutex_);
+
+  e = table_.Lookup(key, hash);
+
   if (e != NULL) {
-    e->refs++;
+    __sync_add_and_fetch(&e->refs, 1);
+    // was ... e->refs++;
     gettimeofday(&e->last_access, NULL);
   }
+
   return reinterpret_cast<Cache::Handle*>(e);
 }
 
@@ -303,7 +321,7 @@ Cache::Handle* LRUCache::Insert(
     // removing item that still has active references is
     //  quite harmful since the removal does not change
     //  usage.  Result can be accidental flush of entire cache.
-    if (low_ptr->refs <= 1)
+    if (&lru_!=low_ptr && low_ptr->refs <= 1)
     {
         one_removed=true;
         LRU_Remove(low_ptr);
