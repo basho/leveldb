@@ -12,6 +12,10 @@
 #include "util/hash.h"
 #include "util/mutexlock.h"
 
+#ifdef OS_SOLARIS
+#  include <atomic.h>
+#endif
+
 namespace leveldb {
 
 Cache::~Cache() {
@@ -263,7 +267,11 @@ Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
   e = table_.Lookup(key, hash);
 
   if (e != NULL) {
+#ifdef OS_SOLARIS
+    atomic_add_int(&e->refs, 1);
+#else
     __sync_add_and_fetch(&e->refs, 1);
+#endif
     // was ... e->refs++;
     gettimeofday(&e->last_access, NULL);
   }
