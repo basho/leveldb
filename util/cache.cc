@@ -37,7 +37,7 @@ struct LRUHandle {
   size_t key_length;
   volatile uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
-   struct timeval last_access;
+  struct timeval last_access;
   char key_data[1];   // Beginning of key
 
   Slice key() const {
@@ -219,6 +219,7 @@ LRUCache::~LRUCache() {
   for (LRUHandle* e = lru_.next; e != &lru_; ) {
     LRUHandle* next = e->next;
     assert(e->refs == 1);  // Error if caller has an unreleased handle
+    e->next_hash=e;  // mark as valid delete / deref
     Unref(e);
     e = next;
   }
@@ -238,9 +239,10 @@ void LRUCache::Unref(LRUHandle* e) {
     }   // if
     else
     {
-        // hack to keep object alive until bug figured out
+        // hack to keep object alive. was for atomic(ref++) bug.
+        //  left for Riak 1.2 safety
         ++e->refs;
-    }   // els
+    }   // else
   }
 }
 
