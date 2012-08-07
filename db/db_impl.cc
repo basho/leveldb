@@ -1077,7 +1077,12 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
     list.push_back(imm_->NewIterator());
     imm_->Ref();
   }
-  versions_->current()->AddIterators(options, &list);
+
+  ReadOptions options2;
+  options2=options;
+  options2.SetEnv(env_);
+
+  versions_->current()->AddIterators(options2, &list);
   Iterator* internal_iter =
       NewMergingIterator(&internal_comparator_, &list[0], list.size());
   versions_->current()->Ref();

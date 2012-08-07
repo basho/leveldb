@@ -186,6 +186,8 @@ struct ReadOptions {
 
   Env * GetEnv() const {return(env);};
 
+  void SetEnv(Env * Environ) {env=Environ;};
+
   // The items below are internal options, not for external manipulation.
   //  They are populated by VersionSet::MakeInputIterator only during compaction operations
 private:

@@ -86,6 +86,13 @@ Status ReadBlock(RandomAccessFile* file,
   result->cachable = false;
   result->heap_allocated = false;
 
+  // throttle designed to reduce disk activity
+  //  once write operations start to back up
+  if (!options.IsCompaction() && NULL!=options.GetEnv())
+  {
+      options.GetEnv()->WriteThrottle(0);
+  }   // if
+
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size());

@@ -112,8 +112,12 @@ Status TableCache::Get(const ReadOptions& options,
   Cache::Handle* handle = NULL;
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
+    ReadOptions options2;
+    options2=options;
+    options2.SetEnv(env_);
+
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
-    s = t->InternalGet(options, k, arg, saver);
+    s = t->InternalGet(options2, k, arg, saver);
     cache_->Release(handle);
   }
   return s;
