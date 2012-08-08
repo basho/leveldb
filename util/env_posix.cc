@@ -31,6 +31,9 @@
 #include <syslog.h>
 #include "leveldb/perf_count.h"
 
+#include <syslog.h>
+#include "leveldb/perf_count.h"
+
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -931,6 +934,7 @@ void BGFileCloser(void * arg)
 
     close(file_ptr->fd_);
     delete file_ptr;
+    __sync_add_and_fetch(&gPerfCounters->m_ROFileClose, 1);
 
     __sync_add_and_fetch(&gPerfCounters->m_ROFileClose, 1);
 
@@ -977,6 +981,7 @@ void BGFileUnmapper(void * arg)
 #endif
 
     delete file_ptr;
+    __sync_add_and_fetch(&gPerfCounters->m_ROFileUnmap, 1);
 
     __sync_add_and_fetch(&gPerfCounters->m_ROFileUnmap, 1);
 
@@ -998,6 +1003,7 @@ void BGFileUnmapper2(void * arg)
 #endif
 
     delete file_ptr;
+    __sync_add_and_fetch(&gPerfCounters->m_RWFileUnmap, 1);
 
     __sync_add_and_fetch(&gPerfCounters->m_RWFileUnmap, 1);
 
