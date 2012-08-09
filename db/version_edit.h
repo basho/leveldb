@@ -25,6 +25,22 @@ struct FileMetaData {
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) { }
 };
 
+
+class FileMetaDataPtrCompare
+{
+protected:
+    const Comparator * comparator_;
+
+public:
+    explicit FileMetaDataPtrCompare(const Comparator * Comparer)
+        : comparator_(Comparer) {};
+
+    bool operator() (const FileMetaData * file1, const FileMetaData * file2) const
+    {
+        return(comparator_->Compare(file1->smallest.user_key(), file2->smallest.user_key()) < 0);
+    }
+};  // class FileMetaDataPtrCompare
+
 class VersionEdit {
  public:
   VersionEdit() { Clear(); }
