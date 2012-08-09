@@ -1225,6 +1225,18 @@ Compaction* VersionSet::PickCompaction() {
     // which will include the picked file.
     current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
     assert(!c->inputs_[0].empty());
+
+    // this can get into tens of thousands after a repair
+    //  keep it sane
+    if (options_->max_open_files < c->inputs_[0].size())
+    {
+        std::nth_element(c->inputs_[0].begin(),
+                         c->inputs_[0].begin()+options_->max_open_files-1,
+                         c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
+        c->inputs_[0].erase(c->inputs_[0].begin()+options_->max_open_files,
+                            c->inputs_[0].end());
+    }   // if
+
   }
 
   SetupOtherInputs(c);
