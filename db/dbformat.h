@@ -16,6 +16,8 @@
 
 namespace leveldb {
 
+class Compaction;
+
 // Grouping of constants.  We may want to make some of these
 // parameters set via options.
 namespace config {
@@ -220,7 +222,40 @@ class LookupKey {
 
 inline LookupKey::~LookupKey() {
   if (start_ != space_) delete[] start_;
-}
+};
+
+
+// this class was constructed from code with DBImpl::DoCompactionWork (db_impl.cc)
+//   so it could be shared within BuildTable (and thus reduce Level 0 bloating)
+class KeyRetirement
+{
+protected:
+    // "state" from previous key reviewed
+    std::string current_user_key;
+    bool has_current_user_key;
+    SequenceNumber last_sequence_for_key;
+
+    // database values needed for processing
+    const Comparator * user_comparator;
+    SequenceNumber smallest_snapshot;
+    Compaction * const compaction;
+
+    bool valid;
+
+public:
+    KeyRetirement(const Comparator * UserComparator, SequenceNumber SmallestSnapshot,
+                  Compaction * const Compaction=NULL);
+
+    virtual ~KeyRetirement() {};
+
+    bool operator()(Slice & key);
+
+private:
+    KeyRetirement();
+    KeyRetirement(const KeyRetirement &);
+    const KeyRetirement & operator=(const KeyRetirement &);
+
+};  // class KeyRetirement
 
 }  // namespace leveldb
 
