@@ -173,6 +173,9 @@ class DBImpl : public DB {
   };
   CompactionStats stats_[config::kNumLevels];
 
+  // hint to background thread when level0 is backing up
+  volatile bool level0_good;
+
   // No copying allowed
   DBImpl(const DBImpl&);
   void operator=(const DBImpl&);
