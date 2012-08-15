@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include "db/dbformat.h"
+#include "db/version_set.h"
 #include "port/port.h"
 #include "util/coding.h"
 
@@ -136,5 +137,90 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
   dst += 8;
   end_ = dst;
 }
+
+
+KeyRetirement::KeyRetirement(
+    const Comparator * Comparator,
+    SequenceNumber SmallestSnapshot,
+    Compaction * const Compaction)
+    : has_current_user_key(false), last_sequence_for_key(kMaxSequenceNumber),
+      user_comparator(Comparator), smallest_snapshot(SmallestSnapshot),
+      compaction(Compaction),
+      valid(false)
+{
+    // NULL is ok for compaction
+    valid=(NULL!=user_comparator);
+
+    return;
+}   // KeyRetirement::KeyRetirement
+
+
+bool
+KeyRetirement::operator()(
+    Slice & key)
+{
+    ParsedInternalKey ikey;
+    bool drop = false;
+
+    if (valid)
+    {
+        if (!ParseInternalKey(key, &ikey))
+        {
+            // Do not hide error keys
+            current_user_key.clear();
+            has_current_user_key = false;
+            last_sequence_for_key = kMaxSequenceNumber;
+        }   // else
+        else
+        {
+            if (!has_current_user_key ||
+                user_comparator->Compare(ikey.user_key,
+                                         Slice(current_user_key)) != 0)
+            {
+                // First occurrence of this user key
+                current_user_key.assign(ikey.user_key.data(), ikey.user_key.size());
+                has_current_user_key = true;
+                last_sequence_for_key = kMaxSequenceNumber;
+            }   // if
+
+            if (last_sequence_for_key <= smallest_snapshot)
+            {
+                // Hidden by an newer entry for same user key
+                drop = true;    // (A)
+            }   // if
+
+            else if (ikey.type == kTypeDeletion
+                     && ikey.sequence <= smallest_snapshot
+                     && NULL!=compaction  // mem to level0 ignores this test
+                     && compaction->IsBaseLevelForKey(ikey.user_key))
+            {
+                // For this user key:
+                // (1) there is no data in higher levels
+                // (2) data in lower levels will have larger sequence numbers
+                // (3) data in layers that are being compacted here and have
+                //     smaller sequence numbers will be dropped in the next
+                //     few iterations of this loop (by rule (A) above).
+                // Therefore this deletion marker is obsolete and can be dropped.
+                drop = true;
+            }   // else if
+
+            last_sequence_for_key = ikey.sequence;
+        }   // else
+    }   // if
+
+#if 0
+    // needs clean up to be used again
+    Log(options_.info_log,
+        "  Compact: %s, seq %d, type: %d %d, drop: %d, is_base: %d, "
+        "%d smallest_snapshot: %d",
+        ikey.user_key.ToString().c_str(),
+        (int)ikey.sequence, ikey.type, kTypeValue, drop,
+        compact->compaction->IsBaseLevelForKey(ikey.user_key),
+        (int)last_sequence_for_key, (int)compact->smallest_snapshot);
+#endif
+    return(drop);
+
+}   // KeyRetirement::operator(Slice & )
+
 
 }  // namespace leveldb
