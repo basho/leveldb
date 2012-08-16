@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <memory>
 #include "leveldb/filter_policy.h"
 
+#include "db/dbformat.h"
 #include "leveldb/slice.h"
 #include "util/hash.h"
 #include "util/murmurhash.h"
@@ -31,8 +33,6 @@ class BloomFilterPolicy2 : public FilterPolicy {
  public:
   explicit BloomFilterPolicy2(int bits_per_key)
       : bits_per_key_(bits_per_key) {
-
-
     // We intentionally round down to reduce probing cost a little bit
     k_ = static_cast<size_t>(bits_per_key * 0.69);  // 0.69 =~ ln(2)
     if (k_ < 1) k_ = 1;
@@ -107,6 +107,23 @@ class BloomFilterPolicy2 : public FilterPolicy {
 const FilterPolicy* NewBloomFilterPolicy2(int bits_per_key) {
   return new BloomFilterPolicy2(bits_per_key);
 }
+
+
+// container to hold one bloom filter and auto destruct
+struct BloomInventoryItem2
+{
+    std::auto_ptr<const FilterPolicy> m_Item;
+
+    BloomInventoryItem2()
+    {
+        m_Item.reset(new InternalFilterPolicy2(NewBloomFilterPolicy2(16)));
+        FilterInventory::AddFilterToInventory(m_Item.get());
+    };
+};  // struct BloomInventoryItem2
+
+// bloom filter for reading, created on start-up
+static BloomInventoryItem2 lBloom2Item;
+
 
 
 // sparse table of primes where index to array is count

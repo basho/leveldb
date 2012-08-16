@@ -99,21 +99,52 @@ void Table::ReadMeta(const Footer& footer) {
   }
   Block* meta = new Block(contents);
 
-
-/// XXX fix to allow multiple filters ... test user's, then known internals
-
   Iterator* iter = meta->NewIterator(BytewiseComparator());
-  std::string key = "filter.";
-  key.append(rep_->options.filter_policy->Name());
-  iter->Seek(key);
-  if (iter->Valid() && iter->key() == Slice(key)) {
-    ReadFilter(iter->value());
-  }
+  bool found,first;
+  const FilterPolicy * policy, * next;
+
+  first=true;
+  do
+  {
+      found=false;
+
+      if (first)
+      {
+          policy=rep_->options.filter_policy;
+          next=FilterInventory::ListHead;
+          first=false;
+      }   // if
+      else
+      {
+          policy=next;
+          if (NULL!=policy)
+              next=policy->GetNext();
+          else
+              next=NULL;
+      }   // else
+
+      if (NULL!=policy)
+      {
+          std::string key = "filter.";
+          key.append(policy->Name());
+          iter->Seek(key);
+          if (iter->Valid() && iter->key() == Slice(key))
+          {
+              ReadFilter(iter->value(), policy);
+              found=true;
+          }   // if
+      }   //if
+  } while(!found && NULL!=policy);
+
   delete iter;
   delete meta;
 }
 
-void Table::ReadFilter(const Slice& filter_handle_value) {
+void
+Table::ReadFilter(
+    const Slice& filter_handle_value,
+    const FilterPolicy * policy)
+{
   Slice v = filter_handle_value;
   BlockHandle filter_handle;
   if (!filter_handle.DecodeFrom(&v).ok()) {
@@ -130,7 +161,8 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
   if (block.heap_allocated) {
     rep_->filter_data = block.data.data();     // Will need to delete later
   }
-  rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
+
+  rep_->filter = new FilterBlockReader(policy, block.data);
 }
 
 Table::~Table() {
@@ -239,12 +271,8 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       if (block_iter->Valid()) {
         bool match;
         match=(*saver)(arg, block_iter->key(), block_iter->value());
-#if 0
-        // false positive test
-        if (!match && NULL!=filter)
-            __sync_add_and_fetch(&gPerfCounters->m_BlockFilterFalse, 1);
-#endif
       }
+
       s = block_iter->status();
       delete block_iter;
     }

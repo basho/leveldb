@@ -73,7 +73,7 @@ class Table {
 
 
   void ReadMeta(const Footer& footer);
-  void ReadFilter(const Slice& filter_handle_value);
+  void ReadFilter(const Slice& filter_handle_value, const class FilterPolicy * policy);
 
   // No copying allowed
   Table(const Table&);
