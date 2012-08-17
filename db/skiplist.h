@@ -92,7 +92,7 @@ class SkipList {
   };
 
  private:
-  enum { kMaxHeight = 12 };
+  enum { kMaxHeight = 17 };
 
   // Immutable after construction
   Comparator const compare_;
