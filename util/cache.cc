@@ -325,7 +325,8 @@ Cache::Handle* LRUCache::Insert(
     for (cursor=lru_.next;
          cursor!=&lru_; cursor=cursor->next)
     {
-        if (timercmp(&cursor->last_access, &low_ptr->last_access, <) && cursor->refs <= 1)
+        if ((timercmp(&cursor->last_access, &low_ptr->last_access, <) && cursor->refs <= 1)
+            || cursor->refs < low_ptr->refs)
             low_ptr=cursor;
     }   // for
     // removing item that still has active references is
