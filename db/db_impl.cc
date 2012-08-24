@@ -132,7 +132,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       log_(NULL),
       tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
-      manual_compaction_(NULL) {
+      manual_compaction_(NULL),
+      level0_good(true)
+{
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
@@ -919,7 +921,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     //  memtable threads
     pthread_rwlock_wrlock(&gThreadLock0);
     pthread_rwlock_unlock(&gThreadLock0);
-    if (0 != compact->compaction->level())
+
+    // Give priorities to level 0 compactions, unless
+    //  this compaction is blocking a level 0 in this database
+    if (0 != compact->compaction->level() && level0_good)
     {
         pthread_rwlock_wrlock(&gThreadLock1);
         pthread_rwlock_unlock(&gThreadLock1);
@@ -1304,6 +1309,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   // shared thread block throttle
   env_->WriteThrottle(versions_->NumLevelFiles(0));
   mutex_.Lock();
+
+  // hint to background compaction.
+  level0_good=(versions_->NumLevelFiles(0) < config::kL0_CompactionTrigger);
 
   while (true) {
     if (!bg_error_.ok()) {
