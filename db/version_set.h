@@ -119,7 +119,7 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  USED_BY_NESTED_FRIEND(std::vector<FileMetaData*> files_[config::kNumLevels])
+  std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
   FileMetaData* file_to_compact_;
@@ -172,6 +172,15 @@ class VersionSet {
 
   // Allocate and return a new file number
   uint64_t NewFileNumber() { return next_file_number_++; }
+
+  // Arrange to reuse "file_number" unless a newer file number has
+  // already been allocated.
+  // REQUIRES: "file_number" was returned by a call to NewFileNumber().
+  void ReuseFileNumber(uint64_t file_number) {
+    if (next_file_number_ == file_number + 1) {
+      next_file_number_ = file_number;
+    }
+  }
 
   // Return the number of Table files at the specified level.
   int NumLevelFiles(int level) const;
