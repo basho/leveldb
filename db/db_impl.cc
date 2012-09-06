@@ -1079,7 +1079,7 @@ DBImpl::PrioritizeWork(
         // pause to potentially hand off disk to
         //  memtable threads
         clock_gettime(CLOCK_REALTIME, &timeout);
-        timeout.tv_sec+=5;
+        timeout.tv_sec+=1;
         ret_val=pthread_rwlock_timedwrlock(&gThreadLock0, &timeout);
         if (0==ret_val)
             pthread_rwlock_unlock(&gThreadLock0);
@@ -1087,10 +1087,10 @@ DBImpl::PrioritizeWork(
 
         // Give priorities to level 0 compactions, unless
         //  this compaction is blocking a level 0 in this database
-        if (!IsLevel0 && level0_good)
+        if (!IsLevel0 && level0_good && !again)
         {
             clock_gettime(CLOCK_REALTIME, &timeout);
-            timeout.tv_sec+=5;
+            timeout.tv_sec+=1;
             ret_val=pthread_rwlock_timedwrlock(&gThreadLock1, &timeout);
             if (0==ret_val)
                 pthread_rwlock_unlock(&gThreadLock1);
