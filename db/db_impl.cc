@@ -679,7 +679,7 @@ void DBImpl::BackgroundCall() {
   bg_cv_.SignalAll();
 }
 
-Status DBImpl::BackgroundCompaction() {
+void DBImpl::BackgroundCompaction() {
   Status status;
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
@@ -765,7 +765,6 @@ Status DBImpl::BackgroundCompaction() {
       manual_compaction_ = NULL;
   }
 
-  return status;
 }
 
 
