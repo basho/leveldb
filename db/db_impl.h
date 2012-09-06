@@ -97,6 +97,7 @@ class DBImpl : public DB {
   Status BackgroundCompaction();
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
+  int64_t PrioritizeWork(bool IsLevel0);
 
   Status OpenCompactionOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
