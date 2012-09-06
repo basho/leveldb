@@ -19,10 +19,13 @@ struct FileMetaData {
   int allowed_seeks;          // Seeks allowed until compaction
   uint64_t number;
   uint64_t file_size;         // File size in bytes
+  uint64_t num_entries;
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
 
-  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) { }
+  FileMetaData()
+  : refs(0), allowed_seeks(1 << 30), file_size(0), num_entries(0)
+  { }
 };
 
 

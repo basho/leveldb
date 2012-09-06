@@ -21,6 +21,7 @@
 #include "db/dbformat.h"
 #include "db/version_edit.h"
 #include "port/port.h"
+#include "leveldb/env.h"
 
 namespace leveldb {
 
@@ -103,6 +104,8 @@ class Version {
 
   int NumFiles(int level) const { return files_[level].size(); }
 
+  int WritePenalty() const {return write_penalty_; }
+
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
 
@@ -130,13 +133,16 @@ class Version {
   // are initialized by Finalize().
   double compaction_score_;
   int compaction_level_;
+  int write_penalty_;
 
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),
         file_to_compact_(NULL),
         file_to_compact_level_(-1),
         compaction_score_(-1),
-        compaction_level_(-1) {
+        compaction_level_(-1),
+        write_penalty_(0)
+  {
   }
 
   ~Version();
@@ -197,6 +203,30 @@ class VersionSet {
   // Return the log file number for the log file that is currently
   // being compacted, or zero if there is no such log file.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
+
+
+  void SetWriteRate(uint64_t Rate)
+  {
+      // take higher rate immediately
+      if (write_rate_usec_ < Rate)
+          write_rate_usec_=Rate;
+
+      // scale down to a lower rate slowly
+      else
+          write_rate_usec_-=(write_rate_usec_ - Rate)/7;
+
+      return;
+  };
+  int WriteThrottleUsec()
+  {
+      int ret_msec=0;
+      int penalty=current_->write_penalty_;
+      penalty+=options_->env->GetBackgroundBacklog();
+
+      // divide by 10 so penalty becomes range of 1.? instead of 1?
+      return((int)((0!=penalty) ? ((penalty)*write_rate_usec_) : 0));
+  }
+
 
   // Pick level and inputs for a new compaction.
   // Returns NULL if there is no compaction to be done.
@@ -276,6 +306,7 @@ class VersionSet {
   uint64_t last_sequence_;
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
+  uint64_t write_rate_usec_;   // most recent average rate per key
 
   // Opened lazily
   WritableFile* descriptor_file_;
