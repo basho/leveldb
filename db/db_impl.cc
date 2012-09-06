@@ -708,7 +708,6 @@ Status DBImpl::BackgroundCompaction() {
     pthread_rwlock_rdlock(&gThreadLock0);
     status=CompactMemTable();
     pthread_rwlock_unlock(&gThreadLock0);
-    return status;
   }
 
   if (status.ok())
