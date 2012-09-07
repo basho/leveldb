@@ -596,72 +596,30 @@ class PosixEnv : public Env {
   }
 
   virtual void SleepForMicroseconds(int micros) {
-    usleep(micros);
-  }
+    struct timespec ts;
+    int ret_val;
 
-  virtual void WriteThrottle(
-      int level0_count)       //!< database specific count
-  {
-      int pause;
-      static volatile int global_pause=0;
-      static pthread_mutex_t global_pause_mutex=PTHREAD_MUTEX_INITIALIZER;
+    if (0!=micros)
+    {
+        micros=(micros/clock_res_ +1)*clock_res_;
+        ts.tv_sec=micros/1000000;
+        ts.tv_nsec=(micros - ts.tv_sec) *1000;
+
+        do
+        {
+#if _POSIX_TIMERS > 0L
+            // later ... add test for CLOCK_MONOTONIC_RAW where supported (better)
+            ret_val=clock_nanosleep(CLOCK_MONOTONIC,0, &ts, &ts);
+#else
+            ret_val=nanosleep(&ts, &ts);
+#endif
+        } while(EINTR==ret_val && 0!=(ts.tv_sec+ts.tv_nsec));
+    }   // if
+  }  // SleepForMicroSeconds
 
 
-      pause=0;
-      // lock access to the queueX_ variables
-      PthreadCall("lock", pthread_mutex_lock(&mu_));
+  virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
 
-      // write time assumptions:  The server is going to be
-      //  relatively fast when starting imm_ or level 1+
-      //  compactions, hence 1,500 write operation pace.
-      //  The server is going to be busy when level 0 to 1
-      //  are falling behind, hence 666 write operations per second.
-      //  Per thread block calculations cancel out in the math, hence ignored.
-
-      // imm_ flush queue, cost is 0.4ms
-      /// (assumes need 0.5 seconds with 1,500 write/ps)
-      pause+=queue4_.size() * 333;
-
-      // level 0 merge queue, cost 10.0ms
-      /// (assumes need 15 seconds with 1,500 write/ps)
-      pause+=queue2_.size() * 10000;
-
-      // 4.5 ms for each level 0 file above compaction trigger point
-      //  (assumes 3 seconds additional per file with 1,500 write/ps)
-      //  Either there are too many Level 0 compaction already, or this
-      //  vnode is in the middle of a Level 1+ compaction.  Progressive
-      //  slow down as time passes.
-      if (config::kL0_CompactionTrigger < level0_count)
-          pause+=(level0_count-config::kL0_CompactionTrigger) * 2000;
-
-      // level 1+ work backlog
-      //  just acknowledge that work is pending, but this work is
-      //  not essential to write volume ... unless it blocks Level 0
-      //  of same vnode and above equation addresses that scenario.
-      if (0!=queue_.size())
-          pause+=1000;
-
-      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-
-      PthreadCall("lock", pthread_mutex_lock(&global_pause_mutex));
-      // want to impact all threads to slow down writes.
-      //  there is no easy way today to know when to "turn off"
-      //  the pause globally, so use --global_pause as proxy
-      //  (this param is touchy)
-      if (global_pause<pause)
-          global_pause+=(pause-global_pause)/7; // 5 good
-      else if (10<global_pause)  // was 5, 50 too much
-          global_pause-=10;
-      else
-          global_pause=0;
-
-      pause=global_pause;
-      PthreadCall("unlock", pthread_mutex_unlock(&global_pause_mutex));
-
-      if (0<pause)
-          SleepForMicroseconds(pause);
-
-  }   // WriteThrottle
 
  private:
   void PthreadCall(const char* label, int result) {
@@ -686,6 +644,8 @@ class PosixEnv : public Env {
   pthread_t bgthread3_;    // background unmap / close
   pthread_t bgthread4_;    // imm_ to level 0 compactions
   bool started_bgthread_;
+  volatile int bg_backlog_;// count of items on 3 compaction queues
+  int64_t clock_res_;
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); };
@@ -694,10 +654,23 @@ class PosixEnv : public Env {
   BGQueue queue2_;    // level 0 to level 1 compactions
   BGQueue queue3_;    //background unmap / close
   BGQueue queue4_;    // imm_ to level 0 compactions
+
 };
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
-                       started_bgthread_(false) {
+                       started_bgthread_(false),
+                       bg_backlog_(0),
+                       clock_res_(1)
+{
+  struct timespec ts;
+
+#if _POSIX_TIMERS > 0L
+  clock_getres(CLOCK_MONOTONIC, &ts);
+  clock_res_=ts.tv_sec*1000000+ts.tv_nsec/1000;
+  if (0==clock_res_)
+      ++clock_res_;
+#endif
+
   PthreadCall("mutex_init", pthread_mutex_init(&mu_, NULL));
   PthreadCall("cvar_init", pthread_cond_init(&bgsignal_, NULL));
 }
@@ -740,7 +713,7 @@ PosixEnv::Schedule(
 
     // If the queue is currently empty, the background thread may currently be
     // waiting.
-    if (queue_.empty() || queue2_.empty()) {
+    if (queue_.empty() || queue2_.empty() || queue3_.empty() || queue4_.empty()) {
         PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
     }
 
@@ -836,6 +809,8 @@ PosixEnv::Schedule(
         queue_.back().arg = arg;
     }   // else
 
+    bg_backlog_=queue4_.size()+queue2_.size()*2+queue_.size()*2;
+
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 }
 
@@ -864,6 +839,7 @@ void PosixEnv::BGThread()
         void (*function)(void*) = queue_ptr->front().function;
         void* arg = queue_ptr->front().arg;
         queue_ptr->pop_front();
+        bg_backlog_=queue4_.size()+queue2_.size()+queue_.size();
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
