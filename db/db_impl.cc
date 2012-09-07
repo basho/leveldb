@@ -11,6 +11,7 @@
 #include <string>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <vector>
 #include "db/builder.h"
 #include "db/db_iter.h"
@@ -681,8 +682,6 @@ void DBImpl::BackgroundCall() {
 
 void DBImpl::BackgroundCompaction() {
   Status status;
-  bool is_manual = (manual_compaction_ != NULL);
-  InternalKey manual_end;
 
   mutex_.AssertHeld();
 
@@ -693,79 +692,78 @@ void DBImpl::BackgroundCompaction() {
     return;
   }
 
-  if (status.ok())
-  {
-      Compaction* c;
-      if (is_manual) {
-          ManualCompaction* m = manual_compaction_;
-          c = versions_->CompactRange(m->level, m->begin, m->end);
-          m->done = (c == NULL);
-          if (c != NULL) {
-              manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
-          }
-          Log(options_.info_log,
-              "Manual compaction at level-%d from %s .. %s; will stop at %s\n",
-              m->level,
-              (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
-              (m->end ? m->end->DebugString().c_str() : "(end)"),
-              (m->done ? "(end)" : manual_end.DebugString().c_str()));
-      } else {
-          c = versions_->PickCompaction();
-      }
-
-      if (c == NULL) {
-          // Nothing to do
-      } else if (!is_manual && c->IsTrivialMove()) {
-          // Move file to next level
-          assert(c->num_input_files(0) == 1);
-          FileMetaData* f = c->input(0, 0);
-          c->edit()->DeleteFile(c->level(), f->number);
-          c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
-                             f->smallest, f->largest);
-          status = versions_->LogAndApply(c->edit(), &mutex_);
-          VersionSet::LevelSummaryStorage tmp;
-          Log(options_.info_log, "Moved #%lld to level-%d %lld bytes %s: %s\n",
-              static_cast<unsigned long long>(f->number),
-              c->level() + 1,
-              static_cast<unsigned long long>(f->file_size),
-              status.ToString().c_str(),
-              versions_->LevelSummary(&tmp));
-      } else {
-          CompactionState* compact = new CompactionState(c);
-          status = DoCompactionWork(compact);
-          CleanupCompaction(compact);
-          c->ReleaseInputs();
-          DeleteObsoleteFiles();
-      }
-      delete c;
+  Compaction* c;
+  bool is_manual = (manual_compaction_ != NULL);
+  InternalKey manual_end;
+  if (is_manual) {
+    ManualCompaction* m = manual_compaction_;
+    c = versions_->CompactRange(m->level, m->begin, m->end);
+    m->done = (c == NULL);
+    if (c != NULL) {
+      manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
+    }
+    Log(options_.info_log,
+        "Manual compaction at level-%d from %s .. %s; will stop at %s\n",
+        m->level,
+        (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
+        (m->end ? m->end->DebugString().c_str() : "(end)"),
+        (m->done ? "(end)" : manual_end.DebugString().c_str()));
+  } else {
+    c = versions_->PickCompaction();
   }
 
-  if (status.ok()) {
-      // Done
-  } else if (shutting_down_.Acquire_Load()) {
-      // Ignore compaction errors found during shutting down
+
+  if (c == NULL) {
+    // Nothing to do
+  } else if (!is_manual && c->IsTrivialMove()) {
+    // Move file to next level
+    assert(c->num_input_files(0) == 1);
+    FileMetaData* f = c->input(0, 0);
+    c->edit()->DeleteFile(c->level(), f->number);
+    c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
+                       f->smallest, f->largest);
+    status = versions_->LogAndApply(c->edit(), &mutex_);
+    VersionSet::LevelSummaryStorage tmp;
+    Log(options_.info_log, "Moved #%lld to level-%d %lld bytes %s: %s\n",
+        static_cast<unsigned long long>(f->number),
+        c->level() + 1,
+        static_cast<unsigned long long>(f->file_size),
+        status.ToString().c_str(),
+        versions_->LevelSummary(&tmp));
   } else {
-      Log(options_.info_log,
-          "Compaction error: %s", status.ToString().c_str());
-      if (options_.paranoid_checks && bg_error_.ok()) {
-          bg_error_ = status;
-      }
+    CompactionState* compact = new CompactionState(c);
+    status = DoCompactionWork(compact);
+    CleanupCompaction(compact);
+    c->ReleaseInputs();
+    DeleteObsoleteFiles();
+  }
+  delete c;
+
+  if (status.ok()) {
+    // Done
+  } else if (shutting_down_.Acquire_Load()) {
+    // Ignore compaction errors found during shutting down
+  } else {
+    Log(options_.info_log,
+        "Compaction error: %s", status.ToString().c_str());
+    if (options_.paranoid_checks && bg_error_.ok()) {
+      bg_error_ = status;
+    }
   }
 
   if (is_manual) {
-      ManualCompaction* m = manual_compaction_;
-      if (!status.ok()) {
-          m->done = true;
-      }
-      if (!m->done) {
-          // We only compacted part of the requested range.  Update *m
-          // to the range that is left to be compacted.
-          m->tmp_storage = manual_end;
-          m->begin = &m->tmp_storage;
-      }
-      manual_compaction_ = NULL;
+    ManualCompaction* m = manual_compaction_;
+    if (!status.ok()) {
+      m->done = true;
+    }
+    if (!m->done) {
+      // We only compacted part of the requested range.  Update *m
+      // to the range that is left to be compacted.
+      m->tmp_storage = manual_end;
+      m->begin = &m->tmp_storage;
+    }
+    manual_compaction_ = NULL;
   }
-
 }
 
 
@@ -1078,9 +1076,19 @@ DBImpl::PrioritizeWork(
 
         // pause to potentially hand off disk to
         //  memtable threads
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
         clock_gettime(CLOCK_REALTIME, &timeout);
         timeout.tv_sec+=1;
         ret_val=pthread_rwlock_timedwrlock(&gThreadLock0, &timeout);
+#else
+        // ugly spin lock
+        ret_val=pthread_rwlock_trywrlock(&gThreadLock0);
+        if (EBUSY==ret_val)
+        {
+            ret_val=ETIMEDOUT;
+            env_->SleepForMicroseconds(10000);  // 10milliseconds
+        }   // if
+#endif
         if (0==ret_val)
             pthread_rwlock_unlock(&gThreadLock0);
         again=(ETIMEDOUT==ret_val);
@@ -1089,9 +1097,20 @@ DBImpl::PrioritizeWork(
         //  this compaction is blocking a level 0 in this database
         if (!IsLevel0 && level0_good && !again)
         {
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
             clock_gettime(CLOCK_REALTIME, &timeout);
             timeout.tv_sec+=1;
             ret_val=pthread_rwlock_timedwrlock(&gThreadLock1, &timeout);
+#else
+            // ugly spin lock
+            ret_val=pthread_rwlock_trywrlock(&gThreadLock1);
+            if (EBUSY==ret_val)
+            {
+                ret_val=ETIMEDOUT;
+                env_->SleepForMicroseconds(10000);  // 10milliseconds
+            }   // if
+#endif
+
             if (0==ret_val)
                 pthread_rwlock_unlock(&gThreadLock1);
             again=again || (ETIMEDOUT==ret_val);
