@@ -596,9 +596,6 @@ class PosixEnv : public Env {
   }
 
   virtual void SleepForMicroseconds(int micros) {
-#if 0
-    usleep(micros); //obsolete since POSIX.1-2008
-#else
     struct timespec ts;
     int ret_val;
 
@@ -610,12 +607,15 @@ class PosixEnv : public Env {
 
         do
         {
+#if _POSIX_TIMERS > 0L
             // later ... add test for CLOCK_MONOTONIC_RAW where supported (better)
             ret_val=clock_nanosleep(CLOCK_MONOTONIC,0, &ts, &ts);
+#else
+            ret_val=nanosleep(&ts, &ts);
+#endif
         } while(EINTR==ret_val && 0!=(ts.tv_sec+ts.tv_nsec));
     }   // if
-#endif
-  }
+  }  // SleepForMicroSeconds
 
 
   virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
@@ -645,7 +645,7 @@ class PosixEnv : public Env {
   pthread_t bgthread4_;    // imm_ to level 0 compactions
   bool started_bgthread_;
   volatile int bg_backlog_;// count of items on 3 compaction queues
-    int64_t clock_res_;
+  int64_t clock_res_;
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); };
@@ -659,13 +659,17 @@ class PosixEnv : public Env {
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
                        started_bgthread_(false),
-                       bg_backlog_(0)
+                       bg_backlog_(0),
+                       clock_res_(1)
 {
   struct timespec ts;
+
+#if _POSIX_TIMERS > 0L
   clock_getres(CLOCK_MONOTONIC, &ts);
   clock_res_=ts.tv_sec*1000000+ts.tv_nsec/1000;
   if (0==clock_res_)
       ++clock_res_;
+#endif
 
   PthreadCall("mutex_init", pthread_mutex_init(&mu_, NULL));
   PthreadCall("cvar_init", pthread_cond_init(&bgsignal_, NULL));
