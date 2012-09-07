@@ -607,7 +607,7 @@ class PosixEnv : public Env {
 
         do
         {
-#if _POSIX_TIMERS > 0L
+#if _POSIX_TIMERS >= 200801L
             // later ... add test for CLOCK_MONOTONIC_RAW where supported (better)
             ret_val=clock_nanosleep(CLOCK_MONOTONIC,0, &ts, &ts);
 #else
@@ -664,7 +664,7 @@ PosixEnv::PosixEnv() : page_size_(getpagesize()),
 {
   struct timespec ts;
 
-#if _POSIX_TIMERS > 0L
+#if _POSIX_TIMERS >= 200801L
   clock_getres(CLOCK_MONOTONIC, &ts);
   clock_res_=ts.tv_sec*1000000+ts.tv_nsec/1000;
   if (0==clock_res_)
