@@ -128,13 +128,19 @@ class InternalKeyComparator : public Comparator {
 
 // Filter policy wrapper that converts from internal keys to user keys
 class InternalFilterPolicy : public FilterPolicy {
- private:
+ protected:
   const FilterPolicy* const user_policy_;
  public:
   explicit InternalFilterPolicy(const FilterPolicy* p) : user_policy_(p) { }
   virtual const char* Name() const;
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst) const;
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const;
+};
+
+class InternalFilterPolicy2 : public InternalFilterPolicy {
+ public:
+  explicit InternalFilterPolicy2(const FilterPolicy* p) : InternalFilterPolicy(p) { }
+  virtual ~InternalFilterPolicy2() {delete user_policy_;};
 };
 
 // Modules in this directory should keep internal keys wrapped inside
