@@ -210,6 +210,15 @@ Status TableBuilder::Finish() {
                   &filter_block_handle);
   }
 
+//xxx create a block for the statistics
+// ... have "options", compress based upon that ...
+// ... otherwise byte length encoding ...
+// ... where to put sst_stats struct and version?
+// ... Encode/DecodeTo could read struct version in future to do
+//     something different ...
+// byte length encode since 8 byte size_t, index/value
+
+
   // Write metaindex block
   if (ok()) {
     BlockBuilder meta_index_block(&r->options);
@@ -221,6 +230,8 @@ Status TableBuilder::Finish() {
       filter_block_handle.EncodeTo(&handle_encoding);
       meta_index_block.Add(key, handle_encoding);
     }
+
+//xxx add key and handle encoding for statistics block
 
     // TODO(postrelease): Add stats and other meta blocks
     WriteBlock(&meta_index_block, &metaindex_block_handle);
