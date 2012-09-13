@@ -9,6 +9,7 @@
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "leveldb/perf_count.h"
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -33,6 +34,7 @@ struct Table::Rep {
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   Block* index_block;
+  SstCounters sst_counters;
 };
 
 Status Table::Open(const Options& options,
@@ -106,6 +108,13 @@ void Table::ReadMeta(const Footer& footer) {
   if (iter->Valid() && iter->key() == Slice(key)) {
     ReadFilter(iter->value());
   }
+
+  key="stats.sst1";
+  iter->Seek(key);
+  if (iter->Valid() && iter->key() == Slice(key)) {
+      ReadSstCounters(iter->value());
+  }
+
   delete iter;
   delete meta;
 }
@@ -129,6 +138,34 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
   }
   rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
 }
+
+
+void Table::ReadSstCounters(const Slice& sst_counters_handle_value) {
+  Slice v = sst_counters_handle_value;
+  BlockHandle counters_handle;
+  if (!counters_handle.DecodeFrom(&v).ok()) {
+    return;
+  }
+
+  // We might want to unify with ReadBlock() if we start
+  // requiring checksum verification in Table::Open.
+  ReadOptions opt;
+  BlockContents block;
+  if (!ReadBlock(rep_->file, opt, counters_handle, &block).ok()) {
+    return;
+  }
+  if (block.heap_allocated) {
+    rep_->sst_counters.DecodeFrom(block.data);
+    delete [] block.data.data();
+  }
+
+}
+
+SstCounters Table::GetSstCounters() const
+{
+    return(rep_->sst_counters);
+}   // Table::GetSstCounters
+
 
 Table::~Table() {
   delete rep_;

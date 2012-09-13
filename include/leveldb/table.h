@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include "leveldb/iterator.h"
+#include "leveldb/perf_count.h"
 
 namespace leveldb {
 
@@ -55,6 +56,9 @@ class Table {
   // be close to the file length.
   uint64_t ApproximateOffsetOf(const Slice& key) const;
 
+  // return a static copy of the table's counters.  
+  SstCounters GetSstCounters() const;
+
  private:
   struct Rep;
   Rep* rep_;
@@ -74,6 +78,7 @@ class Table {
 
   void ReadMeta(const Footer& footer);
   void ReadFilter(const Slice& filter_handle_value);
+  void ReadSstCounters(const Slice& sst_counters_handle_value);
 
   // No copying allowed
   Table(const Table&);

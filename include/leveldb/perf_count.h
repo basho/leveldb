@@ -23,13 +23,63 @@
 #ifndef STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
 #define STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
 
+#include <stdint.h>
+#include <string>
+#include "leveldb/status.h"
 
 namespace leveldb {
 
-struct
+enum SstCountEnum
+{
+    //
+    // array index values/names
+    //
+    eSstCountKeys=0,           //!< how many keys in this sst
+    eSstCountBlocks=1,         //!< how many blocks in this sst
+    eSstCountCompressAborted=2,//!< how many blocks attempted compression and aborted use
+    eSstCountKeySize=3,        //!< byte count of all keys
+    eSstCountValueSize=4,      //!< byte count of all values
+    eSstCountBlockSize=5,      //!< byte count of all blocks (pre-compression)
+    eSstCountBlockWriteSize=6, //!< post-compression size, or BlockSize if no compression
+    eSstCountIndexKeys=7,      //!< how many keys in the index block
+
+    // must follow last index name to represent size of array
+    eSstCountEnumSize,          //!< size of the array described by the enum values
+
+    eSstCountVersion=1
+
+};  // enum SstCountEnum
 
 
+class SstCounters
+{
+protected:
+    bool m_IsReadOnly;         //!< set when data decoded from a file
+    uint32_t m_Version;        //!< object revision identification
+    uint32_t m_CounterSize;    //!< number of objects in m_Counter
 
+    uint64_t m_Counter[eSstCountEnumSize];
+
+public:
+    // constructors / destructor
+    SstCounters(); 
+
+    // Put data into disk form
+    void EncodeTo(std::string & Dst) const;
+
+    // Populate member data from prior EncodeTo block
+    Status DecodeFrom(const Slice& src);
+
+    // increment the counter
+    uint64_t Inc(unsigned Index);
+
+    // add value to the counter
+    uint64_t Add(unsigned Index, uint64_t Amount);
+
+    // return value of a counter
+    uint64_t Value(unsigned Index);
+
+};  // class SstCounters
 
 
 extern struct PerformanceCounters * gPerfCounters;
@@ -154,53 +204,53 @@ struct PerformanceCounters
             printf(" m_StructSize: %u\n", m_StructSize);
             printf(" m_Version: %u\n", m_Version);
 
-            printf(" m_ROFileOpen: %lu\n", m_ROFileOpen);
-            printf(" m_ROFileClose: %lu\n", m_ROFileClose);
-            printf(" m_ROFileUnmap: %lu\n", m_ROFileUnmap);
+            printf(" m_ROFileOpen: %llu\n", m_ROFileOpen);
+            printf(" m_ROFileClose: %llu\n", m_ROFileClose);
+            printf(" m_ROFileUnmap: %llu\n", m_ROFileUnmap);
 
-            printf(" m_ApiOpen: %lu\n", m_ApiOpen);
-            printf(" m_ApiGet: %lu\n", m_ApiGet);
-            printf(" m_ApiWrite: %lu\n", m_ApiWrite);
+            printf(" m_ApiOpen: %llu\n", m_ApiOpen);
+            printf(" m_ApiGet: %llu\n", m_ApiGet);
+            printf(" m_ApiWrite: %llu\n", m_ApiWrite);
 
-            printf(" m_WriteSleep: %lu\n", m_WriteSleep);
-            printf(" m_WriteWaitImm: %lu\n", m_WriteWaitImm);
-            printf(" m_WriteWaitLevel0: %lu\n", m_WriteWaitLevel0);
-            printf(" m_WriteNewMem: %lu\n", m_WriteNewMem);
-            printf(" m_WriteError: %lu\n", m_WriteError);
-            printf(" m_WriteNoWait: %lu\n", m_WriteNoWait);
+            printf(" m_WriteSleep: %llu\n", m_WriteSleep);
+            printf(" m_WriteWaitImm: %llu\n", m_WriteWaitImm);
+            printf(" m_WriteWaitLevel0: %llu\n", m_WriteWaitLevel0);
+            printf(" m_WriteNewMem: %llu\n", m_WriteNewMem);
+            printf(" m_WriteError: %llu\n", m_WriteError);
+            printf(" m_WriteNoWait: %llu\n", m_WriteNoWait);
 
-            printf(" m_GetMem: %lu\n", m_GetMem);
-            printf(" m_GetImm: %lu\n", m_GetImm);
-            printf(" m_GetVersion: %lu\n", m_GetVersion);
+            printf(" m_GetMem: %llu\n", m_GetMem);
+            printf(" m_GetImm: %llu\n", m_GetImm);
+            printf(" m_GetVersion: %llu\n", m_GetVersion);
 
-            printf(" m_SearchLevel[0]: %lu\n", m_SearchLevel[0]);
-            printf(" m_SearchLevel[1]: %lu\n", m_SearchLevel[1]);
-            printf(" m_SearchLevel[2]: %lu\n", m_SearchLevel[2]);
-            printf(" m_SearchLevel[3]: %lu\n", m_SearchLevel[3]);
-            printf(" m_SearchLevel[4]: %lu\n", m_SearchLevel[4]);
-            printf(" m_SearchLevel[5]: %lu\n", m_SearchLevel[5]);
-            printf(" m_SearchLevel[6]: %lu\n", m_SearchLevel[6]);
+            printf(" m_SearchLevel[0]: %llu\n", m_SearchLevel[0]);
+            printf(" m_SearchLevel[1]: %llu\n", m_SearchLevel[1]);
+            printf(" m_SearchLevel[2]: %llu\n", m_SearchLevel[2]);
+            printf(" m_SearchLevel[3]: %llu\n", m_SearchLevel[3]);
+            printf(" m_SearchLevel[4]: %llu\n", m_SearchLevel[4]);
+            printf(" m_SearchLevel[5]: %llu\n", m_SearchLevel[5]);
+            printf(" m_SearchLevel[6]: %llu\n", m_SearchLevel[6]);
 
-            printf(" m_TableCached: %lu\n", m_TableCached);
-            printf(" m_TableOpened: %lu\n", m_TableOpened);
-            printf(" m_TableGet: %lu\n", m_TableGet);
+            printf(" m_TableCached: %llu\n", m_TableCached);
+            printf(" m_TableOpened: %llu\n", m_TableOpened);
+            printf(" m_TableGet: %llu\n", m_TableGet);
 
-            printf(" m_BGCloseUnmap: %lu\n", m_BGCloseUnmap);
-            printf(" m_BGCompactImm: %lu\n", m_BGCompactImm);
-            printf(" m_BGNormal: %lu\n", m_BGNormal);
+            printf(" m_BGCloseUnmap: %llu\n", m_BGCloseUnmap);
+            printf(" m_BGCompactImm: %llu\n", m_BGCompactImm);
+            printf(" m_BGNormal: %llu\n", m_BGNormal);
 
-            printf(" m_BlockFiltered: %lu\n", m_BlockFiltered);
-            printf(" m_BlockFilterFalse: %lu\n", m_BlockFilterFalse);
-            printf(" m_BlockCached: %lu\n", m_BlockCached);
-            printf(" m_BlockRead: %lu\n", m_BlockRead);
-            printf(" m_BlockFilterRead: %lu\n", m_BlockFilterRead);
-            printf(" m_BlockValidGet: %lu\n", m_BlockValidGet);
+            printf(" m_BlockFiltered: %llu\n", m_BlockFiltered);
+            printf(" m_BlockFilterFalse: %llu\n", m_BlockFilterFalse);
+            printf(" m_BlockCached: %llu\n", m_BlockCached);
+            printf(" m_BlockRead: %llu\n", m_BlockRead);
+            printf(" m_BlockFilterRead: %llu\n", m_BlockFilterRead);
+            printf(" m_BlockValidGet: %llu\n", m_BlockValidGet);
 
-            printf(" m_Debug[0]: %lu\n", m_Debug[0]);
-            printf(" m_Debug[1]: %lu\n", m_Debug[1]);
-            printf(" m_Debug[2]: %lu\n", m_Debug[2]);
-            printf(" m_Debug[3]: %lu\n", m_Debug[3]);
-            printf(" m_Debug[4]: %lu\n", m_Debug[4]);
+            printf(" m_Debug[0]: %llu\n", m_Debug[0]);
+            printf(" m_Debug[1]: %llu\n", m_Debug[1]);
+            printf(" m_Debug[2]: %llu\n", m_Debug[2]);
+            printf(" m_Debug[3]: %llu\n", m_Debug[3]);
+            printf(" m_Debug[4]: %llu\n", m_Debug[4]);
         };  // Dump
 
 #if 0

@@ -48,11 +48,11 @@ namespace leveldb
     {
         unsigned loop;
 
-        PutFixed32(&Dst, m_Version);
-        PutFixed32(&Dst, m_CounterSize);
+        PutVarint32(&Dst, m_Version);
+        PutVarint32(&Dst, m_CounterSize);
         
         for(loop=0; loop<eSstCountEnumSize; ++loop)
-            PutFixed64(&Dst, m_Counter[loop]);
+            PutVarint64(&Dst, m_Counter[loop]);
     }   // SstCounters::EncodeTo
 
 
@@ -61,8 +61,26 @@ namespace leveldb
         const Slice& src)
     {
         Status ret_status;
-        
+        Slice cursor;
+        bool good;
+        int loop;
+
+        cursor=src;
         m_IsReadOnly=true;
+        good=GetVarint32(&cursor, &m_Version);
+        good=good && (m_Version<=eSstCountVersion);
+
+        // all lesser number of stats to be read
+        good=good && GetVarint32(&cursor, &m_CounterSize);
+        if (good && eSstCountEnumSize < m_CounterSize)
+            m_CounterSize=eSstCountEnumSize;
+
+        for (loop=0; good && loop<eSstCountEnumSize; ++loop)
+        {
+            good=GetVarint64(&cursor, &m_Counter[loop]);
+        }   // for
+            
+        // if (!good) change ret_status to bad
 
         return(ret_status);
 
@@ -102,5 +120,21 @@ namespace leveldb
 
         return(ret_val);
     }   // SstCounters::Add
+
+
+    uint64_t 
+    SstCounters::Value(
+        unsigned Index) 
+    {
+        uint64_t ret_val;
+
+        ret_val=0;
+        if (Index<m_CounterSize)
+        {
+            ret_val=m_Counter[Index];
+        }   // if 
+
+        return(ret_val);
+    }   // SstCounters::Value
 
 }  // namespace leveldb
