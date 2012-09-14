@@ -140,7 +140,21 @@ namespace leveldb
     }   // SstCounters::Value
 
 
+    void
+    SstCounters::Dump()
+    {
+        unsigned loop;
 
+        printf("SstCounters:\n");
+        printf("   m_IsReadOnly: %u\n", m_IsReadOnly);
+        printf("      m_Version: %u\n", m_Version);
+        printf("  m_CounterSize: %u\n", m_CounterSize);
+        for (loop=0; loop<m_CounterSize; ++loop)
+            printf("    Counter[%2u]: %zu\n", loop, m_Counter[loop]);
+
+        return;
+
+    }   // SstCounters::Dump
 
     void
     PerformanceCounters::Init()

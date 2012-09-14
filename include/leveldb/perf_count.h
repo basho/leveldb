@@ -79,6 +79,12 @@ public:
     // return value of a counter
     uint64_t Value(unsigned Index);
 
+    // return number of counters
+    uint32_t Size() const {return(m_CounterSize);};
+
+    // printf all values
+    void Dump();
+
 };  // class SstCounters
 
 
