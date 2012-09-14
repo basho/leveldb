@@ -47,6 +47,12 @@ class TableCache {
   // Evict any entry for the specified file number
   void Evict(uint64_t file_number);
 
+  // access for testing tools, not for public access
+  Status TEST_FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle** handle)
+  {return( FindTable(file_number, file_size, handle));};
+
+  Cache* TEST_GetInternalCache() {return(cache_);};
+
  private:
   Env* const env_;
   const std::string dbname_;
@@ -55,6 +61,13 @@ class TableCache {
 
   Status FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle**);
 };
+
+
+struct TableAndFile {
+  RandomAccessFile* file;
+  Table* table;
+};
+
 
 }  // namespace leveldb
 

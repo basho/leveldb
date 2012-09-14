@@ -31,6 +31,7 @@ struct Table::Rep {
   uint64_t cache_id;
   FilterBlockReader* filter;
   const char* filter_data;
+  size_t filter_data_size;
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   Block* index_block;
@@ -76,6 +77,7 @@ Status Table::Open(const Options& options,
     rep->index_block = index_block;
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     rep->filter_data = NULL;
+    rep->filter_data_size = 0;
     rep->filter = NULL;
     *table = new Table(rep);
     (*table)->ReadMeta(footer);
@@ -135,6 +137,7 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
   }
   if (block.heap_allocated) {
     rep_->filter_data = block.data.data();     // Will need to delete later
+    rep_->filter_data_size = block.data.size();
   }
   rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
 }
@@ -311,5 +314,18 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
   delete index_iter;
   return result;
 }
+
+Block *
+Table::TEST_GetIndexBlock() {return(rep_->index_block);};
+
+size_t
+Table::TEST_TableObjectSize()
+{
+    return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size);
+};
+
+size_t
+Table::TEST_FilterDataSize() {return(rep_->filter_data_size);};
+
 
 }  // namespace leveldb

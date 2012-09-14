@@ -51,7 +51,10 @@ TESTS = \
 	version_set_test \
 	write_batch_test
 
-PROGRAMS = db_bench $(TESTS)
+TOOLS = \
+	sst_scan
+
+PROGRAMS = db_bench $(TESTS) $(TOOLS)
 BENCHMARKS = db_bench_sqlite3 db_bench_tree_db
 
 LIBRARY = libleveldb.a
@@ -91,9 +94,13 @@ all: $(SHARED) $(LIBRARY)
 check: all $(PROGRAMS) $(TESTS)
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done
 
+tools: all $(TOOLS)
+
+
 clean:
 	-rm -f $(PROGRAMS) $(BENCHMARKS) $(LIBRARY) $(SHARED) $(MEMENVLIBRARY) */*.o */*/*.o ios-x86/*/*.o ios-arm/*/*.o build_config.mk
 	-rm -rf ios-x86/* ios-arm/*
+
 
 $(LIBRARY): $(LIBOBJECTS)
 	rm -f $@
@@ -152,6 +159,9 @@ table_test: table/table_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+sst_scan: tools/sst_scan.o $(LIBOBJECTS)
+	$(CXX) tools/sst_scan.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
 version_edit_test: db/version_edit_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/version_edit_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
