@@ -87,6 +87,26 @@ class Mutex {
   void operator=(const Mutex&);
 };
 
+
+class MutexLock {
+ public:
+  MutexLock(Mutex & mu);
+  ~MutexLock();
+
+  void Lock();
+  void Unlock();
+  void AssertHeld() { }
+
+ private:
+  Mutex & mu_;
+
+  MutexLock();
+  // No copying
+  MutexLock(const MutexLock &);
+  void operator=(const MutexLock &);
+};
+
+
 class CondVar {
  public:
   explicit CondVar(Mutex* mu);
