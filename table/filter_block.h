@@ -32,6 +32,7 @@ class FilterBlockBuilder {
 
   void StartBlock(uint64_t block_offset);
   void AddKey(const Slice& key);
+  void AddKeys(std::vector<size_t> & Starts, std::string & Keys);
   Slice Finish();
 
  private:
