@@ -124,7 +124,7 @@ TableBuilder2::Add(
     if (r->filter_block != NULL)
     {
         // r->filter_block->AddKey(key);
-        block_ptr->m_FiltLengths.push_back(key.size());
+        block_ptr->m_FiltStarts.push_back(block_ptr->m_FiltKeys.size());
         block_ptr->m_FiltKeys.append(key.data(), key.size());
     }   // if
 
@@ -355,7 +355,7 @@ TableBuilder2::WriteBlock2(
         {
             uint64_t timer2=rep_->options.env->NowMicros();
             // push all the keys into filter
-            r->filter_block->AddKeys(state.m_FiltLengths, state.m_FiltKeys);
+            r->filter_block->AddKeys(state.m_FiltStarts, state.m_FiltKeys);
             r->filter_block->StartBlock(r->offset);
         }   // if
 
