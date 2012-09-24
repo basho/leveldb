@@ -116,9 +116,21 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
   r->data_block.Add(key, value);
+
+  // statistics
   r->sst_counters.Inc(eSstCountKeys);
   r->sst_counters.Add(eSstCountKeySize, key.size());
   r->sst_counters.Add(eSstCountValueSize, value.size());
+
+  if (key.size() < r->sst_counters.Value(eSstCountKeySmallest))
+      r->sst_counters.Set(eSstCountKeySmallest, key.size());
+  if (r->sst_counters.Value(eSstCountKeyLargest) < key.size())
+      r->sst_counters.Set(eSstCountKeyLargest, key.size());
+
+  if (value.size() < r->sst_counters.Value(eSstCountValueSmallest))
+      r->sst_counters.Set(eSstCountValueSmallest, value.size());
+  if (r->sst_counters.Value(eSstCountValueLargest) < value.size())
+      r->sst_counters.Set(eSstCountValueLargest, value.size());
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
   if (estimated_block_size >= r->options.block_size) {
@@ -229,9 +241,9 @@ Status TableBuilder::Finish() {
 
       if (r->pending_index_entry)
           r->sst_counters.Inc(eSstCountIndexKeys);
-          
+
       r->sst_counters.EncodeTo(encoded_stats);
-      WriteRawBlock(Slice(encoded_stats), kNoCompression, 
+      WriteRawBlock(Slice(encoded_stats), kNoCompression,
                     &sst_stats_block_handle);
   }   // if
 
@@ -249,7 +261,7 @@ Status TableBuilder::Finish() {
       meta_index_block.Add(key, handle_encoding);
 
     }
-    
+
     // Add mapping for "stats.sst1"
     key = "stats.sst1";
     handle_encoding.clear();

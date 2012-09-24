@@ -20,6 +20,7 @@
 //
 // -------------------------------------------------------------------
 
+#include <limits.h>
 #include <stdio.h>
 
 #ifndef STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
@@ -38,6 +39,9 @@ namespace leveldb
           m_CounterSize(eSstCountEnumSize)
     {
         memset(m_Counter, 0, sizeof(m_Counter));
+
+        m_Counter[eSstCountKeySmallest]=ULLONG_MAX;
+        m_Counter[eSstCountValueSmallest]=ULLONG_MAX;
 
         return;
 
@@ -141,6 +145,20 @@ namespace leveldb
 
 
     void
+    SstCounters::Set(
+        unsigned Index,
+        uint64_t Value)
+    {
+        if (Index<m_CounterSize)
+        {
+            m_Counter[Index]=Value;
+        }   // if
+
+        return;
+    }   // SstCounters::Set
+
+
+    void
     SstCounters::Dump()
     {
         unsigned loop;
@@ -150,7 +168,7 @@ namespace leveldb
         printf("      m_Version: %u\n", m_Version);
         printf("  m_CounterSize: %u\n", m_CounterSize);
         for (loop=0; loop<m_CounterSize; ++loop)
-            printf("    Counter[%2u]: %zu\n", loop, m_Counter[loop]);
+            printf("    Counter[%2u]: %llu\n", loop, m_Counter[loop]);
 
         return;
 

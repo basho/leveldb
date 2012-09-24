@@ -42,6 +42,10 @@ enum SstCountEnum
     eSstCountBlockSize=5,      //!< byte count of all blocks (pre-compression)
     eSstCountBlockWriteSize=6, //!< post-compression size, or BlockSize if no compression
     eSstCountIndexKeys=7,      //!< how many keys in the index block
+    eSstCountKeyLargest=8,     //!< largest key in sst
+    eSstCountKeySmallest=9,    //!< smallest key in sst
+    eSstCountValueLargest=10,  //!< largest value in sst
+    eSstCountValueSmallest=11, //!< smallest value in sst
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values
@@ -78,6 +82,9 @@ public:
 
     // return value of a counter
     uint64_t Value(unsigned Index);
+
+    // set a value
+    void Set(unsigned Index, uint64_t);
 
     // return number of counters
     uint32_t Size() const {return(m_CounterSize);};

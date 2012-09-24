@@ -16,15 +16,19 @@
 //#include "util/logging.h"
 //#include "db/log_reader.h"
 
+void command_help();
+
 int
 main(
     int argc,
     char ** argv)
 {
-    bool error_seen, index_keys, all_keys, block_info, csv_header, counter_info;
+    bool error_seen, index_keys, all_keys, block_info, csv_header, counter_info,
+        running, no_csv;
     int counter, error_counter;
     char ** cursor;
 
+    running=true;
     error_seen=false;
 
     block_info=false;
@@ -32,11 +36,12 @@ main(
     index_keys=false;
     csv_header=false;
     all_keys=false;
+    no_csv=false;
     counter=0;
     error_counter=0;
 
 
-    for (cursor=argv+1; NULL!=*cursor; ++cursor)
+    for (cursor=argv+1; NULL!=*cursor && running; ++cursor)
     {
         // option flag?
         if ('-'==**cursor)
@@ -51,8 +56,13 @@ main(
                 case 'h':  csv_header=true; break;
                 case 'i':  index_keys=true; break;
                 case 'k':  all_keys=true; break;
+                case 'n':  no_csv=true; break;
                 default:
-                    printf(" option \'%c\' is not valid\n", flag);
+                    fprintf(stderr, " option \'%c\' is not valid\n", flag);
+                    command_help();
+                    running=false;
+                    error_counter=1;
+                    error_seen=true;
                     break;
             }   // switch
         }   // if
@@ -83,7 +93,7 @@ main(
             leveldb::Status status = env->GetFileSize(table_name, &meta.file_size);
             if (!status.ok())
             {
-                printf("%s: GetFileSize failed (%s)\n", table_name.c_str(),status.ToString().c_str());
+                fprintf(stderr, "%s: GetFileSize failed (%s)\n", table_name.c_str(),status.ToString().c_str());
                 error_seen=true;
                 error_counter=10;
             }   // if
@@ -136,7 +146,7 @@ main(
                             }   // if
                             else
                             {
-                                printf("%s: index iterator failed (%s)\n", table_name.c_str(),it->status().ToString().c_str());
+                                fprintf(stderr, "%s: index iterator failed (%s)\n", table_name.c_str(),it->status().ToString().c_str());
                             }   // else
                         }   // for
                     }   // if
@@ -181,7 +191,7 @@ main(
                         }   // if
                         else
                         {
-                            printf("ReadBlock failed on block %d\n", block_count);
+                            fprintf(stderr, "ReadBlock failed on block %d\n", block_count);
                         }   // else
                     }   // for
 
@@ -210,18 +220,44 @@ main(
                             }   // if
                             else
                             {
-                                printf("%s: value iterator failed, location [%d, %d] (%s)\n",
+                                fprintf(stderr, "%s: value iterator failed, location [%d, %d] (%s)\n",
                                        table_name.c_str(),count, count2,it2->status().ToString().c_str());
                             }   // else
                         }   // for
                     }   // for
 
-                    if (csv_header)
+                    if (!no_csv)
                     {
-                        csv_header=false;
-                        printf("Table File, File size, Index size, Index key count, ");
-                        printf("total key count, total value size, average value size, smallest block, ratio*100, ");
-                        printf("table object size, filter size");
+                        if (csv_header)
+                        {
+                            csv_header=false;
+                            printf("Table File, File size, Index size, Index key count, ");
+                            printf("total key count, total value size, average value size, smallest block, ratio*100, ");
+                            printf("table object size, filter size");
+
+                            if (counter_info)
+                            {
+                                unsigned loop;
+                                leveldb::SstCounters counters;
+
+                                counters=table->GetSstCounters();
+
+                                for (loop=0; loop<counters.Size(); ++loop)
+                                    printf(", Counter %u", loop);
+                            }   // if
+
+                            printf("\n");
+                        }   // if
+
+                        printf("%s, %zd, %zd, %d,",
+                               table_name.c_str(), meta.file_size, table->TEST_GetIndexBlock()->size(), count);
+
+                        printf(" %d, %zd, %zd, %zd, %zd,",
+                               total, tot_size, (0!=count2) ? tot_size/total : 0, smallest_block,
+                               (tot_uncompress*100)/tot_compress);
+
+                        printf(" %zd, %zd",
+                               table->TEST_TableObjectSize(), table->TEST_FilterDataSize());
 
                         if (counter_info)
                         {
@@ -231,108 +267,42 @@ main(
                             counters=table->GetSstCounters();
 
                             for (loop=0; loop<counters.Size(); ++loop)
-                                printf(", Counter %u", loop);
+                                printf(", %llu", counters.Value(loop));
                         }   // if
 
                         printf("\n");
                     }   // if
-
-                    printf("%s, %zd, %zd, %d,",
-                           table_name.c_str(), meta.file_size, table->TEST_GetIndexBlock()->size(), count);
-
-                    printf(" %d, %zd, %zd, %zd, %zd,",
-                           total, tot_size, (0!=count2) ? tot_size/total : 0, smallest_block,
-                           (tot_uncompress*100)/tot_compress);
-
-                    printf(" %zd, %zd",
-                           table->TEST_TableObjectSize(), table->TEST_FilterDataSize());
-
-                    if (counter_info)
-                    {
-                        unsigned loop;
-                        leveldb::SstCounters counters;
-
-                        counters=table->GetSstCounters();
-
-                        for (loop=0; loop<counters.Size(); ++loop)
-                            printf(", %zu", counters.Value(loop));
-                    }   // if
-
-                    printf("\n");
-
                 }   // if
                 else
                 {
-                    printf("%s: FindTable failed (%s)\n", table_name.c_str(),status.ToString().c_str());
+                    fprintf(stderr, "%s: FindTable failed (%s)\n", table_name.c_str(),status.ToString().c_str());
                     error_seen=true;
-                    error_counter=10;
+                    error_counter=1;
                 }   // else
             }   // if
-
-#if 0
-            if (status.ok())
-            {
-                leveldb::Iterator* iter = table_cache->NewIterator(
-                    read_options, meta.number, meta.file_size);
-
-                for (iter->SeekToFirst(); iter->Valid(); iter->Next())
-                {
-#if 0
-                    leveldb::ParsedInternalKey parsed;
-                    leveldb::Slice key = iter->key();
-                    leveldb::Slice value = iter->value();
-
-                    printf("key %zd, value %zd\n", key.size(), value.size());
-#endif
-#if 0
-                    if (!ParseInternalKey(key, &parsed)) {
-                        Log(options_.info_log, "Table #%llu: unparsable key %s",
-                            (unsigned long long) meta.number,
-                            EscapeString(key).c_str());
-                        continue;
-                    }
-#endif
-
-                    if (!iter->status().ok() && !error_seen)
-                    {
-                        error_counter=counter;
-                        printf("%s: error at counter %d of ", table_name.c_str(), counter);
-                        error_seen=true;
-                    }   // if
-
-                    counter++;
-
-                }   //for
-
-                if (error_seen)
-                {
-                    printf("%d\n", counter);
-                }   // if
-                else if (!iter->Valid() && 0==counter)
-                {
-                    printf("%s: not valid iterator\n", table_name.c_str());
-                    error_seen=true;
-                    error_counter=10;
-                }   // else
-
-                delete iter;
-            }   // if
-#endif
         }   // else
     }   // for
-#if 0
-    else
-    {
-        printf("command:  sst_scan.e path_name_of_sst\n");
-        error_seen=true;
-        error_counter=10;
-    }
-#endif
+
+    if (1==argc)
+        command_help();
 
     return( error_seen && 0!=error_counter ? 1 : 0 );
 
 }   // main
 
+
+void
+command_help()
+{
+    fprintf(stderr, "sst_scan [option | file]*\n");
+    fprintf(stderr, "  options\n");
+    fprintf(stderr, "      -b  print details about block\n");
+    fprintf(stderr, "      -c  print sst counters\n");
+    fprintf(stderr, "      -h  print csv formatted header line (once)\n");
+    fprintf(stderr, "      -i  print index keys\n");
+    fprintf(stderr, "      -k  print all keys\n");
+    fprintf(stderr, "      -n  NO csv data (or header)\n");
+}   // command_help
 
 namespace leveldb {
 

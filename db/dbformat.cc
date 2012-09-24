@@ -38,7 +38,7 @@ std::string ParsedInternalKey::DebugStringHex() const {
            (unsigned long long) sequence,
            int(type));
   std::string result = "'";
-  result += user_key.ToString();
+  result += HexString(user_key);
   result += buf;
   return result;
 }
