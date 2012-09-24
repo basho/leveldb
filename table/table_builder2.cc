@@ -355,7 +355,11 @@ TableBuilder2::WriteBlock2(
         {
             uint64_t timer2=rep_->options.env->NowMicros();
             // push all the keys into filter
+<<<<<<< HEAD
             r->filter_block->AddKeys(state.m_FiltLengths, state.m_FiltKeys);
+=======
+            r->filter_block->AddKeys(state.m_FiltStarts, state.m_FiltKeys);
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
             r->filter_block->StartBlock(r->offset);
         }   // if
 

@@ -62,6 +62,7 @@ class BloomFilterPolicy : public FilterPolicy {
       // Use double-hashing to generate a sequence of hash values.
       // See analysis in [Kirsch,Mitzenmacher 2006].
       uint32_t h = *(uint32_t *)keys[i].data();
+
       const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
       for (size_t j = 0; j < k_; j++) {
         const uint32_t bitpos = h % bits;
