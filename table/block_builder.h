@@ -16,7 +16,11 @@ struct Options;
 
 class BlockBuilder {
  public:
+  BlockBuilder();
   explicit BlockBuilder(const Options* options);
+
+  // for use with default constructor ... must set or NULL pointer errors later!!
+  void SetOptions(const Options * Opt) {options_=Opt;};
 
   // Reset the contents as if the BlockBuilder was just constructed.
   void Reset();
@@ -38,6 +42,17 @@ class BlockBuilder {
   bool empty() const {
     return buffer_.empty();
   }
+
+  // retrieve current buffer, finished or not
+  Slice CurrentBuffer() {return(Slice(buffer_));};
+
+  // overwrite finished buffer, likely with compressed data
+  bool OverwriteBuffer(std::string & NewVersion)
+  {
+      if (finished_)
+          buffer_=NewVersion;
+      return(finished_);
+  }   // OverwriteBuffer
 
  private:
   const Options*        options_;

@@ -36,6 +36,13 @@
 
 namespace leveldb {
 
+
+BlockBuilder::BlockBuilder()
+{
+    options_=NULL;
+    Reset();
+}   
+
 BlockBuilder::BlockBuilder(const Options* options)
     : options_(options),
       restarts_(),
