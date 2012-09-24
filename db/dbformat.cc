@@ -32,6 +32,17 @@ std::string ParsedInternalKey::DebugString() const {
   return result;
 }
 
+std::string ParsedInternalKey::DebugStringHex() const {
+  char buf[50];
+  snprintf(buf, sizeof(buf), "' @ %llu : %d",
+           (unsigned long long) sequence,
+           int(type));
+  std::string result = "'";
+  result += HexString(user_key);
+  result += buf;
+  return result;
+}
+
 std::string InternalKey::DebugString() const {
   std::string result;
   ParsedInternalKey parsed;

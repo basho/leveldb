@@ -75,6 +75,7 @@ struct ParsedInternalKey {
   ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t)
       : user_key(u), sequence(seq), type(t) { }
   std::string DebugString() const;
+  std::string DebugStringHex() const;
 };
 
 // Return the length of the encoding of "key".
