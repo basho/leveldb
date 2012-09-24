@@ -4,12 +4,13 @@
 
 #include "leveldb/filter_policy.h"
 #include "leveldb/slice.h"
+#include "db/dbformat.h"
 
 namespace leveldb {
 
 FilterPolicy::~FilterPolicy() { }
 
 Slice FilterPolicy::TransformKey(const Slice & Key, std::string & Buffer) const
-  {return(Key);};
+  {return(ExtractUserKey(Key));};
 
 }  // namespace leveldb

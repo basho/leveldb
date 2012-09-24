@@ -8,7 +8,10 @@
 #include "table/table_builder_rep.h"
 
 #include <assert.h>
+<<<<<<< HEAD
 #include <sstream>
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 #include <syslog.h>
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
@@ -19,7 +22,10 @@
 #include "table/format.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+<<<<<<< HEAD
 #include "util/mapbuffer.h"
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 
 namespace leveldb {
 
@@ -27,7 +33,11 @@ namespace leveldb {
 TableBuilder2::TableBuilder2(
     const Options& options,
     WritableFile* file)
+<<<<<<< HEAD
     : TableBuilder(options, file), m_Abort(false), m_Finish(false),
+=======
+: TableBuilder(options, file), m_Abort(false), m_Finish(false),
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
     m_CondVar(&m_CvMutex), m_NextAdd(0), m_NextWrite(0)
 {
     int loop, ret_val;
@@ -42,9 +52,12 @@ TableBuilder2::TableBuilder2(
             Log(options.info_log, "thread creation failure in TableBuilder2 (ret_val=%d)", ret_val);
     }   // for
 
+<<<<<<< HEAD
 
     m_TimerReadWait=0;
 
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
     return;
 
 }   // TableBuilder2::TableBuilder2
@@ -53,7 +66,10 @@ TableBuilder2::TableBuilder2(
 TableBuilder2::~TableBuilder2()
 {
     // ?? double check threads are joined?
+<<<<<<< HEAD
     Log(rep_->options.info_log, "m_TimerReadWait: %llu", (unsigned long long)m_TimerReadWait);
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 
     return;
 }   // TableBuilder2::~TableBuilder2
@@ -64,16 +80,22 @@ TableBuilder2::Add(
     const Slice& key,
     const Slice& value)
 {
+<<<<<<< HEAD
     BlockNState * block_ptr;
     Rep* r = rep_;
 
 
+=======
+     BlockNState * block_ptr;
+    Rep* r = rep_;
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
     assert(!r->closed);
     if (!ok()) return;
 
     block_ptr=NULL;
 
     // quick test without lock, most common case is state is already useful
+<<<<<<< HEAD
     if (BlockNState::eBNStateLoading!=m_Blocks[m_NextAdd].m_State
         && BlockNState::eBNStateEmpty!=m_Blocks[m_NextAdd].m_State)
     {
@@ -90,6 +112,22 @@ TableBuilder2::Add(
 
         m_TimerReadWait+=r->options.env->NowMicros() - timer;
     }   // if
+=======
+    while(BlockNState::eBNStateLoading!=m_Blocks[m_NextAdd].m_State
+          && BlockNState::eBNStateEmpty!=m_Blocks[m_NextAdd].m_State)
+    {
+        int loop;
+
+        port::MutexLock lock(m_CvMutex);
+
+        // retest now that lock held
+        if (BlockNState::eBNStateLoading!=m_Blocks[m_NextAdd].m_State
+            && BlockNState::eBNStateEmpty!=m_Blocks[m_NextAdd].m_State)
+        {
+            m_CondVar.Wait();
+        }   // if
+    }   // while
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 
     block_ptr=&m_Blocks[m_NextAdd];
 
@@ -134,16 +172,23 @@ TableBuilder2::Add(
     if (r->filter_block != NULL)
     {
         // r->filter_block->AddKey(key);
+<<<<<<< HEAD
         block_ptr->m_FiltLengths.push_back(key.size());
+=======
+        block_ptr->m_FiltStarts.push_back(block_ptr->m_FiltKeys.size());
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
         block_ptr->m_FiltKeys.append(key.data(), key.size());
     }   // if
 
     block_ptr->m_LastKey.assign(key.data(), key.size());
     r->num_entries++;
     block_ptr->m_Block.Add(key, value);
+<<<<<<< HEAD
     r->sst_counters.Inc(eSstCountKeys);
     r->sst_counters.Add(eSstCountKeySize, key.size());
     r->sst_counters.Add(eSstCountValueSize, value.size());
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 
     // has this block reach size limit
     const size_t estimated_block_size = block_ptr->m_Block.CurrentSizeEstimate();
@@ -271,9 +316,12 @@ TableBuilder2::CompressBlock(
     Rep* r = rep_;
     Slice raw = state.m_Block.Finish();
 
+<<<<<<< HEAD
     r->sst_counters.Inc(eSstCountBlocks);
     r->sst_counters.Add(eSstCountBlockSize, raw.size());
 
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
     state.m_Type = r->options.compression;
     // TODO(postrelease): Support more compression options: zlib?
     switch (state.m_Type)
@@ -292,13 +340,19 @@ TableBuilder2::CompressBlock(
                 // Snappy not supported, or compressed less than 12.5%, so just
                 // store uncompressed form
                 state.m_Type = kNoCompression;
+<<<<<<< HEAD
                 r->sst_counters.Inc(eSstCountCompressAborted);
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
             }
             break;
         }
     }   // switch
 
+<<<<<<< HEAD
     r->sst_counters.Add(eSstCountBlockWriteSize, state.m_Block.CurrentBuffer().size());
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 
     // calculate the crc32c for the data
     char trailer[kBlockTrailerSize];
@@ -352,6 +406,7 @@ TableBuilder2::WriteBlock2(
     BlockHandle handle;
     Rep* r = rep_;
 
+<<<<<<< HEAD
 #if 1
     size_t total_size;
     RiakBufferPtr dest_ptr;
@@ -431,6 +486,8 @@ TableBuilder2::WriteBlock2(
     }   // mutex scope
 #endif
 #else
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
     handle.set_offset(r->offset);
     handle.set_size(state.m_Block.CurrentBuffer().size());
     r->status = r->file->Append(state.m_Block.CurrentBuffer());
@@ -452,7 +509,11 @@ TableBuilder2::WriteBlock2(
         {
             uint64_t timer2=rep_->options.env->NowMicros();
             // push all the keys into filter
+<<<<<<< HEAD
             r->filter_block->AddKeys(state.m_FiltLengths, state.m_FiltKeys);
+=======
+            r->filter_block->AddKeys(state.m_FiltStarts, state.m_FiltKeys);
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
             r->filter_block->StartBlock(r->offset);
         }   // if
 
@@ -460,10 +521,15 @@ TableBuilder2::WriteBlock2(
         handle.EncodeTo(&handle_encoding);
         assert(true==state.m_KeyShortened);
         r->index_block.Add(state.m_LastKey, Slice(handle_encoding));
+<<<<<<< HEAD
         r->sst_counters.Inc(eSstCountIndexKeys);
     }   // if
 
 
+=======
+    }   // if
+
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
     // buffer done, put back in pile
     {
         port::MutexLock lock(m_CvMutex);
@@ -472,7 +538,10 @@ TableBuilder2::WriteBlock2(
         m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
         m_CondVar.SignalAll();
     }   // mutex scope
+<<<<<<< HEAD
 #endif
+=======
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 
     return;
 
@@ -514,10 +583,14 @@ TableBuilder2::Finish()
     m_Finish=true;
     m_CondVar.SignalAll();
     for (loop=0; loop<eTB2Threads; ++loop)
+<<<<<<< HEAD
     {
         pthread_join(m_Writers[loop], NULL);
         m_Writers[loop]=0;
     }   // for
+=======
+        pthread_join(m_Writers[loop], NULL);
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 
     Status status=TableBuilder::Finish();
 
@@ -536,6 +609,7 @@ void TableBuilder2::Abandon() {
     // let all workers complete
     int loop;
     m_Finish=true;
+<<<<<<< HEAD
     m_Abort=true;
     {
         port::MutexLock lock(m_CvMutex);
@@ -568,4 +642,12 @@ TableBuilder2::Dump() const
 
 }   // TableBuilder2::Dump
 
+=======
+    m_CondVar.SignalAll();
+    for (loop=0; loop<eTB2Threads; ++loop)
+        pthread_join(m_Writers[loop], NULL);
+}
+
+
+>>>>>>> Asynchronous write buffers to improve compaction by 14 to to 19%
 }  // namespace leveldb
