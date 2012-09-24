@@ -48,14 +48,14 @@ void FilterBlockBuilder::AddKey(const Slice& key) {
 }
 
 void FilterBlockBuilder::AddKeys(
-    std::vector<size_t> & Lengths,
+    std::vector<size_t> & Starts,
     std::string & Keys)
 {
-  const size_t num_keys = Lengths.size();
+  const size_t num_keys = Starts.size();
   size_t loop, offset, length;
   Slice key;
 
-  start_.reserve(start_.size()+Lengths.size());
+  start_.reserve(start_.size()+Starts.size());
   for (loop=0, offset=0; loop<num_keys; ++loop, offset+=length)
   {
       const char* base = Keys.data() + offset;
