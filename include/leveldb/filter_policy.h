@@ -53,6 +53,10 @@ public:
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst)
       const = 0;
 
+  // Allow filter to preprocess keys being held for CreateFilter ... reducing
+  //  storage
+  virtual Slice TransformKey(const Slice & Key, std::string & Buffer) const;
+
   // "filter" contains the data appended by a preceding call to
   // CreateFilter() on this class.  This method must return true if
   // the key was in the list of keys passed to CreateFilter().
