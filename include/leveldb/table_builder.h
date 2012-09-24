@@ -31,7 +31,7 @@ class TableBuilder {
   TableBuilder(const Options& options, WritableFile* file);
 
   // REQUIRES: Either Finish() or Abandon() has been called.
-  ~TableBuilder();
+  virtual ~TableBuilder();
 
   // Change the options used by this builder.  Note: only some of the
   // option fields can be changed after construction.  If a field is
@@ -44,13 +44,13 @@ class TableBuilder {
   // Add key,value to the table being constructed.
   // REQUIRES: key is after any previously added key according to comparator.
   // REQUIRES: Finish(), Abandon() have not been called
-  void Add(const Slice& key, const Slice& value);
+  virtual void Add(const Slice& key, const Slice& value);
 
   // Advanced operation: flush any buffered key/value pairs to file.
   // Can be used to ensure that two adjacent entries never live in
   // the same data block.  Most clients should not need to use this method.
   // REQUIRES: Finish(), Abandon() have not been called
-  void Flush();
+  virtual void Flush();
 
   // Return non-ok iff some error has been detected.
   Status status() const;
@@ -58,14 +58,14 @@ class TableBuilder {
   // Finish building the table.  Stops using the file passed to the
   // constructor after this function returns.
   // REQUIRES: Finish(), Abandon() have not been called
-  Status Finish();
+  virtual Status Finish();
 
   // Indicate that the contents of this builder should be abandoned.  Stops
   // using the file passed to the constructor after this function returns.
   // If the caller is not going to call Finish(), it must call Abandon()
   // before destroying this builder.
   // REQUIRES: Finish(), Abandon() have not been called
-  void Abandon();
+  virtual void Abandon();
 
   // Number of calls to Add() so far.
   uint64_t NumEntries() const;
@@ -74,7 +74,7 @@ class TableBuilder {
   // Finish() call, returns the size of the final generated file.
   uint64_t FileSize() const;
 
- private:
+protected:
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);
   void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
@@ -82,6 +82,7 @@ class TableBuilder {
   struct Rep;
   Rep* rep_;
 
+private:
   // No copying allowed
   TableBuilder(const TableBuilder&);
   void operator=(const TableBuilder&);
