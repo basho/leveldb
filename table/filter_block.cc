@@ -11,6 +11,9 @@ namespace leveldb {
 
 // See doc/table_format.txt for an explanation of the filter block format.
 
+// list of available filters within code base
+const FilterPolicy * FilterInventory::ListHead(NULL);
+
 FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
     : policy_(policy), filter_base_lg_(0), filter_base_(0), last_offset_(0)
 {
