@@ -44,6 +44,7 @@ class IteratorWrapper {
   void Seek(const Slice& k) { assert(iter_); iter_->Seek(k);       Update(); }
   void SeekToFirst()        { assert(iter_); iter_->SeekToFirst(); Update(); }
   void SeekToLast()         { assert(iter_); iter_->SeekToLast();  Update(); }
+  bool IsCompressible() const { assert(iter_); return(iter_->IsCompressible()); }
 
  private:
   void Update() {

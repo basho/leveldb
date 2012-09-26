@@ -52,6 +52,12 @@ class TwoLevelIterator: public Iterator {
       return status_;
     }
   }
+  virtual bool IsCompressible() const {
+    assert(Valid());
+    return index_iter_.IsCompressible();  // table level compressible judgement, not block
+  }
+
+
 
  private:
   void SaveError(const Status& s) {

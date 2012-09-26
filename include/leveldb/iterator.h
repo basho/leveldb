@@ -75,6 +75,11 @@ class Iterator {
   typedef void (*CleanupFunction)(void* arg1, void* arg2);
   void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
 
+  // Optional compaction optimization.  FALSE reply allows file being
+  //  created to skip costly compactions on values that have proven
+  //  to not compress effectively.  TRUE at minimum supports prior behavior.
+  virtual bool IsCompressible() const {return(true);};
+
  private:
   struct Cleanup {
     CleanupFunction function;
