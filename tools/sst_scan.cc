@@ -126,8 +126,6 @@ main(
                     file = reinterpret_cast<leveldb::TableAndFile*>(table_cache->TEST_GetInternalCache()->Value(handle))->file;
                     it = table->TEST_GetIndexBlock()->NewIterator(options.comparator);
 
-//                if (NULL!=table->FilterObject())
-//                    table->FilterObject()->Dump();
 
                     // walk keys in index block
                     if (index_keys)
