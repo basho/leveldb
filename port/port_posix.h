@@ -25,6 +25,10 @@
       defined(OS_DRAGONFLYBSD) || defined(OS_ANDROID)
   #include <sys/types.h>
   #include <sys/endian.h>
+
+  #if !defined(PLATFORM_IS_LITTLE_ENDIAN) && defined(_BYTE_ORDER)
+    #define PLATFORM_IS_LITTLE_ENDIAN (_BYTE_ORDER == _LITTLE_ENDIAN)
+  #endif
 #else
   #include <endian.h>
 #endif
