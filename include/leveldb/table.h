@@ -75,6 +75,10 @@ class Table {
   void ReadMeta(const Footer& footer);
   void ReadFilter(const Slice& filter_handle_value, const class FilterPolicy * policy);
 
+  // use statistical data to suggest whether portions of the table
+  //  contain compressible content
+  bool IsCompressible() const;
+
   // No copying allowed
   Table(const Table&);
   void operator=(const Table&);

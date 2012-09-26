@@ -132,6 +132,10 @@ class MergingIterator : public Iterator {
     return status;
   }
 
+  virtual bool IsCompressible() const {
+      return(current_->IsCompressible());
+  }
+
  private:
   void FindSmallest();
   void FindLargest();

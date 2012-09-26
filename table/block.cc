@@ -78,6 +78,7 @@ class Block::Iter : public Iterator {
   const char* const data_;      // underlying block contents
   uint32_t const restarts_;     // Offset of restart array (list of fixed32)
   uint32_t const num_restarts_; // Number of uint32_t entries in restart array
+  bool is_compressible_;        // hint for compaction about parent table
 
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
   uint32_t current_;
@@ -114,13 +115,15 @@ class Block::Iter : public Iterator {
   Iter(const Comparator* comparator,
        const char* data,
        uint32_t restarts,
-       uint32_t num_restarts)
+       uint32_t num_restarts,
+       bool is_compressible=true)
       : comparator_(comparator),
         data_(data),
         restarts_(restarts),
         num_restarts_(num_restarts),
         current_(restarts_),
-        restart_index_(num_restarts_) {
+        restart_index_(num_restarts_),
+        is_compressible_(is_compressible) {
     assert(num_restarts_ > 0);
   }
 
@@ -213,6 +216,10 @@ class Block::Iter : public Iterator {
     }
   }
 
+  virtual bool IsCompressible() const {
+    return(is_compressible_);
+  }
+
  private:
   void CorruptionError() {
     current_ = restarts_;
@@ -252,7 +259,7 @@ class Block::Iter : public Iterator {
   }
 };
 
-Iterator* Block::NewIterator(const Comparator* cmp) {
+Iterator* Block::NewIterator(const Comparator* cmp, bool is_compressible) {
   if (size_ < 2*sizeof(uint32_t)) {
     return NewErrorIterator(Status::Corruption("bad block contents"));
   }
@@ -260,7 +267,7 @@ Iterator* Block::NewIterator(const Comparator* cmp) {
   if (num_restarts == 0) {
     return NewEmptyIterator();
   } else {
-    return new Iter(cmp, data_, restart_offset_, num_restarts);
+    return new Iter(cmp, data_, restart_offset_, num_restarts, is_compressible);
   }
 }
 
