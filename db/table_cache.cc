@@ -11,11 +11,6 @@
 
 namespace leveldb {
 
-struct TableAndFile {
-  RandomAccessFile* file;
-  Table* table;
-};
-
 static void DeleteEntry(const Slice& key, void* value) {
   TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
   delete tf->table;

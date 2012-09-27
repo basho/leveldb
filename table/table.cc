@@ -9,6 +9,7 @@
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "leveldb/perf_count.h"
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -30,9 +31,11 @@ struct Table::Rep {
   uint64_t cache_id;
   FilterBlockReader* filter;
   const char* filter_data;
+  size_t filter_data_size;
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   Block* index_block;
+  SstCounters sst_counters;
 };
 
 Status Table::Open(const Options& options,
@@ -74,6 +77,7 @@ Status Table::Open(const Options& options,
     rep->index_block = index_block;
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     rep->filter_data = NULL;
+    rep->filter_data_size = 0;
     rep->filter = NULL;
     *table = new Table(rep);
     (*table)->ReadMeta(footer);
@@ -100,8 +104,10 @@ void Table::ReadMeta(const Footer& footer) {
   Block* meta = new Block(contents);
 
   Iterator* iter = meta->NewIterator(BytewiseComparator());
+
   bool found,first;
   const FilterPolicy * policy, * next;
+  std::string key;
 
   first=true;
   do
@@ -125,7 +131,7 @@ void Table::ReadMeta(const Footer& footer) {
 
       if (NULL!=policy)
       {
-          std::string key = "filter.";
+          key = "filter.";
           key.append(policy->Name());
           iter->Seek(key);
           if (iter->Valid() && iter->key() == Slice(key))
@@ -135,6 +141,12 @@ void Table::ReadMeta(const Footer& footer) {
           }   // if
       }   //if
   } while(!found && NULL!=policy);
+
+  key="stats.sst1";
+  iter->Seek(key);
+  if (iter->Valid() && iter->key() == Slice(key)) {
+      ReadSstCounters(iter->value());
+  }
 
   delete iter;
   delete meta;
@@ -160,10 +172,39 @@ Table::ReadFilter(
   }
   if (block.heap_allocated) {
     rep_->filter_data = block.data.data();     // Will need to delete later
+    rep_->filter_data_size = block.data.size();
   }
 
   rep_->filter = new FilterBlockReader(policy, block.data);
 }
+
+
+void Table::ReadSstCounters(const Slice& sst_counters_handle_value) {
+  Slice v = sst_counters_handle_value;
+  BlockHandle counters_handle;
+  if (!counters_handle.DecodeFrom(&v).ok()) {
+    return;
+  }
+
+  // We might want to unify with ReadBlock() if we start
+  // requiring checksum verification in Table::Open.
+  ReadOptions opt;
+  BlockContents block;
+  if (!ReadBlock(rep_->file, opt, counters_handle, &block).ok()) {
+    return;
+  }
+  if (block.heap_allocated) {
+    rep_->sst_counters.DecodeFrom(block.data);
+    delete [] block.data.data();
+  }
+
+}
+
+SstCounters Table::GetSstCounters() const
+{
+    return(rep_->sst_counters);
+}   // Table::GetSstCounters
+
 
 Table::~Table() {
   delete rep_;
@@ -311,5 +352,18 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
   delete index_iter;
   return result;
 }
+
+Block *
+Table::TEST_GetIndexBlock() {return(rep_->index_block);};
+
+size_t
+Table::TEST_TableObjectSize()
+{
+    return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size);
+};
+
+size_t
+Table::TEST_FilterDataSize() {return(rep_->filter_data_size);};
+
 
 }  // namespace leveldb
