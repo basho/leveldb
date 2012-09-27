@@ -130,7 +130,7 @@ namespace leveldb
 
     uint64_t
     SstCounters::Value(
-        unsigned Index)
+        unsigned Index) const
     {
         uint64_t ret_val;
 
@@ -159,7 +159,7 @@ namespace leveldb
 
 
     void
-    SstCounters::Dump()
+    SstCounters::Dump() const
     {
         unsigned loop;
 

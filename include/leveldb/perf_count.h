@@ -81,7 +81,7 @@ public:
     uint64_t Add(unsigned Index, uint64_t Amount);
 
     // return value of a counter
-    uint64_t Value(unsigned Index);
+    uint64_t Value(unsigned Index) const;
 
     // set a value
     void Set(unsigned Index, uint64_t);
@@ -90,7 +90,7 @@ public:
     uint32_t Size() const {return(m_CounterSize);};
 
     // printf all values
-    void Dump();
+    void Dump() const;
 
 };  // class SstCounters
 
