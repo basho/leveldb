@@ -59,6 +59,17 @@
 #define fdatasync fsync
 #endif
 
+// Some compilers do not provide access to nested classes of a declared friend class
+// Defining PUBLIC_NESTED_FRIEND_ACCESS will cause those declarations to be made
+// public as a workaround.  Added by David Smith, Basho.
+#if defined(OS_MACOSX) || defined(OS_SOLARIS)
+#define USED_BY_NESTED_FRIEND(a) public: a; private:
+#define USED_BY_NESTED_FRIEND2(a,b) public: a,b; private:
+#else
+#define USED_BY_NESTED_FRIEND(a) a;
+#define USED_BY_NESTED_FRIEND2(a,b) a,b;
+#endif
+
 #if defined(OS_ANDROID) && __ANDROID_API__ < 9
 // fdatasync() was only introduced in API level 9 on Android. Use fsync()
 // when targetting older platforms.
