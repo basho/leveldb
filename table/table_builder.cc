@@ -170,6 +170,10 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   CompressionType type = r->options.compression;
   // TODO(postrelease): Support more compression options: zlib?
   switch (type) {
+    case kNoCompressInternal:   // compression bypass
+      type = kNoCompression;
+      r->sst_counters.Inc(eSstCountCompressAborted);
+      // NO break
     case kNoCompression:
       block_contents = raw;
       break;

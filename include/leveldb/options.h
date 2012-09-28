@@ -29,7 +29,9 @@ enum CompressionType {
   // NOTE: do not change the values of existing entries, as these are
   // part of the persistent format on disk.
   kNoCompression     = 0x0,
-  kSnappyCompression = 0x1
+  kSnappyCompression = 0x1,
+
+  kNoCompressInternal = 0xf  // temporary state, used internally only, not on disk
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

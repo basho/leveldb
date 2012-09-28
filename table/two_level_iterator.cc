@@ -54,7 +54,7 @@ class TwoLevelIterator: public Iterator {
   }
   virtual bool IsCompressible() const {
     assert(Valid());
-    return index_iter_.IsCompressible();  // table level compressible judgement, not block
+    return (NULL!=data_iter_.iter() ? data_iter_.IsCompressible() : true);
   }
 
 

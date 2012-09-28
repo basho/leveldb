@@ -936,23 +936,14 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
 
   // for compression bypass feature/automation
-  bool compress_bypass_off = false;
+#if 0
   Options options_state=options_;
-  options_state.compression=kNoCompression;
-
+  options_state.compression=kNoCompressInternal;
+#endif
   KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
 
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
-    if (input->IsCompressible()
-        && kNoCompression==options_state.compression
-        && kNoCompression!=options_.compression)
-    {
-        options_state.compression=options_.compression;
-        if (NULL!=compact->builder)
-            compact->builder->ChangeOptions(options_state);
-    }   // if
-
     // Prioritize immutable compaction work
     imm_micros+=PrioritizeWork(0==compact->compaction->level());
 
@@ -975,18 +966,36 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         if (!status.ok()) {
           break;
         }
+#if 0
         if (options_state.compression!=options_.compression)
             compact->builder->ChangeOptions(options_state);
+#endif
       }
       if (compact->builder->NumEntries() == 0) {
         compact->current_output()->smallest.DecodeFrom(key);
       }
       compact->current_output()->largest.DecodeFrom(key);
+#if 0
+      if (kNoCompressInternal==options_state.compression
+          && kNoCompression!=options_.compression
+          && input->IsCompressible())
+      {
+          Log(options_.info_log,  "Compression flag switched active");
+
+          options_state.compression=options_.compression;
+          if (NULL!=compact->builder)
+              compact->builder->ChangeOptions(options_state);
+      }   // if
+#endif
       compact->builder->Add(key, input->value());
 
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
           compact->compaction->MaxOutputFileSize()) {
+#if 0
+          if (kNoCompressInternal==options_state.compression)
+              Log(options_.info_log,  "Compression bypass success");
+#endif
         status = FinishCompactionOutputFile(compact, input);
         if (!status.ok()) {
           break;

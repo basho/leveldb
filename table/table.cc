@@ -273,7 +273,7 @@ Iterator* Table::BlockReader(void* arg,
 
   Iterator* iter;
   if (block != NULL) {
-    iter = block->NewIterator(table->rep_->options.comparator);
+      iter = block->NewIterator(table->rep_->options.comparator, table->IsCompressible());
     if (cache_handle == NULL) {
       iter->RegisterCleanup(&DeleteBlock, block, NULL);
     } else {
@@ -357,7 +357,8 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
 bool
 Table::IsCompressible() const
 {
-    return(false);
+    return(rep_->sst_counters.Value(eSstCountBlocks)!=rep_->sst_counters.Value(eSstCountCompressAborted)
+        || 0==rep_->sst_counters.Value(eSstCountBlocks));
 }   // Table::IsCompressible
 
 
