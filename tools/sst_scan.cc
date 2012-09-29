@@ -168,7 +168,7 @@ main(
 
                         if (block_info)
                         {
-                            printf("block %d, offset %zd, size %zd, next %zd\n",
+                            printf("block %d, offset %llu, size %llu, next %llu\n",
                                    block_count, handle.offset(), handle.size(), handle.offset()+handle.size());
                         }   // if
 
@@ -247,7 +247,7 @@ main(
                             printf("\n");
                         }   // if
 
-                        printf("%s, %zd, %zd, %d,",
+                        printf("%s, %llu, %zd, %d,",
                                table_name.c_str(), meta.file_size, table->TEST_GetIndexBlock()->size(), count);
 
                         printf(" %d, %zd, %zd, %zd, %zd,",
