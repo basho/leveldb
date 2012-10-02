@@ -85,7 +85,7 @@ protected:
         volatile bool m_KeyShortened;     //!< true when first key of next block seen and applied
         uint32_t m_Crc;                   //!< crc after potential compression
         std::string m_FiltKeys;           //!< keys to put into filter
-        std::vector<size_t> m_FiltStarts; //!< size of each key dumped into m_FiltKeys
+        std::vector<size_t> m_FiltLengths; //!< size of each key dumped into m_FiltKeys
 
         BlockNState()
         : m_State(eBNStateEmpty), m_Type(kNoCompression), m_KeyShortened(false), m_Crc(0) {reset();};
@@ -99,7 +99,7 @@ protected:
             m_KeyShortened=false;
             m_Crc=0;
             m_FiltKeys.clear();
-            m_FiltStarts.clear();
+            m_FiltLengths.clear();
         }   // reset
 
         bool empty() const {return(eBNStateEmpty==m_State);}
