@@ -11,6 +11,9 @@ namespace leveldb {
 
 // See doc/table_format.txt for an explanation of the filter block format.
 
+// list of available filters within code base
+const FilterPolicy * FilterInventory::ListHead(NULL);
+
 FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
     : policy_(policy), filter_base_lg_(0), filter_base_(0), last_offset_(0)
 {
@@ -45,18 +48,18 @@ void FilterBlockBuilder::AddKey(const Slice& key) {
 }
 
 void FilterBlockBuilder::AddKeys(
-    std::vector<size_t> & Starts,
+    std::vector<size_t> & Lengths,
     std::string & Keys)
 {
-  const size_t num_keys = Starts.size();
+  const size_t num_keys = Lengths.size();
   size_t loop, offset, length;
   Slice key;
 
-  start_.reserve(start_.size()+Starts.size());
+  start_.reserve(start_.size()+Lengths.size());
   for (loop=0, offset=0; loop<num_keys; ++loop, offset+=length)
   {
       const char* base = Keys.data() + offset;
-      length = Starts[loop] - offset;
+      length = Lengths[loop] - offset;
       AddKey(Slice(base, length));
   }
 }
