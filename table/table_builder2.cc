@@ -131,6 +131,9 @@ TableBuilder2::Add(
     block_ptr->m_LastKey.assign(key.data(), key.size());
     r->num_entries++;
     block_ptr->m_Block.Add(key, value);
+    r->sst_counters.Inc(eSstCountKeys);
+    r->sst_counters.Add(eSstCountKeySize, key.size());
+    r->sst_counters.Add(eSstCountValueSize, value.size());
 
     // has this block reach size limit
     const size_t estimated_block_size = block_ptr->m_Block.CurrentSizeEstimate();
@@ -258,6 +261,9 @@ TableBuilder2::CompressBlock(
     Rep* r = rep_;
     Slice raw = state.m_Block.Finish();
 
+    r->sst_counters.Inc(eSstCountBlocks);
+    r->sst_counters.Add(eSstCountBlockSize, raw.size());
+
     state.m_Type = r->options.compression;
     // TODO(postrelease): Support more compression options: zlib?
     switch (state.m_Type)
@@ -276,11 +282,13 @@ TableBuilder2::CompressBlock(
                 // Snappy not supported, or compressed less than 12.5%, so just
                 // store uncompressed form
                 state.m_Type = kNoCompression;
+                r->sst_counters.Inc(eSstCountCompressAborted);
             }
             break;
         }
     }   // switch
 
+    r->sst_counters.Add(eSstCountBlockWriteSize, state.m_Block.CurrentBuffer().size());
 
     // calculate the crc32c for the data
     char trailer[kBlockTrailerSize];
@@ -363,6 +371,7 @@ TableBuilder2::WriteBlock2(
         handle.EncodeTo(&handle_encoding);
         assert(true==state.m_KeyShortened);
         r->index_block.Add(state.m_LastKey, Slice(handle_encoding));
+        r->sst_counters.Inc(eSstCountIndexKeys);
     }   // if
 
     // buffer done, put back in pile

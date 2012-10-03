@@ -9,6 +9,7 @@
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "leveldb/perf_count.h"
 #include "table/block_builder.h"
 #include "table/filter_block.h"
 #include "table/format.h"
