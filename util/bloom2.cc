@@ -47,8 +47,8 @@ class BloomFilterPolicy2 : public FilterPolicy {
   {
       uint32_t hash0, hash1;
 
-      hash0=BloomHash0(ExtractUserKey(Key));
-      hash1=BloomHash1(ExtractUserKey(Key));
+      hash0=BloomHash0(Key);
+      hash1=BloomHash1(Key);
       Buffer.assign((char *)&hash0, sizeof(hash0));
       Buffer.append((char *)&hash1, sizeof(hash1));
       return(Slice(Buffer));

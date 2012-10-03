@@ -122,6 +122,10 @@ void InternalFilterPolicy::CreateFilter(const Slice* keys, int n,
   user_policy_->CreateFilter(keys, n, dst);
 }
 
+    Slice InternalFilterPolicy::TransformKey(const Slice & Key, std::string & Buffer) const {
+  return user_policy_->TransformKey(ExtractUserKey(Key), Buffer);
+}
+
 bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
   return user_policy_->KeyMayMatch(ExtractUserKey(key), f);
 }
