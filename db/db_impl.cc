@@ -940,6 +940,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   Options options_state=options_;
   options_state.compression=kNoCompressInternal;
 #endif
+
   KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
 
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
