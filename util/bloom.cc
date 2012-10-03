@@ -38,7 +38,7 @@ class BloomFilterPolicy : public FilterPolicy {
   {
       uint32_t hash;
 
-      hash=BloomHash(ExtractUserKey(Key));
+      hash=BloomHash(Key);
       Buffer.assign((char *)&hash, sizeof(hash));
       return(Slice(Buffer));
   };
