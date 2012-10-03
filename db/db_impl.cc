@@ -936,7 +936,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
 
   // for compression bypass feature/automation
-#if 0
+#if 1
   Options options_state=options_;
   options_state.compression=kNoCompressInternal;
 #endif
@@ -966,7 +966,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         if (!status.ok()) {
           break;
         }
-#if 0
+#if 1
         if (options_state.compression!=options_.compression)
             compact->builder->ChangeOptions(options_state);
 #endif
@@ -975,7 +975,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         compact->current_output()->smallest.DecodeFrom(key);
       }
       compact->current_output()->largest.DecodeFrom(key);
-#if 0
+#if 1
       if (kNoCompressInternal==options_state.compression
           && kNoCompression!=options_.compression
           && input->IsCompressible())
@@ -992,7 +992,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
           compact->compaction->MaxOutputFileSize()) {
-#if 0
+#if 1
           if (kNoCompressInternal==options_state.compression)
               Log(options_.info_log,  "Compression bypass success");
 #endif
