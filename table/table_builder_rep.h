@@ -9,6 +9,7 @@
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "leveldb/perf_count.h"
 #include "table/block_builder.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -29,6 +30,7 @@ struct TableBuilder::Rep {
   int64_t num_entries;
   bool closed;          // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
+  SstCounters sst_counters;
 
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
