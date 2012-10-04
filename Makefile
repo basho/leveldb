@@ -52,7 +52,8 @@ TESTS = \
 	write_batch_test
 
 TOOLS = \
-	sst_scan
+	sst_scan \
+	bloom_scan
 
 PROGRAMS = db_bench $(TESTS) $(TOOLS)
 BENCHMARKS = db_bench_sqlite3 db_bench_tree_db
@@ -105,6 +106,9 @@ clean:
 $(LIBRARY): $(LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(LIBOBJECTS)
+
+bloom_scan: tools/bloom_scan.o $(LIBOBJECTS)
+	$(CXX) tools/bloom_scan.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
 db_bench: db/db_bench.o $(LIBOBJECTS) $(TESTUTIL)
 	$(CXX) db/db_bench.o $(LIBOBJECTS) $(TESTUTIL) -o $@  $(LDFLAGS)
