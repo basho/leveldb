@@ -71,6 +71,7 @@ main(
             leveldb::Env * env;
             leveldb::Status status;
             size_t get_errors, key_count;
+            uint64_t timer;
 
             get_errors=0;
             key_count=0;
@@ -80,11 +81,12 @@ main(
             options.filter_policy=leveldb::NewBloomFilterPolicy2(16);
             options.env=env;
             options.max_open_files=250;
-            
+
             read_options.verify_checksums=true;
             read_options.fill_cache=false;     // force bloom to be used
 
             db_ptr=NULL;
+            timer=env->NowMicros();
             status=leveldb::DB::Open(options, dbname, &db_ptr);
 
             if (status.ok())
@@ -111,17 +113,18 @@ main(
                     if (!status.ok())
                         ++get_errors;
                 }   // for
+                timer=env->NowMicros() - timer;
 
                 if (!no_csv)
                 {
                     if (csv_header)
                     {
                         csv_header=false;
-                        printf("database, key count, GET errors\n");
+                        printf("database, timer micros, key count, GET errors\n");
                     }   // if
 
-                    printf("%s, %zd, %zd\n",
-                           dbname.c_str(), key_count, get_errors);
+                    printf("%s, %llu, %zd, %zd\n",
+                           dbname.c_str(), timer, key_count, get_errors);
                 }   // if
 
                 delete it;
@@ -129,7 +132,7 @@ main(
             }   // if
             else
             {
-                fprintf(stderr, "%s:  leveldb::Open() failed (%s)", 
+                fprintf(stderr, "%s:  leveldb::Open() failed (%s)",
                         dbname.c_str(), status.ToString().c_str());
                 error_seen=true;
                 error_counter+=1;

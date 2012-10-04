@@ -25,7 +25,7 @@ namespace leveldb {
 TableBuilder2::TableBuilder2(
     const Options& options,
     WritableFile* file)
-: TableBuilder(options, file), m_Abort(false), m_Finish(false),
+    : TableBuilder(options, file), m_Abort(false), m_Finish(false),
     m_CondVar(&m_CvMutex), m_NextAdd(0), m_NextWrite(0)
 {
     int loop, ret_val;
@@ -423,7 +423,10 @@ TableBuilder2::Finish()
     m_Finish=true;
     m_CondVar.SignalAll();
     for (loop=0; loop<eTB2Threads; ++loop)
+    {
         pthread_join(m_Writers[loop], NULL);
+        m_Writers[loop]=0;
+    }   // for
 
     Status status=TableBuilder::Finish();
 
@@ -442,9 +445,16 @@ void TableBuilder2::Abandon() {
     // let all workers complete
     int loop;
     m_Finish=true;
-    m_CondVar.SignalAll();
+    m_Abort=true;
+    {
+        port::MutexLock lock(m_CvMutex);
+        m_CondVar.SignalAll();
+    }
     for (loop=0; loop<eTB2Threads; ++loop)
-        pthread_join(m_Writers[loop], NULL);
+    {
+        if (0!=m_Writers[loop])
+            pthread_join(m_Writers[loop], NULL);
+    }   // for
 }
 
 
