@@ -59,7 +59,7 @@ void FilterBlockBuilder::AddKeys(
   for (loop=0, offset=0; loop<num_keys; ++loop, offset+=length)
   {
       const char* base = Keys.data() + offset;
-      length = Lengths[loop] - offset;
+      length = Lengths[loop];
       AddKey(Slice(base, length));
   }
 }
