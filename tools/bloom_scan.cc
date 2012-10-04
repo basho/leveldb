@@ -81,6 +81,7 @@ main(
             options.filter_policy=leveldb::NewBloomFilterPolicy2(16);
             options.env=env;
             options.max_open_files=250;
+
             read_options.verify_checksums=true;
             read_options.fill_cache=false;     // force bloom to be used
 
