@@ -108,6 +108,9 @@ $(LIBRARY): $(LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(LIBOBJECTS)
 
+bloom_scan: tools/bloom_scan.o $(LIBOBJECTS)
+	$(CXX) tools/bloom_scan.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
+
 db_bench: db/db_bench.o $(LIBOBJECTS) $(TESTUTIL)
 	$(CXX) db/db_bench.o $(LIBOBJECTS) $(TESTUTIL) -o $@  $(LDFLAGS)
 
