@@ -424,15 +424,47 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) {
+                                 WritableFile** result,
+                                 bool AdviseKeep,
+                                 const size_t WriteBufferSize) 
+{
     Status s;
-    const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
-    if (fd < 0) {
-      *result = NULL;
-      s = IOError(fname, errno);
-    } else {
-      *result = new PosixMmapFile(fname, fd, page_size_);
-    }
+
+    if (NULL!=result && 0!=fname.length())
+    {
+        // legacy use cases will have zero as the WriteBufferSize
+        if (0==WriteBufferSize)
+        {
+            const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+            if (fd < 0) {
+                *result = NULL;
+                s = IOError(fname, errno);
+            } else {
+                *result = new PosixMmapFile(fname, fd, page_size_);
+            }
+        }   // if
+
+        // update code will use overlapped writes
+        else
+        {
+            RiakBufferFile * new_file;
+
+            new_file=new RiakBufferFile;
+            s=new_file->Open(fname, AdviseKeep, WriteBufferSize);
+
+            if (s.ok())
+                *result=new_file;
+            else
+                *result=NULL;  // redundant, but safe
+        }   // else
+    }   // if
+
+    // param error
+    else
+    {
+        s=Status::InvalidArguement(Slice("NewWritableFile():  bad parameter."));
+    }   // else
+
     return s;
   }
 

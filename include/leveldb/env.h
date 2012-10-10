@@ -68,7 +68,9 @@ class Env {
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) = 0;
+                                 WritableFile** result,
+                                 bool AdviseKeep=false,
+                                 const size_t WriteBufferSize=0) = 0;
 
   // Derived from NewWritableFile.  One change: if the file exists,
   // move to the end of the file and continue writing.
