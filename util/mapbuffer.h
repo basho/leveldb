@@ -30,8 +30,6 @@
 namespace leveldb
 {
 
-class RiakBufferFile;
-
 class RiakWriteBuffer
 {
 public:

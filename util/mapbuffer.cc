@@ -443,7 +443,6 @@ RiakBufferPtr::append(
 
         m_CurOffset+=DataSize;
         m_CurSize-=DataSize;
-
     }   // if
     else
     {
