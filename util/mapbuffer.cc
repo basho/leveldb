@@ -21,17 +21,34 @@
  * under the License.
  */
 
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
+#include "util/mapbuffer.h"
+
+#if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
+#define HAVE_FADVISE
+#endif
+
+namespace leveldb 
+{
 /**
  * Initialize object
  * @date 10/09/12 Created
  * @author matthewv
  */
 RiakWriteBuffer::RiakWriteBuffer(
-    RiakBufferFile & ParentFile)              //!< underlying file object
-    : m_RefCount(0), m_File(ParentFile),
-      m_Base(NULL), m_Offset(0), m_Size(0)
+    RiakBufferFile & ParentFile,              //!< underlying file object
+    off_t Offset,                             //!< starting offset of this mapping
+    size_t Size)                              //!< size of mapping
+    : m_RefCount(1), m_File(ParentFile),
+      m_Base(NULL), m_Offset(Offset), m_Size(Size)
 {
+    // m_RefCount starts at one.  This means caller of "new" implicitly
+    //  starts with a reference OR buffer object can be on stack and will
+    //  NOT self delete when all pointers go away.
+
     return;
 }   // RiakWriteBuffer::RiakWriteBuffer
 
@@ -47,7 +64,7 @@ RiakWriteBuffer::~RiakWriteBuffer()
 
     if (NULL!=m_Base)
     {
-        m_File.Unmap(m_Base, m_Size);
+        m_File.UnMap(m_Base, m_Offset, m_Size);
     }   // if
 
     return;
@@ -68,10 +85,10 @@ RiakWriteBuffer::AssignData(
 {
     Status ret_stat;
 
-    if (m_File.Status().ok)
+    if (m_File.ok())
     {
         {
-            MutexLock lock(m_MapWait);
+            port::MutexLock lock(m_MapWait);
 
             // has someone performed the mapping?
             //   first caller does it, other callers wait on mutex until map ready
@@ -105,7 +122,7 @@ RiakWriteBuffer::AssignData(
     }   // if
     else
     {
-        ret_status=m_File.Status();
+        ret_stat=m_File.StatusObj();
     }   // else
 
     return(ret_stat);
@@ -118,7 +135,7 @@ RiakWriteBuffer::AssignData(
  * @date 10/10/12 Created
  * @author matthewv
  */
-Status
+void
 RiakWriteBuffer::IncRef()
 {
 #ifdef OS_SOLARIS
@@ -137,7 +154,7 @@ RiakWriteBuffer::IncRef()
  * @date 10/10/12 Created
  * @author matthewv
  */
-Status
+void
 RiakWriteBuffer::DecRef()
 {
     if (0<m_RefCount && NULL!=m_Base)
@@ -154,7 +171,7 @@ RiakWriteBuffer::DecRef()
 
         if (0==count)
         {
-            m_File.UnMap(m_Base, m_Size);
+            m_File.UnMap(m_Base, m_Offset, m_Size);
             m_Base=NULL;
             delete this;
         }   // if
@@ -180,21 +197,60 @@ RiakWriteBuffer::get(
     ret_ptr=NULL;
 
     // just in case someone tries to get a pointer before writing:
-    if (NULL==m_Base)
-        AssignData(NULL, 0, Offset);
-
-    assert(m_Offset<=Offset && Offset<m_Offset+m_Size);
-    if (m_Offset<=Offset && Offset<m_Offset+m_Size)
+    if (NULL!=m_Base)
     {
-        off_t map_offset;
+        assert(m_Offset<=Offset && Offset<m_Offset+m_Size);
+        if (m_Offset<=Offset && Offset<m_Offset+m_Size)
+        {
+            off_t map_offset;
 
-        map_offset=Offset-m_Offset;
-        ret_ptr=(char *)m_Base + map_offset;
+            map_offset=Offset-m_Offset;
+            ret_ptr=(char *)m_Base + map_offset;
+        }   // if
     }   // if
 
     return(ret_ptr);
 
 }   // RiakWriteBuffer::get
+
+
+/**
+ * Test if object is in good condition
+ * @date 10/12/12 Created
+ * @author matthewv
+ * @returns true if object is usable
+ */
+bool
+RiakWriteBuffer::ok() const
+{
+    bool ret_flag;
+
+    ret_flag=(m_File.ok() && 0!=m_RefCount);
+
+    assert(ret_flag);
+
+    return(ret_flag);
+
+}   // RiakWriteBuffer::ok
+
+
+/**
+ * Pass mapping parameters to file object for sync
+ * @date 10/12/12 Created
+ * @author matthewv
+ */
+void
+RiakWriteBuffer::Sync() // const
+{
+    if (NULL!=m_Base) 
+        m_File.MSync(m_Base, m_Size);
+    else
+        assert(false);
+
+    return;
+
+}   // RiakWriteBuffer::ok
+
 
 
 /**
@@ -297,6 +353,38 @@ RiakBufferPtr::operator=(
 
 
 /**
+ * Assign parameters to pointer
+ * @date 10/10/12 Created
+ * @author matthewv
+ * @returns Status error (either file ioerr or param error)
+ */
+void
+RiakBufferPtr::reset(
+    RiakWriteBuffer & Buffer,     //!< buffer containing assigned mapping
+    off_t Offset,                 //!< file location of offset
+    size_t Size)                  //!< size of allocation
+{
+    bool same;
+
+    same=(&Buffer==m_Buffer && Offset==m_BaseOffset);
+
+    // release current buffer if assigned and not same as copy
+    if (NULL!=m_Buffer && !same)
+        m_Buffer->DecRef();
+
+    m_Buffer=&Buffer;
+    m_BaseOffset=Offset;
+    m_BaseSize=Size;
+    m_CurOffset=0;
+    m_CurSize=0;
+
+    if (NULL!=m_Buffer && !same)
+        m_Buffer->IncRef();
+    
+    return;
+
+}   // RiakBufferPtr::operator=
+/**
  * Copy data to beginning of allocated space
  * @date 10/10/12 Created
  * @author matthewv
@@ -304,7 +392,7 @@ RiakBufferPtr::operator=(
  */
 Status
 RiakBufferPtr::assign(
-    void * Data,
+    const void * Data,
     size_t DataSize)
 {
     Status ret_stat;
@@ -337,7 +425,7 @@ RiakBufferPtr::assign(
  */
 Status
 RiakBufferPtr::append(
-    void * Data,
+    const void * Data,
     size_t DataSize)
 {
     Status ret_stat;
@@ -362,67 +450,383 @@ RiakBufferPtr::append(
 }   // RiakBufferPtr::append
 
 
+/**
+ * Default constructor
+ * @date 10/10/12 Created
+ * @author matthewv
+ */
+RiakBufferFile::RiakBufferFile()
+    : m_FileDesc(-1), m_Advise(0), m_FileSize(0), m_NextOffset(0),
+      m_BufferSize(0), m_CurBuffer(NULL)
+{
+    return;
+}   // RiakBufferFile::RiakBufferFile
 
 
-#if 0
-// pointer to a map  RiakWritePtr (derived from WritePtr)
-/// pointer to object
-/// offset in object or total space
-/// CopyFirst, CopyNext (assign / append) ... calls object and maybe blocks
-/// get() ... fails / asserts / throws if CopyTo not complete,
-///           OR gives const pointer where next assign will write
-/// ok(), writable() until full, readable() after full
-/// release() ... !ok, !writable, !readable
+/**
+ * Destructor, release resources
+ * @date 10/10/12 Created
+ * @author matthewv
+ */
+RiakBufferFile::~RiakBufferFile()
+{
+    Close();
 
-// container RiakBufferFile
-/// pointer to current map, ref counted ptr
-/// rw lock for map tests
-//// obtain read lock
-//// validate global status ... assert & return if closed (or not open)
-//// assert a mapping exists
-//// inc reference lock on current map
-//// atomic offset / allocate
-//// allocation within current map
-//// yes, done ... create and return WritePtr
-//// no, release reference, then read lock
-//// get write lock,
-//// reference lock, retest ... if now good, release write lock & return ptr
-////  otherwise release object hold on current map, create new map starting
-////  at this caller's point for MIN(caller's size, buffer standard size)
-////  MUST make FTRUNCATE call here, not thread delayed (at map object)
-/// mutex close or abort? ... old 
-/// atomic offset counter
-/// is this the file object ... yes
-/// fadvise param
-/// close sync or async ... sync for now.  ftruncate to current offset
-//// use write lock, change global status and shutdown
-//// mutex on Close to allow clean unmaps? Or assume something else synchronizes
-////  writers to closer ... assert if current map has pointers outstanding, besides file's ptr?
-/// Should open create first mapping? only loss is if first object greater than entire mapping.
-////  yes, establish assumption one mapping always exists
-////  a background worker could be launched to seed new map ... cost/benefit? use zero size mapping?
-////  this would anticipate ftruncate only in cases where objects exactly fill current map. 
-////   put in comment, but do not code.  a testing bitch
-/// Open / Close ... allow stack object creation
-/// container level status: m_Status
+    return;
+
+}   // RiakBufferFile::~RiakBufferFile
 
 
+/**
+ * Open file
+ * @date 10/10/12 Created
+ * @author matthewv
+ */
+Status
+RiakBufferFile::Open(
+    const std::string & Filename,        //!< full path of file to create
+    bool AdviseKeep,                     //!< true for POSIX_FADV_WILLNEED, false _DONTNEED
+    size_t WriteBufferSize,              //!< will use this times 1.1 as default map size
+    size_t PageSize)                     //!< operating system page size
+{
+    Status ret_stat;
 
-/// WritableFile needs "allocate pointer"
-///  WritePtr allocate(size_t)
-///  Fail Write() interface
-
-// NewWritableFile AND NewRiakWritableFile static ???
-///  or choose based upon WriteBufferSize ... zero is old PosixMmapFile
-///     call NewWritableFileOld (not virtual)
-/// hack into existing PosixEnv ... but keep stuff in other files.
-
-
-virtual Status NewWritableFile(  // only wraps "new" and Open call (delete obj if open fails)
-    const std::string &fname, 
-    WritableFile **result, 
-    bool AdviseKeep=false,
-    const size_t WriteBufferSize=0); // use write buffer size * 1.2
-
-
+    // stop reuse / retry
+    if (-1==m_FileDesc && m_FileOk.ok() && 0!=WriteBufferSize)
+    {
+        m_Filename=Filename;
+        m_FileDesc=open(Filename.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+        if (-1!=m_FileDesc)
+        {
+#if HAVE_FADVISE
+            m_Advise=(AdviseKeep ? POSIX_FADV_WILLNEED : POSIX_FADV_DONTNEED);
 #endif
+            m_FileSize=0;
+            m_NextOffset=0;
+
+            // use 1.1 times given size
+            m_BufferSize=WriteBufferSize + WriteBufferSize/10;
+            m_PageSize=PageSize;
+            m_CurBuffer=NULL;
+        }   // if
+        else
+        {
+            ret_stat=Status::IOError(m_Filename, strerror(errno));
+            m_FileOk=ret_stat;
+        }   // else
+    }   // if
+    else
+    {
+        assert(false);
+        ret_stat=Status::InvalidArgument("Open: bad params");
+    }   // else
+
+    return(ret_stat);
+
+}   // RiakBufferFile::Open
+
+
+/**
+ * Assign region of file to caller
+ * @date 10/11/12 Created
+ * @author matthewv
+ * @returns RiakBufferPtr for assign/append if .ok()
+ */
+RiakBufferPtr
+RiakBufferFile::Allocate(
+    size_t DataSize)
+{
+    RiakBufferPtr ret_ptr;
+
+    // This could be done slightly better with a RWLock, 
+    //  but keeping it simple for now
+    if (ok())
+    {
+        port::MutexLock lock(m_Mutex);
+        off_t assigned_off;
+        bool done;
+
+        done=false;
+        assigned_off=m_NextOffset;
+        m_NextOffset+=DataSize;
+
+        // is current mapping sufficient
+        if (NULL!=m_CurBuffer)
+        {
+            RiakWriteBuffer * buf;
+
+            // cast away "volatile" ... we hold lock
+            buf=(RiakWriteBuffer *)m_CurBuffer;
+
+            if (!buf->FitsMapping(assigned_off, DataSize))
+            {
+                buf->DecRef();
+                m_CurBuffer=NULL;
+            }   // if
+        }   // if
+
+        // is a new mapping required
+        if (NULL==m_CurBuffer)
+        {
+            off_t map_offset;
+            size_t map_size;
+            int ret_val;
+
+            if (DataSize < m_BufferSize )
+                map_size=m_BufferSize;
+            else
+                map_size=DataSize;
+
+            map_offset=(assigned_off / m_PageSize) * m_PageSize;
+            map_size=((map_size / m_PageSize) +1) * m_PageSize;
+
+            m_FileSize+=map_size;
+            ret_val=ftruncate(m_FileDesc, m_FileSize);
+            if (0==ret_val)
+            {
+                // need try/catch logic for memory failures
+                m_CurBuffer=new RiakWriteBuffer(*this, map_offset, map_size);
+            }   // if
+            else
+            {
+                // leave m_CurBuffer as NULL and set into ret_ptr
+                m_FileOk=Status::IOError(m_Filename, strerror(errno));
+            }   // else
+        }   // if
+
+        // cast away "volatile" ... we hold lock
+        ret_ptr.reset((RiakWriteBuffer &)*m_CurBuffer, assigned_off, DataSize);
+    }   // MutexLock
+
+    return(ret_ptr);
+
+}   // RiakBufferFile::Allocate
+
+
+/**
+ * Wrapper to support old style Append virtual
+ * @date 10/11/12 Created
+ * @author matthewv
+ */
+Status
+RiakBufferFile::Append(
+    const Slice & Data)
+{
+    Status ret_stat;
+    RiakBufferPtr ptr;
+
+    ptr=Allocate(Data.size());
+
+    if (ptr.ok())
+        ptr.assign(Data.data(), Data.size());
+    else
+        ret_stat=Status::InvalidArgument(Slice("RiakBufferFile::Append() failed."));
+
+    return(ret_stat);
+
+}   // RiakBufferFile::Append
+
+
+/**
+ * Perform file close, assumes caller has shutdown threads that might hold RiakBufferPtr()
+ * @date 10/11/12 Created
+ * @author matthewv
+ * @returns leveldb Status object
+ */
+Status
+RiakBufferFile::Close()
+{
+    Status ret_stat;
+    port::MutexLock lock(m_Mutex);
+
+    if (NULL!=m_CurBuffer)
+    {
+        // hope all pointers were released ...
+        delete m_CurBuffer;
+        m_CurBuffer=NULL;
+    }   // if
+
+    if (-1!=m_FileDesc)
+    {
+        ftruncate(m_FileDesc, m_NextOffset);
+        close(m_FileDesc);
+        m_FileDesc=-1;
+    }   // if
+
+    return(ret_stat);
+
+}   // RiakBufferFile::Close
+
+
+/**
+ * Perform user request flush of data to disk
+ * @date 10/11/12 Created
+ * @author matthewv
+ * @returns leveldb Status object
+ */
+Status
+RiakBufferFile::Flush()
+{
+    Status ret_stat;
+
+    // noop for now (same as previous code)
+
+    return(ret_stat);
+
+}   // RiakBufferFile::Flush
+
+
+/**
+ * Perform user request sync of data to disk
+ * @date 10/11/12 Created
+ * @author matthewv
+ * @returns leveldb Status object
+ */
+Status
+RiakBufferFile::Sync()
+{
+    Status ret_stat;
+
+    if (ok())
+    {
+        int ret_val;
+        // async nature implies that we do not know
+        //  that every file buffer was sync'd
+        do
+        {
+            ret_val=fdatasync(m_FileDesc);
+        } while(EINTR==ret_val);
+
+        if (0!=ret_val)
+        {
+            ret_stat=Status::IOError(m_Filename, strerror(errno));
+            m_FileOk=ret_stat;
+        }   // if
+
+        port::MutexLock lock(m_Mutex);
+        if (NULL!=m_CurBuffer)
+        {
+            RiakWriteBuffer *buf;
+
+            buf=(RiakWriteBuffer *)m_CurBuffer;
+            buf->Sync();
+        }   // if
+    }   // if
+    else
+    {
+        assert(false);
+        if (m_FileOk.ok())
+            m_FileOk=Status::InvalidArgument(Slice("RiakBufferFile::Sync() on invalid file"));
+        ret_stat=m_FileOk;
+    }   // else;
+
+    return(ret_stat);
+
+}   // RiakBufferFile::Sync
+
+
+/**
+ * Routine used by RiakWriteBuffer to request a new mapping
+ * @date 10/11/12 Created
+ * @author matthewv
+ * @returns leveldb Status object
+ */
+Status
+RiakBufferFile::Map(
+    off_t Offset,
+    size_t Size,
+    void ** Base)
+{
+    Status ret_stat;
+
+    if (ok())
+    {
+        *Base=mmap(NULL, Size, PROT_READ | PROT_WRITE, MAP_SHARED, m_FileDesc, Offset);
+        if (MAP_FAILED==*Base)
+        {
+            assert(false);
+            ret_stat=Status::IOError(m_Filename, strerror(errno));
+            m_FileOk=ret_stat;
+            *Base=NULL;
+        }   // if
+    }   // if
+    else
+    {
+        assert(false);
+        if (m_FileOk.ok())
+            m_FileOk=Status::InvalidArgument(Slice("RiakBufferFile::Sync() on invalid file"));
+        ret_stat=m_FileOk;
+    }   // else;
+
+    return(ret_stat);
+
+}   // RiakBufferFile::Map
+
+
+/**
+ * Routine used by RiakWriteBuffer to release a mapping
+ * @date 10/11/12 Created
+ * @author matthewv
+ */
+void
+RiakBufferFile::UnMap(
+    void * Base,
+    off_t Offset,
+    size_t Size)
+{
+    if (ok())
+    {
+        if (0!=munmap(Base, Size))
+        {
+            assert(false);
+            m_FileOk=Status::IOError(m_Filename, strerror(errno));
+        }   // if
+
+#if defined(HAVE_FADVISE)
+        posix_fadvise(m_FileDesc, Offset, Size, m_Advise);
+#endif
+    }   // if
+    else
+    {
+        assert(false);
+        if (m_FileOk.ok())
+            m_FileOk=Status::InvalidArgument(Slice("RiakBufferFile::UnMap() on invalid file"));
+    }   // else;
+
+    return;
+
+}   // RiakBufferFile::UnMap
+
+
+/**
+ * Perform sync requested by buffer
+ * @date 10/12/12 Created
+ * @author matthewv
+ */
+void
+RiakBufferFile::MSync(
+    void * Base,
+    size_t Size)
+{
+    if (ok())
+    {
+        // async nature implies that we do not know
+        //  that every file buffer was sync'd
+        if (0!=msync(Base, Size, MS_SYNC))
+        {
+            m_FileOk=Status::IOError(m_Filename, strerror(errno));
+        }   // if
+    }   // if
+    else
+    {
+        assert(false);
+        if (m_FileOk.ok())
+            m_FileOk=Status::InvalidArgument(Slice("RiakBufferFile::MSync() on invalid file"));
+    }   // else;
+
+    return;
+
+}   // RiakBufferFile::MSync
+
+
+};  // namespace leveldb
