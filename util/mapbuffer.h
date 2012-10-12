@@ -21,13 +21,16 @@
  * under the License.
  */
 
-#include <sys/mmap>
+#include <sys/mman.h>
 
+#include <leveldb/env.h>
 #include <leveldb/status.h>
-
+#include <port/port.h>
 
 namespace leveldb
 {
+
+class RiakBufferFile;
 
 class RiakWriteBuffer
 {
@@ -35,21 +38,21 @@ public:
 
 protected:
 
-    volatile int m_RefCount;       //!< number of active users of this map, delete on zero
+    volatile int m_RefCount;   //!< number of active users of this map, delete on zero
     RiakBufferFile & m_File;   //!< parent file object
 
     // mapping parameters
-    volatile void * m_Base;    //!< memory map location
+    void * m_Base;             //!< memory map location
     off_t m_Offset;            //!< offset into m_File of m_Base
     size_t m_Size;             //!< byte count of the mapping
 
-    Mutex m_MapWait;           //!< first assign actually performs mapping, others wait
+    port::Mutex m_MapWait;     //!< first assign actually performs mapping, others wait
 
 private:
 
 
 public:
-    explicit RiakWriteBuffer(RiakBufferFile & FileParent);
+    RiakWriteBuffer(RiakBufferFile & FileParent, off_t Offset, size_t Size);
 
     virtual ~RiakWriteBuffer();  // put unmap within file object
 
@@ -64,6 +67,14 @@ public:
 
     // WARNING:  can return NULL
     const void * get(off_t Offset) const;
+
+    bool ok() const;
+
+    bool FitsMapping(off_t Offset, size_t Size) const
+    {return(m_Offset<=Offset && Offset+Size<=m_Offset+m_Size);};
+
+    // send parameters back to parent for msync
+    void Sync(); // const ... breaks volatile
 
 private:
     RiakWriteBuffer();                                               //!< deny default constructor
@@ -102,91 +113,74 @@ public:
     //
     const void * get() const {return(NULL!=m_Buffer ? m_Buffer->get(m_BaseOffset) : NULL);};
     // ?? void release()?
-    bool ok() const {return(NULL!=m_Buffer);};
+    bool ok() const {return(NULL!=m_Buffer && m_Buffer->ok());};
+
+    void reset(RiakWriteBuffer & Buffer, off_t Base, size_t Size);
 
     // is space still available for writing
     bool writable() const {return(0!=m_CurSize);};
 
-    Status assign(void * Data, size_t DataSize);
-    Status append(void * Data, size_t DataSize);
+    Status assign(const void * Data, size_t DataSize);
+    Status append(const void * Data, size_t DataSize);
 
 private:
 
 };  // class RiakBufferPtr
 
-#if 0
-// map   RiakWriteBuffer
-/// file object
-/// ref count
-//// if ref count goes to zero AND file next offset beyond range, delete
-////   on delete tell file object to remove from list
-//// OR file object holds one reference while in range, then releases
-/// creation mutex, all wait until mapping complete, first caller to 
-///  assign/append performs mapping ... allows mappings to be threaded on large blocks
-/// memcpy operation that verifies map offset and size
-/// mapping offset, size, pointer
-/// create UnMap routine in file object, call it on delete / background munmap
 
-// pointer to a map  RiakWritePtr (derived from WritePtr)
-/// pointer to object
-/// offset in object or total space
-/// CopyFirst, CopyNext (assign / append) ... calls object and maybe blocks
-/// get() ... fails / asserts / throws if CopyTo not complete,
-///           OR gives const pointer where next assign will write
-/// ok(), writable() until full, readable() after full
-/// release() ... !ok, !writable, !readable
+class RiakBufferFile : public WritableFile
+{
+protected:
+    int m_FileDesc;                //!< file desc from open call, or -1
+    int m_Advise;                  //!< posix_fadvise value to use
+    volatile off_t m_FileSize;     //!< ftruncate size of file
+    volatile off_t m_NextOffset;   //!< size used, next file position, etc.
+    size_t m_BufferSize;           //!< user supplied buffer size * 1.10
+    size_t m_PageSize;             //!< page size/boundry for mapping
 
-// container RiakBufferFile
-/// pointer to current map, ref counted ptr
-/// rw lock for map tests
-//// obtain read lock
-//// validate global status ... assert & return if closed (or not open)
-//// assert a mapping exists
-//// inc reference lock on current map
-//// atomic offset / allocate
-//// allocation within current map
-//// yes, done ... create and return WritePtr
-//// no, release reference, then read lock
-//// get write lock,
-//// reference lock, retest ... if now good, release write lock & return ptr
-////  otherwise release object hold on current map, create new map starting
-////  at this caller's point for MIN(caller's size, buffer standard size)
-////  MUST make FTRUNCATE call here, not thread delayed (at map object)
-/// mutex close or abort? ... old 
-/// atomic offset counter
-/// is this the file object ... yes
-/// fadvise param
-/// close sync or async ... sync for now.  ftruncate to current offset
-//// use write lock, change global status and shutdown
-//// mutex on Close to allow clean unmaps? Or assume something else synchronizes
-////  writers to closer ... assert if current map has pointers outstanding, besides file's ptr?
-/// Should open create first mapping? only loss is if first object greater than entire mapping.
-////  yes, establish assumption one mapping always exists
-////  a background worker could be launched to seed new map ... cost/benefit? use zero size mapping?
-////  this would anticipate ftruncate only in cases where objects exactly fill current map. 
-////   put in comment, but do not code.  a testing bitch
-/// Open / Close ... allow stack object creation
-/// container level status: m_Status
+    volatile RiakWriteBuffer * m_CurBuffer; //!< buffer to receive next allocation
 
+    Status m_FileOk;               //!< global status for file
+    port::Mutex m_Mutex;           //!< protects m_NextOffset/m_CurBuffer evaluation/change
+    std::string m_Filename;        //!< save file name for potential error reporting
 
+public:
+    RiakBufferFile();
+    virtual ~RiakBufferFile();
 
-/// WritableFile needs "allocate pointer"
-///  WritePtr allocate(size_t)
-///  Fail Write() interface
+    virtual Status Open(const std::string & Filename, bool AdviseKeep, 
+                        size_t WriteBufferSize, size_t PageSize);
 
-// NewWritableFile AND NewRiakWritableFile static ???
-///  or choose based upon WriteBufferSize ... zero is old PosixMmapFile
-///     call NewWritableFileOld (not virtual)
-/// hack into existing PosixEnv ... but keep stuff in other files.
+    RiakBufferPtr Allocate(size_t DataSize);
 
+    virtual Status Append(const Slice& data);
 
-virtual Status NewWritableFile(  // only wraps "new" and Open call (delete obj if open fails)
-    const std::string &fname, 
-    WritableFile **result, 
-    bool AdviseKeep=false,
-    const size_t WriteBufferSize=0); // use write buffer size * 1.2
+    virtual Status Close();
+    virtual Status Flush();
+    virtual Status Sync();
 
+    // methods used by RiakWriteBuffer
+    void UnMap(void * Base, off_t Offset, size_t Size);
 
-#endif
+    Status Map(off_t Offset, size_t Size, void ** Base);
+
+    void MSync(void * Base, size_t Size);
+
+    // global test of ready and working
+    bool ok() const {return(m_FileOk.ok() && -1!=m_FileDesc);};
+
+    Status StatusObj() const {return(m_FileOk);};
+
+private:
+    // No copying allowed
+    RiakBufferFile(const RiakBufferFile&);
+    RiakBufferFile & operator=(const RiakBufferFile&);
+
+protected:
+
+private:
+
+};  // class RiakBufferFile
+
 
 };  // namespace leveldb
