@@ -24,6 +24,7 @@
 #include "leveldb/slice.h"
 #include "port/port.h"
 #include "util/logging.h"
+#include "util/mapbuffer.h"
 #include "util/posix_logger.h"
 #include "db/dbformat.h"
 
@@ -450,7 +451,7 @@ class PosixEnv : public Env {
             RiakBufferFile * new_file;
 
             new_file=new RiakBufferFile;
-            s=new_file->Open(fname, AdviseKeep, WriteBufferSize);
+            s=new_file->Open(fname, AdviseKeep, WriteBufferSize, page_size_);
 
             if (s.ok())
                 *result=new_file;
@@ -462,7 +463,7 @@ class PosixEnv : public Env {
     // param error
     else
     {
-        s=Status::InvalidArguement(Slice("NewWritableFile():  bad parameter."));
+        s=Status::InvalidArgument(Slice("NewWritableFile():  bad parameter."));
     }   // else
 
     return s;
