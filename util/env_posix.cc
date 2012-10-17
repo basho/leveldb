@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #endif
 #include "leveldb/env.h"
+#include "leveldb/filter_policy.h"
 #include "leveldb/slice.h"
 #include "port/port.h"
 #include "util/logging.h"
@@ -973,6 +974,14 @@ static void InitDefaultEnv()
 
     pthread_rwlock_init(&gThreadLock0, NULL);
     pthread_rwlock_init(&gThreadLock1, NULL);
+
+    // force the loading of code for both filters in case they
+    //  are hidden in a shared library
+    const FilterPolicy * ptr;
+    ptr=NewBloomFilterPolicy(16);
+    delete ptr;
+    ptr=NewBloomFilterPolicy2(16);
+    delete ptr;
 
 }
 
