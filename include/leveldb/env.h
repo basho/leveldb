@@ -29,6 +29,7 @@ class SequentialFile;
 class Slice;
 class WritableFile;
 class AppendableFile;
+class RiakBufferPtr;
 
 class Env {
  public:
@@ -243,6 +244,7 @@ class WritableFile {
   virtual Status Close() = 0;
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;
+  virtual Status Allocate(size_t, RiakBufferPtr&) {return(Status::NotSupported("WritableFile::Allocate() not supported"));};
 
  private:
   // No copying allowed

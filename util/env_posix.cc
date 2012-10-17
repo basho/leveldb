@@ -32,6 +32,8 @@
 #include "leveldb/perf_count.h"
 
 
+#include "util/env_riak.h"
+
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -155,6 +157,7 @@ namespace {
 static Status IOError(const std::string& context, int err_number) {
   return Status::IOError(context, strerror(err_number));
 }
+
 
 // background routines to close and/or unmap files
 static void BGFileCloser(void* file_info);
@@ -544,7 +547,7 @@ class PosixEnv : public Env {
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result,
                                  bool AdviseKeep,
-                                 const size_t WriteBufferSize) 
+                                 const size_t WriteBufferSize)
 {
     Status s;
 
@@ -1174,6 +1177,8 @@ void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
               pthread_create(&t, NULL,  &StartThreadWrapper, state));
 }
 
+}  // namespace
+
 // this was a reference file:  unmap, purge page cache, close
 void BGFileCloser(void * arg)
 {
@@ -1234,7 +1239,8 @@ void BGFileUnmapper(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+    if (-1 != file_ptr->fd_)
+        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
 #endif
 
     delete file_ptr;
@@ -1255,7 +1261,8 @@ void BGFileUnmapper2(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    if (-1 != file_ptr->fd_)
+        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
 #endif
 
     delete file_ptr;
@@ -1265,7 +1272,6 @@ void BGFileUnmapper2(void * arg)
 
 }   // BGFileUnmapper2
 
-}  // namespace
 
 // how many blocks of 4 priority background threads/queues
 /// for riak, make sure this is an odd number (and especially not 4)
@@ -1307,6 +1313,14 @@ static void InitDefaultEnv()
         crc32c::SwitchToHardwareCRC();
 
     PerformanceCounters::Init(false);
+
+    // force the loading of code for both filters in case they
+    //  are hidden in a shared library
+    const FilterPolicy * ptr;
+    ptr=NewBloomFilterPolicy(16);
+    delete ptr;
+    ptr=NewBloomFilterPolicy2(16);
+    delete ptr;
 
 }
 
