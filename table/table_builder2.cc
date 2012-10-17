@@ -8,6 +8,7 @@
 #include "table/table_builder_rep.h"
 
 #include <assert.h>
+#include <sstream>
 #include <syslog.h>
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
@@ -18,6 +19,7 @@
 #include "table/format.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "util/mapbuffer.h"
 
 namespace leveldb {
 
@@ -40,6 +42,9 @@ TableBuilder2::TableBuilder2(
             Log(options.info_log, "thread creation failure in TableBuilder2 (ret_val=%d)", ret_val);
     }   // for
 
+
+    m_TimerReadWait=0;
+
     return;
 
 }   // TableBuilder2::TableBuilder2
@@ -48,6 +53,7 @@ TableBuilder2::TableBuilder2(
 TableBuilder2::~TableBuilder2()
 {
     // ?? double check threads are joined?
+    Log(rep_->options.info_log, "m_TimerReadWait: %llu", (unsigned long long)m_TimerReadWait);
 
     return;
 }   // TableBuilder2::~TableBuilder2
@@ -58,28 +64,32 @@ TableBuilder2::Add(
     const Slice& key,
     const Slice& value)
 {
-     BlockNState * block_ptr;
+    BlockNState * block_ptr;
     Rep* r = rep_;
+
+
     assert(!r->closed);
     if (!ok()) return;
 
     block_ptr=NULL;
 
     // quick test without lock, most common case is state is already useful
-    while(BlockNState::eBNStateLoading!=m_Blocks[m_NextAdd].m_State
-          && BlockNState::eBNStateEmpty!=m_Blocks[m_NextAdd].m_State)
+    if (BlockNState::eBNStateLoading!=m_Blocks[m_NextAdd].m_State
+        && BlockNState::eBNStateEmpty!=m_Blocks[m_NextAdd].m_State)
     {
-        int loop;
+        uint64_t timer=r->options.env->NowMicros();
 
         port::MutexLock lock(m_CvMutex);
 
-        // retest now that lock held
-        if (BlockNState::eBNStateLoading!=m_Blocks[m_NextAdd].m_State
-            && BlockNState::eBNStateEmpty!=m_Blocks[m_NextAdd].m_State)
+        // loop until state is helpful
+        while(BlockNState::eBNStateLoading!=m_Blocks[m_NextAdd].m_State
+              && BlockNState::eBNStateEmpty!=m_Blocks[m_NextAdd].m_State)
         {
             m_CondVar.Wait();
-        }   // if
-    }   // while
+        }   // while
+
+        m_TimerReadWait+=r->options.env->NowMicros() - timer;
+    }   // if
 
     block_ptr=&m_Blocks[m_NextAdd];
 
@@ -342,6 +352,72 @@ TableBuilder2::WriteBlock2(
     BlockHandle handle;
     Rep* r = rep_;
 
+#if 1
+    size_t total_size;
+    RiakBufferPtr dest_ptr;
+
+    //
+    // activities that must be performed in file sequence
+    //
+    total_size=state.m_Block.CurrentBuffer().size()
+        + kBlockTrailerSize;
+    r->status=r->file->Allocate(total_size, dest_ptr);
+    assert(ok());
+
+    handle.set_offset(r->offset);
+    handle.set_size(state.m_Block.CurrentBuffer().size());
+    r->offset += total_size;
+
+    if (r->filter_block != NULL)
+    {
+        uint64_t timer2=rep_->options.env->NowMicros();
+        // push all the keys into filter
+        r->filter_block->AddKeys(state.m_FiltLengths, state.m_FiltKeys);
+        r->filter_block->StartBlock(r->offset);
+    }   // if
+
+    std::string handle_encoding;
+    handle.EncodeTo(&handle_encoding);
+    assert(true==state.m_KeyShortened);
+    r->index_block.Add(state.m_LastKey, Slice(handle_encoding));
+    r->sst_counters.Inc(eSstCountIndexKeys);
+
+    // let next block into this portion of code
+    {
+        port::MutexLock lock(m_CvMutex);
+
+        state.m_State=BlockNState::eBNStateCopying;
+        m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
+        m_CondVar.SignalAll();
+    }   // mutex scope
+
+    if (r->status.ok())
+    {
+        r->status=dest_ptr.assign(state.m_Block.CurrentBuffer().data(), state.m_Block.CurrentBuffer().size());
+        assert(ok());
+        if (r->status.ok())
+        {
+            char trailer[kBlockTrailerSize];
+            trailer[0] = state.m_Type;
+            EncodeFixed32(trailer+1, crc32c::Mask(state.m_Crc));
+            r->status = dest_ptr.append(trailer, kBlockTrailerSize);
+            assert(ok());
+            if (r->status.ok())
+            {
+//                r->offset += state.m_Block.CurrentBuffer().size() + kBlockTrailerSize;
+            }   // if
+        }   // if
+    }   // if
+
+    // buffer done, put back in pile
+    {
+        port::MutexLock lock(m_CvMutex);
+
+        state.reset();
+        m_CondVar.SignalAll();
+    }   // mutex scope
+
+#else
     handle.set_offset(r->offset);
     handle.set_size(state.m_Block.CurrentBuffer().size());
     r->status = r->file->Append(state.m_Block.CurrentBuffer());
@@ -374,6 +450,7 @@ TableBuilder2::WriteBlock2(
         r->sst_counters.Inc(eSstCountIndexKeys);
     }   // if
 
+
     // buffer done, put back in pile
     {
         port::MutexLock lock(m_CvMutex);
@@ -382,6 +459,7 @@ TableBuilder2::WriteBlock2(
         m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
         m_CondVar.SignalAll();
     }   // mutex scope
+#endif
 
     return;
 
@@ -457,5 +535,24 @@ void TableBuilder2::Abandon() {
     }   // for
 }
 
+
+void
+TableBuilder2::Dump() const
+{
+    int loop;
+    std::ostringstream str;
+
+    str << "Buffer states[";
+
+    for (loop=0; loop<eTB2Buffers; ++loop)
+        str << " " << m_Blocks[loop].m_State;
+
+    str << "]" << std::ends;
+
+    Log(rep_->options.info_log, "%s", str.str().c_str());
+
+    return;
+
+}   // TableBuilder2::Dump
 
 }  // namespace leveldb

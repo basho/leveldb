@@ -148,10 +148,10 @@ public:
     RiakBufferFile();
     virtual ~RiakBufferFile();
 
-    virtual Status Open(const std::string & Filename, bool AdviseKeep, 
+    virtual Status Open(const std::string & Filename, bool AdviseKeep,
                         size_t WriteBufferSize, size_t PageSize);
 
-    RiakBufferPtr Allocate(size_t DataSize);
+    virtual Status Allocate(size_t DataSize, RiakBufferPtr & OutPtr);
 
     virtual Status Append(const Slice& data);
 

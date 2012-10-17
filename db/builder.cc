@@ -31,7 +31,7 @@ Status BuildTable(const std::string& dbname,
   std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
     WritableFile* file;
-    s = env->NewWritableFile(fname, &file);
+    s = env->NewWritableFile(fname, &file, true, options.write_buffer_size);
     if (!s.ok()) {
       return s;
     }
@@ -62,10 +62,16 @@ Status BuildTable(const std::string& dbname,
 
     // Finish and check for file errors
     if (s.ok()) {
+    uint64_t timer=options.env->NowMicros();
       s = file->Sync();
+    timer=options.env->NowMicros()-timer;
+    Log(options.info_log, "Sync() micros: %llu", (unsigned long long)timer);
     }
     if (s.ok()) {
+    uint64_t timer=options.env->NowMicros();
       s = file->Close();
+    timer=options.env->NowMicros()-timer;
+    Log(options.info_log, "Close() micros: %llu", (unsigned long long)timer);
     }
     delete file;
     file = NULL;
