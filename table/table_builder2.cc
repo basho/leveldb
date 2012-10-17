@@ -43,6 +43,7 @@ TableBuilder2::TableBuilder2(
     }   // for
 
     m_TimerReadWait=0;
+
     return;
 
 }   // TableBuilder2::TableBuilder2
@@ -379,8 +380,6 @@ TableBuilder2::WriteBlock2(
     r->index_block.Add(state.m_LastKey, Slice(handle_encoding));
     r->sst_counters.Inc(eSstCountIndexKeys);
 
-#if 1
-// this allows multiple memcpy
     // let next block into this portion of code
     {
         port::MutexLock lock(m_CvMutex);
@@ -389,7 +388,6 @@ TableBuilder2::WriteBlock2(
         m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
         m_CondVar.SignalAll();
     }   // mutex scope
-#endif
 
     if (r->status.ok())
     {
@@ -409,7 +407,6 @@ TableBuilder2::WriteBlock2(
         }   // if
     }   // if
 
-#if 1
     // buffer done, put back in pile
     {
         port::MutexLock lock(m_CvMutex);
@@ -417,16 +414,7 @@ TableBuilder2::WriteBlock2(
         state.reset();
         m_CondVar.SignalAll();
     }   // mutex scope
-#else
-    // buffer done, put back in pile
-    {
-        port::MutexLock lock(m_CvMutex);
 
-        state.reset();
-        m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
-        m_CondVar.SignalAll();
-    }   // mutex scope
-#endif
 #else
 
     handle.set_offset(r->offset);
@@ -461,6 +449,7 @@ TableBuilder2::WriteBlock2(
         r->sst_counters.Inc(eSstCountIndexKeys);
     }   // if
 
+
     // buffer done, put back in pile
     {
         port::MutexLock lock(m_CvMutex);
@@ -469,6 +458,7 @@ TableBuilder2::WriteBlock2(
         m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
         m_CondVar.SignalAll();
     }   // mutex scope
+#endif
 
 #endif
 

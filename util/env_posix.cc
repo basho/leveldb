@@ -34,6 +34,8 @@
 
 #include "util/env_riak.h"
 
+#include "util/env_riak.h"
+
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -157,26 +159,6 @@ namespace {
 static Status IOError(const std::string& context, int err_number) {
   return Status::IOError(context, strerror(err_number));
 }
-
-
-// background routines to close and/or unmap files
-static void BGFileCloser(void* file_info);
-static void BGFileCloser2(void* file_info);
-// currently unused static void BGFileUnmapper(void* file_info);
-static void BGFileUnmapper2(void* file_info);
-
-// data needed by background routines for close/unmap
-struct BGCloseInfo
-{
-    int fd_;
-    void * base_;
-    size_t offset_;
-    size_t length_;
-    size_t unused_;
-
-    BGCloseInfo(int fd, void * base, size_t offset, size_t length, size_t unused)
-        : fd_(fd), base_(base), offset_(offset), length_(length), unused_(unused) {};
-};
 
 class PosixSequentialFile: public SequentialFile {
  private:
