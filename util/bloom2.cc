@@ -116,7 +116,7 @@ class BloomFilterPolicy2 : public FilterPolicy {
     return true;
   }
 };
-}
+}; // namespace (blank)
 
 const FilterPolicy* NewBloomFilterPolicy2(int bits_per_key) {
   return new BloomFilterPolicy2(bits_per_key);

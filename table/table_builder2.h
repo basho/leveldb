@@ -31,7 +31,7 @@ private:
     enum
     {
         eTB2Threads=4,    //!< number of compression threads
-        eTB2Buffers=6,    //!< number of shared block buffers
+        eTB2Buffers=12,   //!< number of shared block buffers
     };
 
 
@@ -64,6 +64,9 @@ public:
     // REQUIRES: Finish(), Abandon() have not been called
     virtual void Abandon();
 
+    // debug tool
+    void Dump() const;
+
 protected:
     struct BlockNState
     {
@@ -76,6 +79,7 @@ protected:
             eBNStateKeyWait=4,  //!< compression complete, but no "next key"
             eBNStateReady=5,    //!< ready for write, but not first on list
             eBNStateWriting=6,  //!< write in progress now
+            eBNStateCopying=7   //!< write position known, copying data into map
         };
 
         volatile BNState m_State;
@@ -114,6 +118,8 @@ protected:
     volatile unsigned m_NextAdd;                          //!< m_Block for Add, changed only by Add thread(s)
     volatile unsigned m_NextWrite;
 
+    volatile uint64_t m_TimerReadWait;
+
     // WorkerThreadEntry calls here with C++ object established
     void WorkerThread();
 
@@ -124,6 +130,7 @@ protected:
         return NULL;
     };
 
+public:  // temporarily public to allow perf annotate to comment
     void CompressBlock(BlockNState & State);
     void WriteBlock2(BlockNState & State);
 

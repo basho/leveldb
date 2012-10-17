@@ -22,16 +22,21 @@
  */
 
 #include <errno.h>
+#include <features.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 
+#include "port/port.h"
 #include "util/mapbuffer.h"
+#include "util/env_riak.h"
 
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
 
-namespace leveldb 
+namespace leveldb
 {
 /**
  * Initialize object
@@ -103,7 +108,7 @@ RiakWriteBuffer::AssignData(
         if (ret_stat.ok() && 0<DataSize)
         {
             // only copy if range valid
-            if (m_Offset<=AssignedOffset 
+            if (m_Offset<=AssignedOffset
                 && AssignedOffset+DataSize<=m_Offset+m_Size)
             {
                 off_t map_offset;
@@ -157,7 +162,7 @@ RiakWriteBuffer::IncRef()
 void
 RiakWriteBuffer::DecRef()
 {
-    if (0<m_RefCount && NULL!=m_Base)
+    if (0<m_RefCount)
     {
         int count;
 
@@ -169,7 +174,7 @@ RiakWriteBuffer::DecRef()
         count=__sync_sub_and_fetch(&m_RefCount, 1);
 #endif
 
-        if (0==count)
+        if (0==count && NULL!=m_Base)
         {
             m_File.UnMap(m_Base, m_Offset, m_Size);
             m_Base=NULL;
@@ -188,12 +193,12 @@ RiakWriteBuffer::DecRef()
  * @author matthewv
  * @returns NULL or pointer to location in the buffer, no reference lock
  */
-const void * 
+const void *
 RiakWriteBuffer::get(
     off_t Offset) const   //!< offset from beginning of file
 {
     const void * ret_ptr;
-    
+
     ret_ptr=NULL;
 
     // just in case someone tries to get a pointer before writing:
@@ -242,7 +247,7 @@ RiakWriteBuffer::ok() const
 void
 RiakWriteBuffer::Sync() // const
 {
-    if (NULL!=m_Base) 
+    if (NULL!=m_Base)
         m_File.MSync(m_Base, m_Size);
     else
         assert(false);
@@ -259,8 +264,8 @@ RiakWriteBuffer::Sync() // const
  * @author matthewv
  */
 RiakBufferPtr::RiakBufferPtr()
-    : m_Buffer(NULL), m_BaseOffset(0), m_BaseSize(0), 
-      m_CurOffset(NULL), m_CurSize(0)
+    : m_Buffer(NULL), m_BaseOffset(0), m_BaseSize(0),
+      m_CurOffset(0), m_CurSize(0)
 {
     return;
 }   // RiakBufferPtr::RiakBufferPtr  (default)
@@ -273,8 +278,8 @@ RiakBufferPtr::RiakBufferPtr()
  */
 RiakBufferPtr::RiakBufferPtr(
     const RiakBufferPtr & Rhs)      //!< existing pointer to copy
-    : m_Buffer(NULL), m_BaseOffset(0), m_BaseSize(0), 
-      m_CurOffset(NULL), m_CurSize(0)
+    : m_Buffer(NULL), m_BaseOffset(0), m_BaseSize(0),
+      m_CurOffset(0), m_CurSize(0)
 {
     *this=Rhs;
 
@@ -292,8 +297,8 @@ RiakBufferPtr::RiakBufferPtr(
     RiakWriteBuffer & Buffer,
     off_t PointerBase,
     size_t PointerSize)
-    : m_Buffer(&Buffer), m_BaseOffset(PointerBase), m_BaseSize(PointerSize), 
-      m_CurOffset(NULL), m_CurSize(0)
+    : m_Buffer(&Buffer), m_BaseOffset(PointerBase), m_BaseSize(PointerSize),
+      m_CurOffset(0), m_CurSize(0)
 {
     m_Buffer->IncRef();
 
@@ -346,7 +351,7 @@ RiakBufferPtr::operator=(
 
     if (NULL!=m_Buffer && !same)
         m_Buffer->IncRef();
-    
+
     return(*this);
 
 }   // RiakBufferPtr::operator=
@@ -380,7 +385,7 @@ RiakBufferPtr::reset(
 
     if (NULL!=m_Buffer && !same)
         m_Buffer->IncRef();
-    
+
     return;
 
 }   // RiakBufferPtr::operator=
@@ -397,7 +402,7 @@ RiakBufferPtr::assign(
 {
     Status ret_stat;
 
-    if (NULL!=m_Buffer && DataSize<=m_BaseSize 
+    if (NULL!=m_Buffer && DataSize<=m_BaseSize
         && (NULL!=Data || 0==DataSize))
     {
         if (0!=DataSize)
@@ -405,7 +410,7 @@ RiakBufferPtr::assign(
 
         m_CurOffset=m_BaseOffset+DataSize;
         m_CurSize=m_BaseSize-DataSize;
-        
+
     }   // if
     else
     {
@@ -430,7 +435,7 @@ RiakBufferPtr::append(
 {
     Status ret_stat;
 
-    if (NULL!=m_Buffer && DataSize<=m_CurSize 
+    if (NULL!=m_Buffer && DataSize<=m_CurSize
         && (NULL!=Data || 0==DataSize))
     {
         if (0!=DataSize)
@@ -438,7 +443,7 @@ RiakBufferPtr::append(
 
         m_CurOffset+=DataSize;
         m_CurSize-=DataSize;
-        
+
     }   // if
     else
     {
@@ -498,7 +503,7 @@ RiakBufferFile::Open(
         m_FileDesc=open(Filename.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
         if (-1!=m_FileDesc)
         {
-#if HAVE_FADVISE
+#ifdef HAVE_FADVISE
             m_Advise=(AdviseKeep ? POSIX_FADV_WILLNEED : POSIX_FADV_DONTNEED);
 #endif
             m_FileSize=0;
@@ -530,15 +535,17 @@ RiakBufferFile::Open(
  * Assign region of file to caller
  * @date 10/11/12 Created
  * @author matthewv
- * @returns RiakBufferPtr for assign/append if .ok()
+ * @returns leveldb Status object
  */
-RiakBufferPtr
+Status
 RiakBufferFile::Allocate(
-    size_t DataSize)
+    size_t DataSize,
+    RiakBufferPtr & OutPtr)
 {
     RiakBufferPtr ret_ptr;
+    Status ret_stat;
 
-    // This could be done slightly better with a RWLock, 
+    // This could be done slightly better with a RWLock,
     //  but keeping it simple for now
     if (ok())
     {
@@ -598,7 +605,8 @@ RiakBufferFile::Allocate(
         ret_ptr.reset((RiakWriteBuffer &)*m_CurBuffer, assigned_off, DataSize);
     }   // MutexLock
 
-    return(ret_ptr);
+    OutPtr=ret_ptr;
+    return(ret_stat);
 
 }   // RiakBufferFile::Allocate
 
@@ -615,11 +623,11 @@ RiakBufferFile::Append(
     Status ret_stat;
     RiakBufferPtr ptr;
 
-    ptr=Allocate(Data.size());
+    ret_stat=Allocate(Data.size(), ptr);
 
-    if (ptr.ok())
+    if (ret_stat.ok() && ptr.ok())
         ptr.assign(Data.data(), Data.size());
-    else
+    else if (ret_stat.ok())
         ret_stat=Status::InvalidArgument(Slice("RiakBufferFile::Append() failed."));
 
     return(ret_stat);
@@ -642,7 +650,8 @@ RiakBufferFile::Close()
     if (NULL!=m_CurBuffer)
     {
         // hope all pointers were released ...
-        delete m_CurBuffer;
+        ((RiakWriteBuffer *)m_CurBuffer)->DecRef();
+//        delete m_CurBuffer;
         m_CurBuffer=NULL;
     }   // if
 
@@ -686,7 +695,7 @@ Status
 RiakBufferFile::Sync()
 {
     Status ret_stat;
-
+#if 1
     if (ok())
     {
         int ret_val;
@@ -719,7 +728,7 @@ RiakBufferFile::Sync()
             m_FileOk=Status::InvalidArgument(Slice("RiakBufferFile::Sync() on invalid file"));
         ret_stat=m_FileOk;
     }   // else;
-
+#endif
     return(ret_stat);
 
 }   // RiakBufferFile::Sync
@@ -776,14 +785,19 @@ RiakBufferFile::UnMap(
 {
     if (ok())
     {
+#if defined(HAVE_FADVISE)
+        posix_fadvise(m_FileDesc, Offset, Size, m_Advise);
+#endif
+
+        BGCloseInfo * ptr=new BGCloseInfo(-1, Base, 0, Size, 0);
+        Env::Default()->Schedule(&BGFileUnmapper, ptr, 4);
+
+#if 0
         if (0!=munmap(Base, Size))
         {
             assert(false);
             m_FileOk=Status::IOError(m_Filename, strerror(errno));
         }   // if
-
-#if defined(HAVE_FADVISE)
-        posix_fadvise(m_FileDesc, Offset, Size, m_Advise);
 #endif
     }   // if
     else
@@ -808,11 +822,12 @@ RiakBufferFile::MSync(
     void * Base,
     size_t Size)
 {
+#if 0
     if (ok())
     {
         // async nature implies that we do not know
         //  that every file buffer was sync'd
-        if (0!=msync(Base, Size, MS_SYNC))
+        if (0!=msync(Base, Size, MS_ASYNC))
         {
             m_FileOk=Status::IOError(m_Filename, strerror(errno));
         }   // if
@@ -823,7 +838,7 @@ RiakBufferFile::MSync(
         if (m_FileOk.ok())
             m_FileOk=Status::InvalidArgument(Slice("RiakBufferFile::MSync() on invalid file"));
     }   // else;
-
+#endif
     return;
 
 }   // RiakBufferFile::MSync
