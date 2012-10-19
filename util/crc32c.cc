@@ -384,7 +384,7 @@ HardCRC(
             : "S"(ret_crc), "c"(*src_c));
     }   // for
 
-    return(ret_crc);
+    return(ret_crc ^ 0xffffffffu);
 
 }   // HardCRC
 
