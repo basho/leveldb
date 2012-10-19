@@ -7,6 +7,7 @@
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
+#include "util/crc32c.h"
 
 namespace leveldb {
 
@@ -45,7 +46,7 @@ Options::Dump(
     Log(log,"Options.block_restart_interval: %d", block_restart_interval);
     Log(log,"           Options.compression: %d", compression);
     Log(log,"         Options.filter_policy: %s", filter_policy == NULL ? "NULL" : filter_policy->Name());
-
+    Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
 }   // Options::Dump
 
 }  // namespace leveldb

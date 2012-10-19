@@ -23,6 +23,7 @@
 #include "leveldb/env.h"
 #include "leveldb/slice.h"
 #include "port/port.h"
+#include "util/crc32c.h"
 #include "util/logging.h"
 #include "util/posix_logger.h"
 #include "db/dbformat.h"
@@ -959,6 +960,8 @@ void BGFileUnmapper2(void * arg)
 /// for riak, make sure this is an odd number (and especially not 4)
 #define THREAD_BLOCKS 5
 
+static bool HasSSE4_2();
+
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 static Env* default_env[THREAD_BLOCKS];
 static unsigned count=0;
@@ -974,6 +977,8 @@ static void InitDefaultEnv()
     pthread_rwlock_init(&gThreadLock0, NULL);
     pthread_rwlock_init(&gThreadLock1, NULL);
 
+    if (HasSSE4_2())
+        crc32c::SwitchToHardwareCRC();
 }
 
 Env* Env::Default() {
@@ -981,5 +986,31 @@ Env* Env::Default() {
   ++count;
   return default_env[count % THREAD_BLOCKS];
 }
+
+
+static bool
+HasSSE4_2()
+{
+#if defined(__x86_64__)
+    uint64_t ecx;
+    ecx=0;
+
+    __asm__ __volatile__
+        ("mov %%rbx, %%rdi\n\t" /* 32bit PIC: don't clobber ebx */
+         "mov $1,%%rax\n\t"
+         "cpuid\n\t"
+         "mov %%rdi, %%rbx\n\t"
+         : "=c" (ecx)
+         :
+         : "%rax", "%rbx", "%rdx", "%rdi" );
+
+    return( 0 != (ecx & 1<<20));
+#else
+    return(false);
+#endif
+
+}   // HasSSE4_2
+
+
 
 }  // namespace leveldb
