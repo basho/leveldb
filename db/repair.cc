@@ -233,6 +233,7 @@ class Repairer {
     // since ExtractMetaData() will also generate edits.
     FileMetaData meta;
     meta.number = next_file_number_++;
+    meta.level = 0;
     Iterator* iter = mem->NewIterator();
     status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta, kMaxSequenceNumber);
     delete iter;
@@ -256,9 +257,10 @@ class Repairer {
     for (size_t i = 0; i < table_numbers_.size(); i++) {
       TableInfo t;
       t.meta.number = table_numbers_[i];
+      t.meta.level = 0;                     // xxxx
       Status status = ScanTable(&t);
       if (!status.ok()) {
-        std::string fname = TableFileName(dbname_, table_numbers_[i]);
+          std::string fname = TableFileName(dbname_, table_numbers_[i], t.meta.level);  // xxxxxxx
         Log(options_.info_log, "Table #%llu: ignoring %s",
             (unsigned long long) table_numbers_[i],
             status.ToString().c_str());
@@ -270,12 +272,12 @@ class Repairer {
   }
 
   Status ScanTable(TableInfo* t) {
-    std::string fname = TableFileName(dbname_, t->meta.number);
+    std::string fname = TableFileName(dbname_, t->meta.number, t->meta.level);
     int counter = 0;
     Status status = env_->GetFileSize(fname, &t->meta.file_size);
     if (status.ok()) {
       Iterator* iter = table_cache_->NewIterator(
-          ReadOptions(), t->meta.number, t->meta.file_size);
+          ReadOptions(), t->meta.number, t->meta.file_size, t->meta.level);
       bool empty = true;
       ParsedInternalKey parsed;
       t->max_sequence = 0;

@@ -4,9 +4,13 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "db/filename.h"
 #include "db/dbformat.h"
 #include "leveldb/env.h"
+#include "leveldb/status.h"
 #include "util/logging.h"
 
 namespace leveldb {
@@ -24,14 +28,44 @@ static std::string MakeFileName(const std::string& name, uint64_t number,
   return name + buf;
 }
 
+static std::string MakeFileName2(const std::string& name, uint64_t number,
+                                 int level, const char* suffix) {
+  char buf[100];
+  if (-1!=level)
+      snprintf(buf, sizeof(buf), "/%s_%-d/%06llu.%s",
+               suffix, level,
+               static_cast<unsigned long long>(number),
+               suffix);
+  else
+      snprintf(buf, sizeof(buf), "/%s/%06llu.%s",
+               suffix,
+               static_cast<unsigned long long>(number),
+               suffix);
+
+  return name + buf;
+}
+
+std::string MakeDirName2(const std::string& name,
+                                 int level, const char* suffix) {
+  char buf[100];
+  if (-1!=level)
+      snprintf(buf, sizeof(buf), "/%s_%-d",
+               suffix, level);
+  else
+      snprintf(buf, sizeof(buf), "/%s",
+               suffix);
+
+  return name + buf;
+}
+
 std::string LogFileName(const std::string& name, uint64_t number) {
   assert(number > 0);
   return MakeFileName(name, number, "log");
 }
 
-std::string TableFileName(const std::string& name, uint64_t number) {
+std::string TableFileName(const std::string& name, uint64_t number, int level) {
   assert(number > 0);
-  return MakeFileName(name, number, "sst");
+  return MakeFileName2(name, number, level, "sst");
 }
 
 std::string DescriptorFileName(const std::string& dbname, uint64_t number) {
@@ -135,5 +169,30 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
   }
   return s;
 }
+
+
+Status
+MakeLevelDirectories(const std::string & dbname)
+{
+    Status ret_stat;
+    int level, ret_val;
+    std::string dirname;
+
+    for (level=0; level<config::kNumLevels && ret_stat.ok(); ++level)
+    {
+        dirname=dbname;
+        MakeDirName2(dirname, level, "sst");
+
+        ret_val=mkdir(dirname.c_str(), 0755);
+
+        if (0!=ret_val && EEXIST!=errno)
+            ret_stat=Status::IOError(dirname, strerror(errno));
+    }   // for
+
+    return(ret_stat);
+
+}  // MakeLevelDirectories
+
+
 
 }  // namespace leveldb

@@ -27,7 +27,7 @@ Status BuildTable(const std::string& dbname,
 
   KeyRetirement retire(options.comparator, smallest_snapshot);
 
-  std::string fname = TableFileName(dbname, meta->number);
+  std::string fname = TableFileName(dbname, meta->number, meta->level);
   if (iter->Valid()) {
     WritableFile* file;
     s = env->NewWritableFile(fname, &file);
@@ -73,7 +73,8 @@ Status BuildTable(const std::string& dbname,
       // Verify that the table is usable
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
-                                              meta->file_size);
+                                              meta->file_size,
+                                              meta->level);
       s = it->status();
       delete it;
     }

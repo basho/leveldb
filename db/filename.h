@@ -27,6 +27,15 @@ enum FileType {
   kInfoLogFile  // Either the current one, or an old one
 };
 
+
+std::string MakeDirName2(const std::string& name,
+                         int level, const char* suffix);
+
+Status
+    MakeLevelDirectories(const std::string & dbname);
+
+
+
 // Return the name of the log file with the specified number
 // in the db named by "dbname".  The result will be prefixed with
 // "dbname".
@@ -35,7 +44,7 @@ extern std::string LogFileName(const std::string& dbname, uint64_t number);
 // Return the name of the sstable with the specified number
 // in the db named by "dbname".  The result will be prefixed with
 // "dbname".
-extern std::string TableFileName(const std::string& dbname, uint64_t number);
+extern std::string TableFileName(const std::string& dbname, uint64_t number, int level);
 
 // Return the name of the descriptor file for the db named by
 // "dbname" and the specified incarnation number.  The result will be
