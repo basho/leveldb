@@ -561,10 +561,20 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != NULL) {
-//      level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);  // xxxxxxx
+        level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
+        if (0!=level)
+        {
+            std::string old_name, new_name;
+
+            old_name=TableFileName(dbname_, meta.number, 0);
+            new_name=TableFileName(dbname_, meta.number, level);
+            s=env_->RenameFile(old_name, new_name);
+        }   // if
     }
-    edit->AddFile(level, meta.number, meta.file_size,
-                  meta.smallest, meta.largest);
+
+    if (s.ok())
+        edit->AddFile(level, meta.number, meta.file_size,
+                      meta.smallest, meta.largest);
   }
 
   CompactionStats stats;
@@ -802,18 +812,29 @@ Status DBImpl::BackgroundCompaction() {
   } else if (!is_manual && c->IsTrivialMove()) {
     // Move file to next level
     assert(c->num_input_files(0) == 1);
+    std::string old_name, new_name;
     FileMetaData* f = c->input(0, 0);
-    c->edit()->DeleteFile(c->level(), f->number);
-    c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
-                       f->smallest, f->largest);
-    status = versions_->LogAndApply(c->edit(), &mutex_);
-    VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, "Moved #%lld to level-%d %lld bytes %s: %s\n",
-        static_cast<unsigned long long>(f->number),
-        c->level() + 1,
-        static_cast<unsigned long long>(f->file_size),
-        status.ToString().c_str(),
-        versions_->LevelSummary(&tmp));
+
+    old_name=TableFileName(dbname_, f->number, c->level());
+    new_name=TableFileName(dbname_, f->number, c->level() +1);
+    status=env_->RenameFile(old_name, new_name);
+
+    if (status.ok())
+    {
+        c->edit()->DeleteFile(c->level(), f->number);
+        c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
+                           f->smallest, f->largest);
+        status = versions_->LogAndApply(c->edit(), &mutex_);
+
+        // if LogAndApply fails, should file be renamed back to original spot?
+        VersionSet::LevelSummaryStorage tmp;
+        Log(options_.info_log, "Moved #%lld to level-%d %lld bytes %s: %s\n",
+            static_cast<unsigned long long>(f->number),
+            c->level() + 1,
+            static_cast<unsigned long long>(f->file_size),
+            status.ToString().c_str(),
+            versions_->LevelSummary(&tmp));
+    }  // if
   } else {
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
