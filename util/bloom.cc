@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <memory>
 #include "leveldb/filter_policy.h"
 
+#include "db/dbformat.h"
 #include "leveldb/slice.h"
 #include "util/hash.h"
 
@@ -91,5 +93,20 @@ class BloomFilterPolicy : public FilterPolicy {
 const FilterPolicy* NewBloomFilterPolicy(int bits_per_key) {
   return new BloomFilterPolicy(bits_per_key);
 }
+
+// container to hold one bloom filter and auto destruct
+struct BloomInventoryItem
+{
+    std::auto_ptr<const FilterPolicy> m_Item;
+
+    BloomInventoryItem()
+    {
+        m_Item.reset(new InternalFilterPolicy2(NewBloomFilterPolicy(16)));
+        FilterInventory::AddFilterToInventory(m_Item.get());
+    };
+};  // struct BloomInventoryItem
+
+// bloom filter for reading, created on start-up
+static BloomInventoryItem lBloomItem;
 
 }  // namespace leveldb

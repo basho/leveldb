@@ -16,6 +16,8 @@
 
 namespace leveldb {
 
+class Compaction;
+
 // Grouping of constants.  We may want to make some of these
 // parameters set via options.
 namespace config {
@@ -73,6 +75,7 @@ struct ParsedInternalKey {
   ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t)
       : user_key(u), sequence(seq), type(t) { }
   std::string DebugString() const;
+  std::string DebugStringHex() const;
 };
 
 // Return the length of the encoding of "key".
@@ -126,13 +129,19 @@ class InternalKeyComparator : public Comparator {
 
 // Filter policy wrapper that converts from internal keys to user keys
 class InternalFilterPolicy : public FilterPolicy {
- private:
+ protected:
   const FilterPolicy* const user_policy_;
  public:
   explicit InternalFilterPolicy(const FilterPolicy* p) : user_policy_(p) { }
   virtual const char* Name() const;
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst) const;
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const;
+};
+
+class InternalFilterPolicy2 : public InternalFilterPolicy {
+ public:
+  explicit InternalFilterPolicy2(const FilterPolicy* p) : InternalFilterPolicy(p) { }
+  virtual ~InternalFilterPolicy2() {delete user_policy_;};
 };
 
 // Modules in this directory should keep internal keys wrapped inside
@@ -220,7 +229,40 @@ class LookupKey {
 
 inline LookupKey::~LookupKey() {
   if (start_ != space_) delete[] start_;
-}
+};
+
+
+// this class was constructed from code with DBImpl::DoCompactionWork (db_impl.cc)
+//   so it could be shared within BuildTable (and thus reduce Level 0 bloating)
+class KeyRetirement
+{
+protected:
+    // "state" from previous key reviewed
+    std::string current_user_key;
+    bool has_current_user_key;
+    SequenceNumber last_sequence_for_key;
+
+    // database values needed for processing
+    const Comparator * user_comparator;
+    SequenceNumber smallest_snapshot;
+    Compaction * const compaction;
+
+    bool valid;
+
+public:
+    KeyRetirement(const Comparator * UserComparator, SequenceNumber SmallestSnapshot,
+                  Compaction * const Compaction=NULL);
+
+    virtual ~KeyRetirement() {};
+
+    bool operator()(Slice & key);
+
+private:
+    KeyRetirement();
+    KeyRetirement(const KeyRetirement &);
+    const KeyRetirement & operator=(const KeyRetirement &);
+
+};  // class KeyRetirement
 
 }  // namespace leveldb
 

@@ -136,7 +136,7 @@ bool SomeFileOverlapsRange(
   const Comparator* ucmp = icmp.user_comparator();
   if (!disjoint_sorted_files) {
     // Need to check against all files
-    for (int i = 0; i < files.size(); i++) {
+    for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
       if (AfterFile(ucmp, smallest_user_key, f) ||
           BeforeFile(ucmp, largest_user_key, f)) {
@@ -713,6 +713,7 @@ VersionSet::VersionSet(const std::string& dbname,
       last_sequence_(0),
       log_number_(0),
       prev_log_number_(0),
+      write_rate_usec_(0),
       descriptor_file_(NULL),
       descriptor_log_(NULL),
       dummy_versions_(this),
@@ -951,6 +952,7 @@ void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
   int best_level = -1;
   double best_score = -1;
+  int penalty=0;
 
   for (int level = 0; level < config::kNumLevels-1; level++) {
     double score;
@@ -971,12 +973,23 @@ void VersionSet::Finalize(Version* v) {
 
       // don't screw around ... get data written to disk!
       if (config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
-          score*=10.0;
+          score*=1000000.0;
+
+      // compute penalty for write throttle if too many Level-0 files accumulating
+      if (config::kL0_CompactionTrigger <= v->files_[level].size())
+      {
+          penalty+=v->files_[level].size() - config::kL0_CompactionTrigger +1;
+      }   // if
 
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
       score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
+
+      // compute aggressive penalty for write throttle, things go bad if higher
+      //  levels are allowed to backup ... especially Level-1
+      if (1<=score)
+          penalty+=(static_cast<int>(score))*5;
     }
 
     if (score > best_score) {
@@ -987,6 +1000,11 @@ void VersionSet::Finalize(Version* v) {
 
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
+
+  if (50<penalty)
+      penalty=50;
+  v->write_penalty_ = penalty;
+
 }
 
 Status VersionSet::WriteSnapshot(log::Writer* log) {
@@ -1232,6 +1250,18 @@ Compaction* VersionSet::PickCompaction() {
     // which will include the picked file.
     current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
     assert(!c->inputs_[0].empty());
+
+    // this can get into tens of thousands after a repair
+    //  keep it sane
+    if (options_->max_open_files < c->inputs_[0].size())
+    {
+        std::nth_element(c->inputs_[0].begin(),
+                         c->inputs_[0].begin()+options_->max_open_files-1,
+                         c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
+        c->inputs_[0].erase(c->inputs_[0].begin()+options_->max_open_files,
+                            c->inputs_[0].end());
+    }   // if
+
   }
 
   SetupOtherInputs(c);
@@ -1319,7 +1349,7 @@ Compaction* VersionSet::CompactRange(
   // Avoid compacting too much in one shot in case the range is large.
   const uint64_t limit = MaxFileSizeForLevel(level);
   uint64_t total = 0;
-  for (int i = 0; i < inputs.size(); i++) {
+  for (size_t i = 0; i < inputs.size(); i++) {
     uint64_t s = inputs[i]->file_size;
     total += s;
     if (total >= limit) {

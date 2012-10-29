@@ -59,7 +59,6 @@ HexString(const Slice& value)
   return(str);
 }  // HexString
 
-
 bool ConsumeChar(Slice* in, char c) {
   if (!in->empty() && (*in)[0] == c) {
     in->remove_prefix(1);

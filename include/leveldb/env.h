@@ -158,9 +158,8 @@ class Env {
   // Sleep/delay the thread for the perscribed number of micro-seconds.
   virtual void SleepForMicroseconds(int micros) = 0;
 
-  // Simple adaptive write throttle to pace incoming data against
-  //  hardware write throughput
-  virtual void WriteThrottle(int level0_count) {return;};
+  // Where supported, give count of background jobs pending.
+  virtual int GetBackgroundBacklog() const {return(0);};
 
  private:
   // No copying allowed

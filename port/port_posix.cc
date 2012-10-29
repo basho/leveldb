@@ -46,6 +46,9 @@ void CondVar::SignalAll() {
   PthreadCall("broadcast", pthread_cond_broadcast(&cv_));
 }
 
+void InitOnce(OnceType* once, void (*initializer)()) {
+  PthreadCall("once", pthread_once(once, initializer));
+}
 
 RWMutex::RWMutex() { PthreadCall("init mutex", pthread_rwlock_init(&mu_, NULL)); }
 
@@ -56,7 +59,6 @@ void RWMutex::ReadLock() { PthreadCall("read lock", pthread_rwlock_rdlock(&mu_))
 void RWMutex::WriteLock() { PthreadCall("write lock", pthread_rwlock_wrlock(&mu_)); }
 
 void RWMutex::Unlock() { PthreadCall("unlock", pthread_rwlock_unlock(&mu_)); }
-
 
 }  // namespace port
 }  // namespace leveldb

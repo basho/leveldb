@@ -32,6 +32,7 @@ extern std::string NumberToString(uint64_t num);
 // Escapes any non-printable characters found in "value".
 extern std::string EscapeString(const Slice& value);
 
+// Return human-readable hex string version of "value"
 extern std::string HexString(const Slice & value);
 
 // If *in starts with "c", advances *in past the first character and

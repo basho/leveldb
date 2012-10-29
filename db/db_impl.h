@@ -94,9 +94,10 @@ class DBImpl : public DB {
   void MaybeScheduleCompaction();
   static void BGWork(void* db);
   void BackgroundCall();
-  void BackgroundCompaction();
+  Status BackgroundCompaction();
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
+  int64_t PrioritizeWork(bool IsLevel0);
 
   Status OpenCompactionOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
@@ -172,6 +173,9 @@ class DBImpl : public DB {
     }
   };
   CompactionStats stats_[config::kNumLevels];
+
+  // hint to background thread when level0 is backing up
+  volatile bool level0_good;
 
   // No copying allowed
   DBImpl(const DBImpl&);

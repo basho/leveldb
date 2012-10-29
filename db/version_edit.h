@@ -19,11 +19,30 @@ struct FileMetaData {
   int allowed_seeks;          // Seeks allowed until compaction
   uint64_t number;
   uint64_t file_size;         // File size in bytes
+  uint64_t num_entries;
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
 
-  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) { }
+  FileMetaData()
+  : refs(0), allowed_seeks(1 << 30), file_size(0), num_entries(0)
+  { }
 };
+
+
+class FileMetaDataPtrCompare
+{
+protected:
+    const Comparator * comparator_;
+
+public:
+    explicit FileMetaDataPtrCompare(const Comparator * Comparer)
+        : comparator_(Comparer) {};
+
+    bool operator() (const FileMetaData * file1, const FileMetaData * file2) const
+    {
+        return(comparator_->Compare(file1->smallest.user_key(), file2->smallest.user_key()) < 0);
+    }
+};  // class FileMetaDataPtrCompare
 
 class VersionEdit {
  public:

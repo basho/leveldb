@@ -19,10 +19,13 @@ Status BuildTable(const std::string& dbname,
                   const Options& options,
                   TableCache* table_cache,
                   Iterator* iter,
-                  FileMetaData* meta) {
+                  FileMetaData* meta,
+                  SequenceNumber smallest_snapshot) {
   Status s;
   meta->file_size = 0;
   iter->SeekToFirst();
+
+  KeyRetirement retire(options.comparator, smallest_snapshot);
 
   std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
@@ -36,8 +39,12 @@ Status BuildTable(const std::string& dbname,
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
-      meta->largest.DecodeFrom(key);
-      builder->Add(key, iter->value());
+      if (!retire(key))
+      {
+          meta->largest.DecodeFrom(key);
+          builder->Add(key, iter->value());
+          ++meta->num_entries;
+      }   // if
     }
 
     // Finish and check for builder errors

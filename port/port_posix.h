@@ -7,19 +7,28 @@
 #ifndef STORAGE_LEVELDB_PORT_PORT_POSIX_H_
 #define STORAGE_LEVELDB_PORT_PORT_POSIX_H_
 
+#undef PLATFORM_IS_LITTLE_ENDIAN
 #if defined(OS_MACOSX)
   #include <machine/endian.h>
+  #if defined(__DARWIN_LITTLE_ENDIAN) && defined(__DARWIN_BYTE_ORDER)
+    #define PLATFORM_IS_LITTLE_ENDIAN \
+        (__DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN)
+  #endif
 #elif defined(OS_SOLARIS)
   #include <sys/isa_defs.h>
   #ifdef _LITTLE_ENDIAN
-    #define LITTLE_ENDIAN
+    #define PLATFORM_IS_LITTLE_ENDIAN true
   #else
-    #define BIG_ENDIAN
+    #define PLATFORM_IS_LITTLE_ENDIAN false
   #endif
 #elif defined(OS_FREEBSD) || defined(OS_OPENBSD) || defined(OS_NETBSD) ||\
-      defined(OS_DRAGONFLYBSD)
+      defined(OS_DRAGONFLYBSD) || defined(OS_ANDROID)
   #include <sys/types.h>
   #include <sys/endian.h>
+
+  #if !defined(PLATFORM_IS_LITTLE_ENDIAN) && defined(_BYTE_ORDER)
+    #define PLATFORM_IS_LITTLE_ENDIAN (_BYTE_ORDER == _LITTLE_ENDIAN)
+  #endif
 #else
   #include <endian.h>
 #endif
@@ -31,14 +40,13 @@
 #include <string>
 #include "port/atomic_pointer.h"
 
-#ifdef LITTLE_ENDIAN
-#define IS_LITTLE_ENDIAN true
-#else
-#define IS_LITTLE_ENDIAN (__BYTE_ORDER == __LITTLE_ENDIAN)
+#ifndef PLATFORM_IS_LITTLE_ENDIAN
+#define PLATFORM_IS_LITTLE_ENDIAN (__BYTE_ORDER == __LITTLE_ENDIAN)
 #endif
 
 #if defined(OS_MACOSX) || defined(OS_SOLARIS) || defined(OS_FREEBSD) ||\
-    defined(OS_NETBSD) || defined(OS_OPENBSD) || defined(OS_DRAGONFLYBSD)
+    defined(OS_NETBSD) || defined(OS_OPENBSD) || defined(OS_DRAGONFLYBSD) ||\
+    defined(OS_ANDROID)
 // Use fread/fwrite/fflush on platforms without _unlocked variants
 #define fread_unlocked fread
 #define fwrite_unlocked fwrite
@@ -53,7 +61,7 @@
 
 // Some compilers do not provide access to nested classes of a declared friend class
 // Defining PUBLIC_NESTED_FRIEND_ACCESS will cause those declarations to be made
-// public as a workaround
+// public as a workaround.  Added by David Smith, Basho.
 #if defined(OS_MACOSX) || defined(OS_SOLARIS)
 #define USED_BY_NESTED_FRIEND(a) public: a; private:
 #define USED_BY_NESTED_FRIEND2(a,b) public: a,b; private:
@@ -62,10 +70,17 @@
 #define USED_BY_NESTED_FRIEND2(a,b) a,b;
 #endif
 
+#if defined(OS_ANDROID) && __ANDROID_API__ < 9
+// fdatasync() was only introduced in API level 9 on Android. Use fsync()
+// when targetting older platforms.
+#define fdatasync fsync
+#endif
+
 namespace leveldb {
 namespace port {
 
-static const bool kLittleEndian = IS_LITTLE_ENDIAN;
+static const bool kLittleEndian = PLATFORM_IS_LITTLE_ENDIAN;
+#undef PLATFORM_IS_LITTLE_ENDIAN
 
 class CondVar;
 
@@ -98,6 +113,10 @@ class CondVar {
   pthread_cond_t cv_;
   Mutex* mu_;
 };
+
+typedef pthread_once_t OnceType;
+#define LEVELDB_ONCE_INIT PTHREAD_ONCE_INIT
+extern void InitOnce(OnceType* once, void (*initializer)());
 
 
 class RWMutex {
