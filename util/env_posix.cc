@@ -45,10 +45,6 @@ namespace leveldb {
 pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
 
-// always have something active in gPerfCounters, eliminates
-//  need to test for "is shared object attached yet"
-static PerformanceCounters LocalStartupCounters;
-PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
 namespace {
 
@@ -145,7 +141,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
   PosixMmapReadableFile(const std::string& fname, void* base, size_t length, int fd)
       : filename_(fname), mmapped_region_(base), length_(length), fd_(fd)
   {
-      __sync_add_and_fetch(&gPerfCounters->m_ROFileOpen, 1);
+      gPerfCounters->Inc(ePerfROFileOpen);
 
 #if defined(HAVE_FADVISE)
     posix_fadvise(fd_, 0, length_, POSIX_FADV_RANDOM);
@@ -280,7 +276,7 @@ class PosixMmapFile : public WritableFile {
         pending_sync_(false) {
     assert((page_size & (page_size - 1)) == 0);
 
-    __sync_add_and_fetch(&gPerfCounters->m_RWFileOpen, 1);
+    gPerfCounters->Inc(ePerfRWFileOpen);
   }
 
 
@@ -861,12 +857,14 @@ void PosixEnv::BGThread()
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
-        if (bgthread3_==pthread_self())
-            __sync_add_and_fetch(&gPerfCounters->m_BGCloseUnmap, 1);
+        if (bgthread4_==pthread_self())
+            gPerfCounters->Inc(ePerfBGCompactImm);
+        else if (bgthread3_==pthread_self())
+            gPerfCounters->Inc(ePerfBGCloseUnmap);
         else if (bgthread2_==pthread_self())
-            __sync_add_and_fetch(&gPerfCounters->m_BGCompactImm, 1);
+            gPerfCounters->Inc(ePerfBGCompactLevel0);
         else
-            __sync_add_and_fetch(&gPerfCounters->m_BGNormal, 1);
+            gPerfCounters->Inc(ePerfBGNormal);
 
         (*function)(arg);
     }   // while
@@ -912,9 +910,7 @@ void BGFileCloser(void * arg)
 
     close(file_ptr->fd_);
     delete file_ptr;
-    __sync_add_and_fetch(&gPerfCounters->m_ROFileClose, 1);
-
-    __sync_add_and_fetch(&gPerfCounters->m_ROFileClose, 1);
+    gPerfCounters->Inc(ePerfROFileClose);
 
     return;
 
@@ -939,7 +935,7 @@ void BGFileCloser2(void * arg)
     close(file_ptr->fd_);
     delete file_ptr;
 
-    __sync_add_and_fetch(&gPerfCounters->m_RWFileClose, 1);
+    gPerfCounters->Inc(ePerfRWFileClose);
 
     return;
 
@@ -959,9 +955,7 @@ void BGFileUnmapper(void * arg)
 #endif
 
     delete file_ptr;
-    __sync_add_and_fetch(&gPerfCounters->m_ROFileUnmap, 1);
-
-    __sync_add_and_fetch(&gPerfCounters->m_ROFileUnmap, 1);
+    gPerfCounters->Inc(ePerfROFileUnmap);
 
     return;
 
@@ -981,9 +975,7 @@ void BGFileUnmapper2(void * arg)
 #endif
 
     delete file_ptr;
-    __sync_add_and_fetch(&gPerfCounters->m_RWFileUnmap, 1);
-
-    __sync_add_and_fetch(&gPerfCounters->m_RWFileUnmap, 1);
+    gPerfCounters->Inc(ePerfRWFileUnmap);
 
     return;
 
@@ -1022,6 +1014,8 @@ static void InitDefaultEnv()
 
     if (HasSSE4_2())
         crc32c::SwitchToHardwareCRC();
+
+    PerformanceCounters::Init(false);
 
 }
 
