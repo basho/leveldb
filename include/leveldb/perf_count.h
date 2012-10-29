@@ -182,6 +182,7 @@ protected:
     static const char * m_PerfCounterNames[];
     static int m_PerfSharedId;
     static int m_LastError;
+    static volatile uint64_t m_BogusCounter;  //!< for out of range GetPtr calls
 
 public:
     // only called for local object, not for shared memory
@@ -194,6 +195,8 @@ public:
     static PerformanceCounters * Init(bool IsReadOnly);
 
     uint64_t Inc(unsigned Index);
+
+    volatile uint64_t * GetPtr(unsigned Index);
 
     void Dump();
 

@@ -280,8 +280,25 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // PerformanceCounters::Inc
 
 
+    volatile uint64_t *
+    PerformanceCounters::GetPtr(
+        unsigned Index)
+    {
+        volatile uint64_t * ret_ptr;
+
+        if (Index<m_CounterSize)
+            ret_ptr=&m_Counter[Index];
+        else
+            ret_ptr=&m_BogusCounter;
+
+        return(ret_ptr);
+
+    }   // PerformanceCounters::GetPtr
+
+
     int PerformanceCounters::m_PerfSharedId=-1;
     int PerformanceCounters::m_LastError=0;
+    volatile uint64_t PerformanceCounters::m_BogusCounter=0;
     const char * PerformanceCounters::m_PerfCounterNames[]=
     {
         "ROFileOpen",
