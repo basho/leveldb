@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <errno.h>
 
 #ifndef STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
@@ -206,7 +208,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         ret_ptr=NULL;
 
         // attempt to attach/create to shared memory instance
-        m_PerfSharedId=shmget(ePerfKey, sizeof(PerformanceCounters), IPC_CREAT);
+        m_PerfSharedId=shmget(ePerfKey, sizeof(PerformanceCounters), IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         if (-1!=m_PerfSharedId)
         {
             ret_ptr=(PerformanceCounters *)shmat(m_PerfSharedId, NULL, (IsReadOnly ? SHM_RDONLY : 0));
