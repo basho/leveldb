@@ -95,64 +95,105 @@ public:
 };  // class SstCounters
 
 
+extern struct PerformanceCounters * gPerfCounters;
+
+
+enum PerformanceCountersEnum
+{
+    //
+    // array index values/names
+    //  (enum explicitly numbered to allow future edits / moves / inserts)
+    //
+    ePerfROFileOpen=0,      //!< PosixMmapReadableFile open
+    ePerfROFileClose=1,     //!<  closed
+    ePerfROFileUnmap=2,     //!<  unmap without close
+
+    ePerfRWFileOpen=3,      //!< PosixMmapFile open
+    ePerfRWFileClose=4,     //!<  closed
+    ePerfRWFileUnmap=5,     //!<  unmap without close
+
+    ePerfApiOpen=6,         //!< Count of DB::Open completions
+    ePerfApiGet=7,          //!< Count of DBImpl::Get completions
+    ePerfApiWrite=8,        //!< Count of DBImpl::Get completions
+
+    ePerfWriteSleep=9,      //!< DBImpl::MakeRoomForWrite called sleep
+    ePerfWriteWaitImm=10,   //!< DBImpl::MakeRoomForWrite called Wait on Imm compact
+    ePerfWriteWaitLevel0=11,//!< DBImpl::MakeRoomForWrite called Wait on Level0 compact
+    ePerfWriteNewMem=12,    //!< DBImpl::MakeRoomForWrite created new memory log
+    ePerfWriteError=13,     //!< DBImpl::MakeRoomForWrite saw bg_error_
+    ePerfWriteNoWait=14,    //!< DBImpl::MakeRoomForWrite took no action
+
+    ePerfGetMem=15,         //!< DBImpl::Get read from memory log
+    ePerfGetImm=16,         //!< DBImpl::Get read from previous memory log
+    ePerfGetVersion=17,     //!< DBImpl::Get read from Version object
+
+    // code ASSUMES the levels are in numerical order,
+    //  i.e. based off of ePerfSearchLevel0
+    ePerfSearchLevel0=18,   //!< Version::Get read searched one or more files here
+    ePerfSearchLevel1=19,   //!< Version::Get read searched one or more files here
+    ePerfSearchLevel2=20,   //!< Version::Get read searched one or more files here
+    ePerfSearchLevel3=21,   //!< Version::Get read searched one or more files here
+    ePerfSearchLevel4=22,   //!< Version::Get read searched one or more files here
+    ePerfSearchLevel5=23,   //!< Version::Get read searched one or more files here
+    ePerfSearchLevel6=24,   //!< Version::Get read searched one or more files here
+
+    ePerfTableCached=25,    //!< TableCache::FindTable found table in cache
+    ePerfTableOpened=26,    //!< TableCache::FindTable had to open table file
+    ePerfTableGet=27,       //!< TableCache::Get used to retrieve a key
+
+    ePerfBGCloseUnmap=28,   //!< PosixEnv::BGThreaed started Unmap/Close job
+    ePerfBGCompactImm=29,   //!< PosixEnv::BGThreaed started compaction of Imm
+    ePerfBGNormal=30,       //!< PosixEnv::BGThreaed started normal compaction job
+    ePerfBGCompactLevel0=31,//!< PosixEnv::BGThreaed started compaction of Level0
+
+    ePerfBlockFiltered=32,  //!< Table::BlockReader search stopped due to filter
+    ePerfBlockFilterFalse=33,//!< Table::BlockReader gave a false positive for match
+    ePerfBlockCached=34,    //!< Table::BlockReader found block in cache
+    ePerfBlockRead=35,      //!< Table::BlockReader read block from disk
+    ePerfBlockFilterRead=36,//!< Table::ReadMeta filter loaded from file
+    ePerfBlockValidGet=37,  //!< Table::InternalGet has valid iterator
+
+    ePerfDebug0=38,         //!< Developer debug counters, moveable
+    ePerfDebug1=39,         //!< Developer debug counters, moveable
+    ePerfDebug2=40,         //!< Developer debug counters, moveable
+    ePerfDebug3=41,         //!< Developer debug counters, moveable
+    ePerfDebug4=42,         //!< Developer debug counters, moveable
+
+    // must follow last index name to represent size of array
+    //  (ASSUMES previous enum is highest value)
+    ePerfCountEnumSize,     //!< size of the array described by the enum values
+
+    ePerfVersion=1,         //!< structure versioning
+    ePerfKey=41207          //!< random number as shared memory identifier
+};
+
+//
+// Do NOT use virtual functions.  This structure will be aligned at different
+//  locations in multiple processes.  Things can get messy with virtuals.
+
 struct PerformanceCounters
 {
-    enum
-    {
-        eVersion=1,            //!< structure versioning
-    };
+protected:
+    uint32_t m_Version;        //!< object revision identification
+    uint32_t m_CounterSize;    //!< number of objects in m_Counter
 
+    volatile uint64_t m_Counter[ePerfCountEnumSize];
 
-    volatile uint32_t m_StructSize;     //!< part 1 of object revision identification
-    volatile uint32_t m_Version;        //!< part 2 of object revision identification
+    static const char * m_PerfCounterNames[];
+    static int m_PerfSharedId;
+    static int m_LastError;
 
-    volatile uint64_t m_ROFileOpen;     //!< PosixMmapReadableFile open
-    volatile uint64_t m_ROFileClose;    //!<  closed
-    volatile uint64_t m_ROFileUnmap;    //!<  unmap without close
-
-    volatile uint64_t m_RWFileOpen;     //!< PosixMmapFile open
-    volatile uint64_t m_RWFileClose;    //!<  closed
-    volatile uint64_t m_RWFileUnmap;    //!<  unmap without close
-
-    volatile uint64_t m_ApiOpen;        //!< Count of DB::Open completions
-    volatile uint64_t m_ApiGet;         //!< Count of DBImpl::Get completions
-    volatile uint64_t m_ApiWrite;       //!< Count of DBImpl::Get completions
-
-    volatile uint64_t m_WriteSleep;     //!< DBImpl::MakeRoomForWrite called sleep
-    volatile uint64_t m_WriteWaitImm;   //!< DBImpl::MakeRoomForWrite called Wait on Imm compact
-    volatile uint64_t m_WriteWaitLevel0;//!< DBImpl::MakeRoomForWrite called Wait on Level0 compact
-    volatile uint64_t m_WriteNewMem;    //!< DBImpl::MakeRoomForWrite created new memory log
-    volatile uint64_t m_WriteError;     //!< DBImpl::MakeRoomForWrite saw bg_error_
-    volatile uint64_t m_WriteNoWait;    //!< DBImpl::MakeRoomForWrite took no action
-
-    volatile uint64_t m_GetMem;         //!< DBImpl::Get read from memory log
-    volatile uint64_t m_GetImm;         //!< DBImpl::Get read from previous memory log
-    volatile uint64_t m_GetVersion;     //!< DBImpl::Get read from Version object
-
-    volatile uint64_t m_SearchLevel[7]; //!< Version::Get read searched one or more files here
-
-    volatile uint64_t m_TableCached;    //!< TableCache::FindTable found table in cache
-    volatile uint64_t m_TableOpened;    //!< TableCache::FindTable had to open table file
-    volatile uint64_t m_TableGet;       //!< TableCache::Get used to retrieve a key
-
-    volatile uint64_t m_BGCloseUnmap;   //!< PosixEnv::BGThreaed started Unmap/Close job
-    volatile uint64_t m_BGCompactImm;   //!< PosixEnv::BGThreaed started compaction of Imm or Level0
-    volatile uint64_t m_BGNormal;       //!< PosixEnv::BGThreaed started normal compaction job
-
-    volatile uint64_t m_BlockFiltered;  //!< Table::BlockReader search stopped due to filter
-    volatile uint64_t m_BlockFilterFalse;//!< Table::BlockReader gave a false positive for match
-    volatile uint64_t m_BlockCached;    //!< Table::BlockReader found block in cache
-    volatile uint64_t m_BlockRead;      //!< Table::BlockReader read block from disk
-    volatile uint64_t m_BlockFilterRead;//!< Table::ReadMeta filter loaded from file
-    volatile uint64_t m_BlockValidGet;  //!< Table::InternalGet has valid iterator
-
-    volatile uint64_t m_Debug[5];       //!< Developer debug counters, moveable
+public:
+    // only called for local object, not for shared memory
+    PerformanceCounters();
 
     //!< does executable's idea of version match shared object?
     bool VersionTest()
-        {return(sizeof(PerformanceCounters)==m_StructSize && eVersion==m_Version);};
+        {return(ePerfCountEnumSize<=m_CounterSize && ePerfVersion==m_Version);};
 
-    void Init();
+    static PerformanceCounters * Init(bool IsReadOnly);
+
+    uint64_t Inc(unsigned Index);
 
     void Dump();
 

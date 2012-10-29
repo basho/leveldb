@@ -71,12 +71,12 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
 
 //      *handle = cache_->Insert(key, tf, file_size, &DeleteEntry);
       *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
-      __sync_add_and_fetch(&gPerfCounters->m_TableOpened, 1);
+      gPerfCounters->Inc(ePerfTableOpened);
     }
   }
   else
   {
-      __sync_add_and_fetch(&gPerfCounters->m_TableCached, 1);
+      gPerfCounters->Inc(ePerfTableCached);
   }   // else
   return s;
 }
