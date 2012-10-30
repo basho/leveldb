@@ -173,6 +173,9 @@ enum PerformanceCountersEnum
 
 struct PerformanceCounters
 {
+public:
+    static int m_LastError;
+
 protected:
     uint32_t m_Version;        //!< object revision identification
     uint32_t m_CounterSize;    //!< number of objects in m_Counter
@@ -181,7 +184,6 @@ protected:
 
     static const char * m_PerfCounterNames[];
     static int m_PerfSharedId;
-    static int m_LastError;
     static volatile uint64_t m_BogusCounter;  //!< for out of range GetPtr calls
 
 public:
@@ -196,7 +198,12 @@ public:
 
     uint64_t Inc(unsigned Index);
 
-    volatile uint64_t * GetPtr(unsigned Index);
+    // return value of a counter
+    uint64_t Value(unsigned Index) const;
+
+    volatile const uint64_t * GetPtr(unsigned Index) const;
+
+    static const char * GetNamePtr(unsigned Index);
 
     void Dump();
 

@@ -52,8 +52,9 @@ TESTS = \
 	write_batch_test
 
 TOOLS = \
-	leveldb_repair
-
+	leveldb_repair \
+	perf_dump \
+	sst_scan
 
 PROGRAMS = db_bench $(TESTS) $(TOOLS)
 BENCHMARKS = db_bench_sqlite3 db_bench_tree_db
@@ -157,6 +158,9 @@ log_test: db/log_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 table_test: table/table_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) table/table_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+perf_dump: tools/perf_dump.o $(LIBOBJECTS)
+	$(CXX) tools/perf_dump.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
 skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
