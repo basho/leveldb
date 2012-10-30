@@ -280,16 +280,48 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // PerformanceCounters::Inc
 
 
-    volatile uint64_t *
-    PerformanceCounters::GetPtr(
-        unsigned Index)
+    uint64_t
+    PerformanceCounters::Value(
+        unsigned Index) const
     {
-        volatile uint64_t * ret_ptr;
+        uint64_t ret_val;
+
+        ret_val=0;
+        if (Index<m_CounterSize)
+        {
+            ret_val=m_Counter[Index];
+        }   // if
+
+        return(ret_val);
+    }   // SstCounters::Value
+
+
+    volatile const uint64_t *
+    PerformanceCounters::GetPtr(
+        unsigned Index) const
+    {
+        const volatile uint64_t * ret_ptr;
 
         if (Index<m_CounterSize)
             ret_ptr=&m_Counter[Index];
         else
             ret_ptr=&m_BogusCounter;
+
+        return(ret_ptr);
+
+    }   // PerformanceCounters::GetPtr
+
+
+    const char *
+    PerformanceCounters::GetNamePtr(
+        unsigned Index)
+    {
+        const char * ret_ptr;
+
+        if (Index<ePerfCountEnumSize)
+            ret_ptr=m_PerfCounterNames[Index];
+        else
+            ret_ptr="???";
 
         return(ret_ptr);
 
