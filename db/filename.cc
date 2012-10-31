@@ -31,14 +31,18 @@ static std::string MakeFileName(const std::string& name, uint64_t number,
 static std::string MakeFileName2(const std::string& name, uint64_t number,
                                  int level, const char* suffix) {
   char buf[100];
-  if (-1!=level)
+  if (0<=level)
       snprintf(buf, sizeof(buf), "/%s_%-d/%06llu.%s",
                suffix, level,
                static_cast<unsigned long long>(number),
                suffix);
-  else
+  else if (-1==level)
       snprintf(buf, sizeof(buf), "/%s/%06llu.%s",
                suffix,
+               static_cast<unsigned long long>(number),
+               suffix);
+  else if (-2==level)
+      snprintf(buf, sizeof(buf), "/%06llu.%s",
                static_cast<unsigned long long>(number),
                suffix);
 
@@ -172,21 +176,19 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
 
 
 Status
-MakeLevelDirectories(const std::string & dbname)
+MakeLevelDirectories(Env * env, const std::string & dbname)
 {
     Status ret_stat;
-    int level, ret_val;
+    int level;
     std::string dirname;
 
     for (level=0; level<config::kNumLevels && ret_stat.ok(); ++level)
     {
         dirname=dbname;
-        MakeDirName2(dirname, level, "sst");
+        dirname=MakeDirName2(dirname, level, "sst");
 
-        ret_val=mkdir(dirname.c_str(), 0755);
-
-        if (0!=ret_val && EEXIST!=errno)
-            ret_stat=Status::IOError(dirname, strerror(errno));
+        // ignoring error since no way to tell if "bad" error, or "already exists" error
+        env->CreateDir(dirname.c_str());
     }   // for
 
     return(ret_stat);
@@ -194,5 +196,27 @@ MakeLevelDirectories(const std::string & dbname)
 }  // MakeLevelDirectories
 
 
+bool
+TestForLevelDirectories(
+    Env * env,
+    const std::string & dbname)
+{
+    bool ret_flag;
+    int level;
+    std::string dirname;
+
+    ret_flag=true;
+
+    for (level=0; level<config::kNumLevels && ret_flag; ++level)
+    {
+        dirname=dbname;
+        dirname=MakeDirName2(dirname, level, "sst");
+
+        ret_flag=env->FileExists(dirname.c_str());
+    }   // for
+
+    return(ret_flag);
+
+}   // TestForLevelDirectories
 
 }  // namespace leveldb

@@ -317,7 +317,7 @@ DBImpl::KeepOrDelete(
 Status DBImpl::Recover(VersionEdit* edit) {
   mutex_.AssertHeld();
 
-  Log(options_.info_log, "DBImpl::Recover called");
+  bool level_dirs_created(false);
 
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
@@ -346,27 +346,52 @@ Status DBImpl::Recover(VersionEdit* edit) {
     }
   }
 
-#if 0
+
   // Verify 2.0 directory structure created and ready
-  s=MakeLevelDirectories(dbname_);
-  if (!s.ok()) {
-    return s;
-  }
-#else
-  int level;
-  std::string dirname;
-
-  for (level=0; level<config::kNumLevels; ++level)
+  if (!TestForLevelDirectories(env_, dbname_))
   {
-      dirname=dbname_;
-      dirname=MakeDirName2(dirname, level, "sst");
+      if (options_.create_if_missing)
+      {
+          s=MakeLevelDirectories(env_, dbname_);
+          if (s.ok())
+              level_dirs_created=true;
+          else
+              return s;
+      }   // if
+      else
+      {
+          return Status::InvalidArgument(
+              dbname_, "level directories do not exist (create_if_missing is false)");
+      }   // else
+  }   // if
 
-      Log(options_.info_log, "dirname %s", dirname.c_str());
-      env_->CreateDir(dirname.c_str());
-  }   // for
-#endif
-
+  // read manifest
   s = versions_->Recover();
+
+  // move files from old heirarchy to new
+  if (s.ok() && level_dirs_created)
+  {
+      int level;
+      std::string old_name, new_name;
+
+      versions_->current()->Ref();
+      for (level=0; level<config::kNumLevels && s.ok(); ++level)
+      {
+          const std::vector<FileMetaData*> & level_files(versions_->current()->GetFileList(level));
+          std::vector<FileMetaData*>::const_iterator it;
+
+          for (it=level_files.begin(); level_files.end()!=it && s.ok(); ++it)
+          {
+              old_name=TableFileName(dbname_, (*it)->number, -2);
+              new_name=TableFileName(dbname_, (*it)->number, level);
+              s=env_->RenameFile(old_name, new_name);
+          }   // for
+      }   // for
+
+      versions_->current()->Unref();
+  }   // if
+
+
   if (s.ok()) {
     SequenceNumber max_sequence(0);
 

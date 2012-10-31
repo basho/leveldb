@@ -31,10 +31,9 @@ enum FileType {
 std::string MakeDirName2(const std::string& name,
                          int level, const char* suffix);
 
-Status
-    MakeLevelDirectories(const std::string & dbname);
+Status MakeLevelDirectories(Env * env, const std::string & dbname);
 
-
+bool TestForLevelDirectories(Env * env, const std::string & dbname);
 
 // Return the name of the log file with the specified number
 // in the db named by "dbname".  The result will be prefixed with
