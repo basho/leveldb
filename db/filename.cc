@@ -184,8 +184,7 @@ MakeLevelDirectories(Env * env, const std::string & dbname)
 
     for (level=0; level<config::kNumLevels && ret_stat.ok(); ++level)
     {
-        dirname=dbname;
-        dirname=MakeDirName2(dirname, level, "sst");
+        dirname=MakeDirName2(dbname, level, "sst");
 
         // ignoring error since no way to tell if "bad" error, or "already exists" error
         env->CreateDir(dirname.c_str());
@@ -209,8 +208,7 @@ TestForLevelDirectories(
 
     for (level=0; level<config::kNumLevels && ret_flag; ++level)
     {
-        dirname=dbname;
-        dirname=MakeDirName2(dirname, level, "sst");
+        dirname=MakeDirName2(dbname, level, "sst");
 
         ret_flag=env->FileExists(dirname.c_str());
     }   // for
