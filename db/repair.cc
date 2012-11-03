@@ -316,7 +316,7 @@ class Repairer {
           Log(options_.info_log, "Table #%llu: ignoring %s",
               (unsigned long long) t.meta.number,
               status.ToString().c_str());
-          ArchiveFile(fname);
+          ArchiveFile(fname, true);
         } else {
           tables_[level].push_back(t);
         }
@@ -459,7 +459,7 @@ class Repairer {
     std::string new_dir;
 
     if (std::string::npos != slash2 && 0<slash2)
-      new_dir.append(fname,0,slash2-1);
+      new_dir.append(fname,0,slash2);
 
     new_dir.append("/lost");
     env_->CreateDir(new_dir);  // Ignore error
