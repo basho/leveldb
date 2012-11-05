@@ -185,7 +185,9 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             GetVarint64(&input, &f.number) &&
             GetVarint64(&input, &f.file_size) &&
             GetInternalKey(&input, &f.smallest) &&
-            GetInternalKey(&input, &f.largest)) {
+            GetInternalKey(&input, &f.largest))
+        {
+          f.level=level;
           new_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";

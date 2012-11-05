@@ -52,6 +52,7 @@ class Repairer {
         options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
+        has_level_dirs_(false),
         db_lock_(NULL),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
@@ -72,25 +73,42 @@ class Repairer {
     Status status;
 
     status = env_->LockFile(LockFileName(dbname_), &db_lock_);
+
+    if (status.ok())
+        status = MakeLevelDirectories(env_, dbname_);
+
     if (status.ok()) {
       status = FindFiles();
       if (status.ok()) {
-        ConvertLogFilesToTables();
-        ExtractMetaData();
-        status = WriteDescriptor();
+          ConvertLogFilesToTables();
+          ExtractMetaData();
+          status = WriteDescriptor();
       }
       if (status.ok()) {
         unsigned long long bytes = 0;
-        for (size_t i = 0; i < tables_.size(); i++) {
-          bytes += tables_[i].meta.file_size;
-        }
+        unsigned long long files = 0;
+
+        // calculate size for log information
+        for (int level=0; level<config::kNumLevels;++level)
+        {
+          std::vector<TableInfo> * table_ptr;
+          std::vector<TableInfo>::const_iterator i;
+
+          table_ptr=&tables_[level];
+          files+=table_ptr->size();
+
+          for ( i = table_ptr->begin(); table_ptr->end()!= i; i++) {
+            bytes += i->meta.file_size;
+          }
+        } // for
+
         Log(options_.info_log,
             "**** Repaired leveldb %s; "
             "recovered %d files; %llu bytes. "
             "Some data may have been lost. "
             "****",
             dbname_.c_str(),
-            static_cast<int>(tables_.size()),
+            static_cast<int>(files),
             bytes);
       }
       if (db_lock_ != NULL) {
@@ -113,28 +131,30 @@ class Repairer {
   Options const options_;
   bool owns_info_log_;
   bool owns_cache_;
+  bool has_level_dirs_;
   FileLock* db_lock_;
   TableCache* table_cache_;
   VersionEdit edit_;
 
   std::vector<std::string> manifests_;
-  std::vector<uint64_t> table_numbers_;
+  std::vector<uint64_t> table_numbers_[config::kNumLevels];
   std::vector<uint64_t> logs_;
-  std::vector<TableInfo> tables_;
+  std::vector<TableInfo> tables_[config::kNumLevels];
   uint64_t next_file_number_;
 
-  Status FindFiles() {
+  Status FindFiles()
+  {
     std::vector<std::string> filenames;
+    uint64_t number;
+    FileType type;
+    int level;
+
+    // base directory
     Status status = env_->GetChildren(dbname_, &filenames);
     if (!status.ok()) {
       return status;
     }
-    if (filenames.empty()) {
-      return Status::IOError(dbname_, "repair found no files");
-    }
 
-    uint64_t number;
-    FileType type;
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type)) {
         if (type == kDescriptorFile) {
@@ -146,13 +166,38 @@ class Repairer {
           if (type == kLogFile) {
             logs_.push_back(number);
           } else if (type == kTableFile) {
-            table_numbers_.push_back(number);
+            table_numbers_[0].push_back(number);
           } else {
             // Ignore other files
-          }
-        }
+          } // else
+        } // else
+      } // if
+    } // for
+
+    for (level=0; level < config::kNumLevels; ++level)
+    {
+      std::string dirname;
+
+      filenames.clear();
+      dirname=MakeDirName2(dbname_, level, "sst");
+      Status status = env_->GetChildren(dirname, &filenames);
+      if (!status.ok()) {
+          return status;
       }
-    }
+
+      for (size_t i = 0; i < filenames.size(); i++) {
+        if (ParseFileName(filenames[i], &number, &type)) {
+          if (number + 1 > next_file_number_) {
+            next_file_number_ = number + 1;
+          }
+
+          if (type == kTableFile) {
+            table_numbers_[level].push_back(number);
+          }
+        } // if
+      } // for
+    } // for
+
     return status;
   }
 
@@ -233,6 +278,7 @@ class Repairer {
     // since ExtractMetaData() will also generate edits.
     FileMetaData meta;
     meta.number = next_file_number_++;
+    meta.level = 0;
     Iterator* iter = mem->NewIterator();
     status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta, kMaxSequenceNumber);
     delete iter;
@@ -240,7 +286,7 @@ class Repairer {
     mem = NULL;
     if (status.ok()) {
       if (meta.file_size > 0) {
-        table_numbers_.push_back(meta.number);
+        table_numbers_[0].push_back(meta.number);
       }
     }
     Log(options_.info_log, "Log #%llu: %d ops saved to Table #%llu %s",
@@ -253,29 +299,38 @@ class Repairer {
 
   void ExtractMetaData() {
     std::vector<TableInfo> kept;
-    for (size_t i = 0; i < table_numbers_.size(); i++) {
-      TableInfo t;
-      t.meta.number = table_numbers_[i];
-      Status status = ScanTable(&t);
-      if (!status.ok()) {
-        std::string fname = TableFileName(dbname_, table_numbers_[i]);
-        Log(options_.info_log, "Table #%llu: ignoring %s",
-            (unsigned long long) table_numbers_[i],
-            status.ToString().c_str());
-        ArchiveFile(fname);
-      } else {
-        tables_.push_back(t);
+    for (int level=0; level < config::kNumLevels; ++level)
+    {
+      std::vector<uint64_t> * number_ptr;
+      std::vector<uint64_t>::const_iterator i;
+
+      number_ptr=&table_numbers_[level];
+      for (i = number_ptr->begin(); number_ptr->end()!= i; ++i) {
+        TableInfo t;
+        t.meta.number = *i;
+        t.meta.level = level;
+        Status status = ScanTable(&t);
+        if (!status.ok())
+        {
+          std::string fname = TableFileName(dbname_, t.meta.number, t.meta.level);
+          Log(options_.info_log, "Table #%llu: ignoring %s",
+              (unsigned long long) t.meta.number,
+              status.ToString().c_str());
+          ArchiveFile(fname, true);
+        } else {
+          tables_[level].push_back(t);
+        }
       }
     }
   }
 
   Status ScanTable(TableInfo* t) {
-    std::string fname = TableFileName(dbname_, t->meta.number);
+    std::string fname = TableFileName(dbname_, t->meta.number, t->meta.level);
     int counter = 0;
     Status status = env_->GetFileSize(fname, &t->meta.file_size);
     if (status.ok()) {
       Iterator* iter = table_cache_->NewIterator(
-          ReadOptions(), t->meta.number, t->meta.file_size);
+          ReadOptions(), t->meta.number, t->meta.file_size, t->meta.level);
       bool empty = true;
       ParsedInternalKey parsed;
       t->max_sequence = 0;
@@ -319,23 +374,38 @@ class Repairer {
     }
 
     SequenceNumber max_sequence = 0;
-    for (size_t i = 0; i < tables_.size(); i++) {
-      if (max_sequence < tables_[i].max_sequence) {
-        max_sequence = tables_[i].max_sequence;
-      }
-    }
+    for (int level=0; level<config::kNumLevels;++level)
+    {
+      std::vector<TableInfo> * table_ptr;
+      std::vector<TableInfo>::const_iterator i;
+
+      table_ptr=&tables_[level];
+
+      for ( i = table_ptr->begin(); table_ptr->end()!= i; i++) {
+        if (max_sequence < i->max_sequence) {
+          max_sequence = i->max_sequence;
+        }
+      } // for
+    } // for
 
     edit_.SetComparatorName(icmp_.user_comparator()->Name());
     edit_.SetLogNumber(0);
     edit_.SetNextFile(next_file_number_);
     edit_.SetLastSequence(max_sequence);
 
-    for (size_t i = 0; i < tables_.size(); i++) {
-      // TODO(opt): separate out into multiple levels
-      const TableInfo& t = tables_[i];
-      edit_.AddFile(0, t.meta.number, t.meta.file_size,
-                    t.meta.smallest, t.meta.largest);
-    }
+    for (int level=0; level<config::kNumLevels;++level)
+    {
+      std::vector<TableInfo> * table_ptr;
+      std::vector<TableInfo>::const_iterator i;
+
+      table_ptr=&tables_[level];
+
+      for ( i = table_ptr->begin(); table_ptr->end()!= i; i++) {
+          edit_.AddFile(level, i->meta.number, i->meta.file_size,
+                    i->meta.smallest, i->meta.largest);
+
+      } // for
+    } // for
 
     //fprintf(stderr, "NewDescriptor:\n%s\n", edit_.DebugString().c_str());
     {
@@ -369,21 +439,33 @@ class Repairer {
     return status;
   }
 
-  void ArchiveFile(const std::string& fname) {
+  void ArchiveFile(const std::string& fname, bool two_levels=false) {
     // Move into another directory.  E.g., for
     //    dir/foo
     // rename to
     //    dir/lost/foo
-    const char* slash = strrchr(fname.c_str(), '/');
+    std::string::size_type slash, slash2;
+
+    slash=fname.rfind('/');
+    if (two_levels && std::string::npos!=slash && 0<slash)
+    {
+        slash2=fname.rfind('/',slash-1);
+        if (std::string::npos==slash2)
+            slash2=slash;
+    }   // if
+    else
+        slash2=slash;
+
     std::string new_dir;
-    if (slash != NULL) {
-      new_dir.assign(fname.data(), slash - fname.data());
-    }
+
+    if (std::string::npos != slash2 && 0<slash2)
+      new_dir.append(fname,0,slash2);
+
     new_dir.append("/lost");
     env_->CreateDir(new_dir);  // Ignore error
     std::string new_file = new_dir;
     new_file.append("/");
-    new_file.append((slash == NULL) ? fname.c_str() : slash + 1);
+    new_file.append((std::string::npos!=slash) ? fname.substr(slash+1) : fname);
     Status s = env_->RenameFile(fname, new_file);
     Log(options_.info_log, "Archiving %s: %s\n",
         fname.c_str(), s.ToString().c_str());

@@ -33,6 +33,7 @@ class TableCache {
   Iterator* NewIterator(const ReadOptions& options,
                         uint64_t file_number,
                         uint64_t file_size,
+                        int level,
                         Table** tableptr = NULL);
 
   // If a seek to internal key "k" in specified file finds an entry,
@@ -40,6 +41,7 @@ class TableCache {
   Status Get(const ReadOptions& options,
              uint64_t file_number,
              uint64_t file_size,
+             int level,
              const Slice& k,
              void* arg,
              bool (*handle_result)(void*, const Slice&, const Slice&));
@@ -48,8 +50,8 @@ class TableCache {
   void Evict(uint64_t file_number);
 
   // access for testing tools, not for public access
-  Status TEST_FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle** handle)
-  {return( FindTable(file_number, file_size, handle));};
+  Status TEST_FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle** handle)
+  {return( FindTable(file_number, file_size, level, handle));};
 
   Cache* TEST_GetInternalCache() {return(cache_);};
 
@@ -59,7 +61,7 @@ class TableCache {
   const Options* options_;
   Cache* cache_;
 
-  Status FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle**);
+  Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**);
 };
 
 

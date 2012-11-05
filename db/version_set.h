@@ -104,6 +104,8 @@ class Version {
 
   int NumFiles(int level) const { return files_[level].size(); }
 
+  const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
+
   int WritePenalty() const {return write_penalty_; }
 
   // Return a human readable string that describes this version's contents.

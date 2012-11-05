@@ -22,9 +22,10 @@ struct FileMetaData {
   uint64_t num_entries;
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
+  int level;
 
   FileMetaData()
-  : refs(0), allowed_seeks(1 << 30), file_size(0), num_entries(0)
+  : refs(0), allowed_seeks(1 << 30), file_size(0), num_entries(0), level(-1)
   { }
 };
 
@@ -87,6 +88,7 @@ class VersionEdit {
     f.file_size = file_size;
     f.smallest = smallest;
     f.largest = largest;
+    f.level = level;
     new_files_.push_back(std::make_pair(level, f));
   }
 
