@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include "db/filename.h"
 #include "db/dbformat.h"
+#include "db/version_set.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
 #include "util/logging.h"
@@ -198,19 +199,41 @@ MakeLevelDirectories(Env * env, const std::string & dbname)
 bool
 TestForLevelDirectories(
     Env * env,
-    const std::string & dbname)
+    const std::string & dbname,
+    Version * version)
 {
-    bool ret_flag;
+    bool ret_flag, again;
     int level;
     std::string dirname;
 
     ret_flag=true;
+    again=true;
 
-    for (level=0; level<config::kNumLevels && ret_flag; ++level)
+    // walk backwards, fault will be in higher levels if partial conversion
+    for (level=config::kNumLevels-1; 0<=level && again; --level)
     {
-        dirname=MakeDirName2(dbname, level, "sst");
+        again=false;
 
+        // does directory exist
+        dirname=MakeDirName2(dbname, level, "sst");
         ret_flag=env->FileExists(dirname.c_str());
+
+        // do all files exist in level
+        if (ret_flag)
+        {
+            const std::vector<FileMetaData*> & level_files(version->GetFileList(level));
+            std::vector<FileMetaData*>::const_iterator it;
+            std::string table_name;
+            Status s;
+
+            for (it=level_files.begin(); level_files.end()!=it && ret_flag; ++it)
+            {
+                table_name=TableFileName(dbname, (*it)->number, level);
+                ret_flag=env->FileExists(table_name.c_str());
+            }   // for
+
+            again=ret_flag && 0==level_files.size();
+        }   // if
     }   // for
 
     return(ret_flag);

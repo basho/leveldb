@@ -87,7 +87,7 @@ main(
 void
 command_help()
 {
-    fprintf(stderr, "bloom_scan [option | data_base]*\n");
+    fprintf(stderr, "leveldb_repair [option | data_base]*\n");
     fprintf(stderr, "  options\n");
     fprintf(stderr, "      (none at this time)\n");
 }   // command_help

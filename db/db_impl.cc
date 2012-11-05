@@ -317,8 +317,6 @@ DBImpl::KeepOrDelete(
 Status DBImpl::Recover(VersionEdit* edit) {
   mutex_.AssertHeld();
 
-  bool level_dirs_created(false);
-
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
@@ -346,15 +344,39 @@ Status DBImpl::Recover(VersionEdit* edit) {
     }
   }
 
+  // read manifest
+  s = versions_->Recover();
 
   // Verify 2.0 directory structure created and ready
-  if (!TestForLevelDirectories(env_, dbname_))
+  if (s.ok() && !TestForLevelDirectories(env_, dbname_, versions_->current()))
   {
+      int level;
+      std::string old_name, new_name;
+
       if (options_.create_if_missing)
       {
+          // move files from old heirarchy to new
           s=MakeLevelDirectories(env_, dbname_);
           if (s.ok())
-              level_dirs_created=true;
+          {
+              for (level=0; level<config::kNumLevels && s.ok(); ++level)
+              {
+                  const std::vector<FileMetaData*> & level_files(versions_->current()->GetFileList(level));
+                  std::vector<FileMetaData*>::const_iterator it;
+
+                  for (it=level_files.begin(); level_files.end()!=it && s.ok(); ++it)
+                  {
+                      new_name=TableFileName(dbname_, (*it)->number, level);
+
+                      // test for partial completion
+                      if (!env_->FileExists(new_name.c_str()))
+                      {
+                          old_name=TableFileName(dbname_, (*it)->number, -2);
+                          s=env_->RenameFile(old_name, new_name);
+                      }   // if
+                  }   // for
+              }   // for
+          }   // if
           else
               return s;
       }   // if
@@ -363,32 +385,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
           return Status::InvalidArgument(
               dbname_, "level directories do not exist (create_if_missing is false)");
       }   // else
-  }   // if
 
-  // read manifest
-  s = versions_->Recover();
-
-  // move files from old heirarchy to new
-  if (s.ok() && level_dirs_created)
-  {
-      int level;
-      std::string old_name, new_name;
-
-      versions_->current()->Ref();
-      for (level=0; level<config::kNumLevels && s.ok(); ++level)
-      {
-          const std::vector<FileMetaData*> & level_files(versions_->current()->GetFileList(level));
-          std::vector<FileMetaData*>::const_iterator it;
-
-          for (it=level_files.begin(); level_files.end()!=it && s.ok(); ++it)
-          {
-              old_name=TableFileName(dbname_, (*it)->number, -2);
-              new_name=TableFileName(dbname_, (*it)->number, level);
-              s=env_->RenameFile(old_name, new_name);
-          }   // for
-      }   // for
-
-      versions_->current()->Unref();
   }   // if
 
 

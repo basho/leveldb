@@ -16,6 +16,7 @@
 namespace leveldb {
 
 class Env;
+class Version;
 
 enum FileType {
   kLogFile,
@@ -33,7 +34,7 @@ std::string MakeDirName2(const std::string& name,
 
 Status MakeLevelDirectories(Env * env, const std::string & dbname);
 
-bool TestForLevelDirectories(Env * env, const std::string & dbname);
+bool TestForLevelDirectories(Env * env, const std::string & dbname, class Version *);
 
 // Return the name of the log file with the specified number
 // in the db named by "dbname".  The result will be prefixed with

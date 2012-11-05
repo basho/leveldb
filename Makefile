@@ -52,7 +52,7 @@ TESTS = \
 	write_batch_test
 
 TOOLS = \
-	repair
+	leveldb_repair
 
 
 PROGRAMS = db_bench $(TESTS) $(TOOLS)
@@ -161,8 +161,8 @@ table_test: table/table_test.o $(LIBOBJECTS) $(TESTHARNESS)
 skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
-repair: tools/repair.o $(LIBOBJECTS)
-	$(CXX) tools/repair.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
+leveldb_repair: tools/leveldb_repair.o $(LIBOBJECTS)
+	$(CXX) tools/leveldb_repair.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
 version_edit_test: db/version_edit_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/version_edit_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
