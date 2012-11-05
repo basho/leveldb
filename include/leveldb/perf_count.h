@@ -159,6 +159,8 @@ enum PerformanceCountersEnum
     ePerfDebug3=41,         //!< Developer debug counters, moveable
     ePerfDebug4=42,         //!< Developer debug counters, moveable
 
+    ePerfReadBlockError=43, //!< crc or compression error in ReadBlock (format.cc)
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values
