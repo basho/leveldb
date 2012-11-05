@@ -33,7 +33,11 @@
 #endif
 
 #include "util/coding.h"
-//#include "util/crc32c.h"
+
+#ifdef OS_SOLARIS
+#  include <atomic.h>
+#endif
+
 
 namespace leveldb
 {
@@ -376,6 +380,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "Debug[2]",
         "Debug[3]",
         "Debug[4]"
+        "ReadBlockError"
     };
 
 
