@@ -42,7 +42,7 @@ TableCache::~TableCache() {
   delete cache_;
 }
 
-Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
+Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level,
                              Cache::Handle** handle) {
   Status s;
   char buf[sizeof(file_number)];
@@ -50,7 +50,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
-    std::string fname = TableFileName(dbname_, file_number);
+    std::string fname = TableFileName(dbname_, file_number, level);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);
@@ -78,13 +78,14 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number,
                                   uint64_t file_size,
+                                  int level,
                                   Table** tableptr) {
   if (tableptr != NULL) {
     *tableptr = NULL;
   }
 
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, &handle);
+  Status s = FindTable(file_number, file_size, level, &handle);
   if (!s.ok()) {
     return NewErrorIterator(s);
   }
@@ -101,11 +102,12 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
 Status TableCache::Get(const ReadOptions& options,
                        uint64_t file_number,
                        uint64_t file_size,
+                       int level,
                        const Slice& k,
                        void* arg,
                        bool (*saver)(void*, const Slice&, const Slice&)) {
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, &handle);
+  Status s = FindTable(file_number, file_size, level, &handle);
   if (s.ok()) {
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
     s = t->InternalGet(options, k, arg, saver);

@@ -209,6 +209,7 @@ Status DBImpl::NewDB() {
   } else {
     env_->DeleteFile(manifest);
   }
+
   return s;
 }
 
@@ -226,50 +227,92 @@ void DBImpl::DeleteObsoleteFiles() {
   std::set<uint64_t> live = pending_outputs_;
   versions_->AddLiveFiles(&live);
 
+  // prune the database root directory
   std::vector<std::string> filenames;
   env_->GetChildren(dbname_, &filenames); // Ignoring errors on purpose
+  for (size_t i = 0; i < filenames.size(); i++) {
+      KeepOrDelete(filenames[i], -1, live);
+  }   // for
+
+  // prune the table file directories
+  for (int level=0; level<config::kNumLevels; ++level)
+  {
+      std::string dirname;
+
+      filenames.clear();
+      dirname=MakeDirName2(dbname_, level, "sst");
+      env_->GetChildren(dirname, &filenames); // Ignoring errors on purpose
+      for (size_t i = 0; i < filenames.size(); i++) {
+          KeepOrDelete(filenames[i], level, live);
+      }   // for
+  }   // for
+}
+
+void
+DBImpl::KeepOrDelete(
+    const std::string & Filename,
+    int Level,
+    const std::set<uint64_t> & Live)
+{
   uint64_t number;
   FileType type;
-  for (size_t i = 0; i < filenames.size(); i++) {
-    if (ParseFileName(filenames[i], &number, &type)) {
-      bool keep = true;
-      switch (type) {
-        case kLogFile:
-          keep = ((number >= versions_->LogNumber()) ||
-                  (number == versions_->PrevLogNumber()));
-          break;
-        case kDescriptorFile:
-          // Keep my manifest file, and any newer incarnations'
-          // (in case there is a race that allows other incarnations)
-          keep = (number >= versions_->ManifestFileNumber());
-          break;
-        case kTableFile:
-          keep = (live.find(number) != live.end());
-          break;
-        case kTempFile:
-          // Any temp files that are currently being written to must
-          // be recorded in pending_outputs_, which is inserted into "live"
-          keep = (live.find(number) != live.end());
-          break;
-        case kCurrentFile:
-        case kDBLockFile:
-        case kInfoLogFile:
-          keep = true;
-          break;
-      }
+  bool keep = true;
 
-      if (!keep) {
-        if (type == kTableFile) {
-          table_cache_->Evict(number);
-        }
-        Log(options_.info_log, "Delete type=%d #%lld\n",
-            int(type),
-            static_cast<unsigned long long>(number));
-        env_->DeleteFile(dbname_ + "/" + filenames[i]);
-      }
-    }
-  }
-}
+  if (ParseFileName(Filename, &number, &type))
+  {
+      switch (type)
+      {
+          case kLogFile:
+              keep = ((number >= versions_->LogNumber()) ||
+                      (number == versions_->PrevLogNumber()));
+              break;
+
+          case kDescriptorFile:
+              // Keep my manifest file, and any newer incarnations'
+              // (in case there is a race that allows other incarnations)
+              keep = (number >= versions_->ManifestFileNumber());
+              break;
+
+          case kTableFile:
+              keep = (Live.find(number) != Live.end());
+              break;
+
+          case kTempFile:
+              // Any temp files that are currently being written to must
+              // be recorded in pending_outputs_, which is inserted into "Live"
+              keep = (Live.find(number) != Live.end());
+          break;
+
+          case kCurrentFile:
+          case kDBLockFile:
+          case kInfoLogFile:
+              keep = true;
+              break;
+      }   // switch
+
+      if (!keep)
+      {
+          if (type == kTableFile) {
+              table_cache_->Evict(number);
+          }
+          Log(options_.info_log, "Delete type=%d #%lld\n",
+              int(type),
+              static_cast<unsigned long long>(number));
+          if (-1!=Level)
+          {
+              std::string file;
+
+              file=TableFileName(dbname_, number, Level);
+              env_->DeleteFile(file);
+          }   // if
+          else
+          {
+              env_->DeleteFile(dbname_ + "/" + Filename);
+          }   // else
+      }   // if
+  }   // if
+} // DBImpl::KeepOrDelete
+
 
 Status DBImpl::Recover(VersionEdit* edit) {
   mutex_.AssertHeld();
@@ -301,7 +344,51 @@ Status DBImpl::Recover(VersionEdit* edit) {
     }
   }
 
+  // read manifest
   s = versions_->Recover();
+
+  // Verify 2.0 directory structure created and ready
+  if (s.ok() && !TestForLevelDirectories(env_, dbname_, versions_->current()))
+  {
+      int level;
+      std::string old_name, new_name;
+
+      if (options_.create_if_missing)
+      {
+          // move files from old heirarchy to new
+          s=MakeLevelDirectories(env_, dbname_);
+          if (s.ok())
+          {
+              for (level=0; level<config::kNumLevels && s.ok(); ++level)
+              {
+                  const std::vector<FileMetaData*> & level_files(versions_->current()->GetFileList(level));
+                  std::vector<FileMetaData*>::const_iterator it;
+
+                  for (it=level_files.begin(); level_files.end()!=it && s.ok(); ++it)
+                  {
+                      new_name=TableFileName(dbname_, (*it)->number, level);
+
+                      // test for partial completion
+                      if (!env_->FileExists(new_name.c_str()))
+                      {
+                          old_name=TableFileName(dbname_, (*it)->number, -2);
+                          s=env_->RenameFile(old_name, new_name);
+                      }   // if
+                  }   // for
+              }   // for
+          }   // if
+          else
+              return s;
+      }   // if
+      else
+      {
+          return Status::InvalidArgument(
+              dbname_, "level directories do not exist (create_if_missing is false)");
+      }   // else
+
+  }   // if
+
+
   if (s.ok()) {
     SequenceNumber max_sequence(0);
 
@@ -452,6 +539,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
   meta.number = versions_->NewFileNumber();
+  meta.level = 0;
   pending_outputs_.insert(meta.number);
   Iterator* iter = mem->NewIterator();
   SequenceNumber smallest_snapshot;
@@ -495,10 +583,20 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != NULL) {
-      level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
+        level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
+        if (0!=level)
+        {
+            std::string old_name, new_name;
+
+            old_name=TableFileName(dbname_, meta.number, 0);
+            new_name=TableFileName(dbname_, meta.number, level);
+            s=env_->RenameFile(old_name, new_name);
+        }   // if
     }
-    edit->AddFile(level, meta.number, meta.file_size,
-                  meta.smallest, meta.largest);
+
+    if (s.ok())
+        edit->AddFile(level, meta.number, meta.file_size,
+                      meta.smallest, meta.largest);
   }
 
   CompactionStats stats;
@@ -736,18 +834,29 @@ Status DBImpl::BackgroundCompaction() {
   } else if (!is_manual && c->IsTrivialMove()) {
     // Move file to next level
     assert(c->num_input_files(0) == 1);
+    std::string old_name, new_name;
     FileMetaData* f = c->input(0, 0);
-    c->edit()->DeleteFile(c->level(), f->number);
-    c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
-                       f->smallest, f->largest);
-    status = versions_->LogAndApply(c->edit(), &mutex_);
-    VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, "Moved #%lld to level-%d %lld bytes %s: %s\n",
-        static_cast<unsigned long long>(f->number),
-        c->level() + 1,
-        static_cast<unsigned long long>(f->file_size),
-        status.ToString().c_str(),
-        versions_->LevelSummary(&tmp));
+
+    old_name=TableFileName(dbname_, f->number, c->level());
+    new_name=TableFileName(dbname_, f->number, c->level() +1);
+    status=env_->RenameFile(old_name, new_name);
+
+    if (status.ok())
+    {
+        c->edit()->DeleteFile(c->level(), f->number);
+        c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
+                           f->smallest, f->largest);
+        status = versions_->LogAndApply(c->edit(), &mutex_);
+
+        // if LogAndApply fails, should file be renamed back to original spot?
+        VersionSet::LevelSummaryStorage tmp;
+        Log(options_.info_log, "Moved #%lld to level-%d %lld bytes %s: %s\n",
+            static_cast<unsigned long long>(f->number),
+            c->level() + 1,
+            static_cast<unsigned long long>(f->file_size),
+            status.ToString().c_str(),
+            versions_->LevelSummary(&tmp));
+    }  // if
   } else {
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
@@ -820,7 +929,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   }
 
   // Make the output file
-  std::string fname = TableFileName(dbname_, file_number);
+  std::string fname = TableFileName(dbname_, file_number, compact->compaction->level()+1);
   Status s = env_->NewWritableFile(fname, &compact->outfile);
   if (s.ok()) {
     compact->builder = new TableBuilder(options_, compact->outfile);
@@ -866,7 +975,8 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
     // Verify that the table is usable
     Iterator* iter = table_cache_->NewIterator(ReadOptions(),
                                                output_number,
-                                               current_bytes);
+                                               current_bytes,
+                                               compact->compaction->level()+1);
     s = iter->status();
     delete iter;
     if (s.ok()) {
