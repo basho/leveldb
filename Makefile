@@ -159,11 +159,14 @@ log_test: db/log_test.o $(LIBOBJECTS) $(TESTHARNESS)
 table_test: table/table_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) table/table_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
+skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
 perf_dump: tools/perf_dump.o $(LIBOBJECTS)
 	$(CXX) tools/perf_dump.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
-skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+sst_scan: tools/sst_scan.o $(LIBOBJECTS)
+	$(CXX) tools/sst_scan.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
 leveldb_repair: tools/leveldb_repair.o $(LIBOBJECTS)
 	$(CXX) tools/leveldb_repair.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
