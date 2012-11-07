@@ -159,7 +159,7 @@ main(
 void
 command_help()
 {
-    fprintf(stderr, "sst_scan [option | file]*\n");
+    fprintf(stderr, "perf_dump [option]*\n");
     fprintf(stderr, "  options\n");
     fprintf(stderr, "      -h    print csv formatted header line (once)\n");
     fprintf(stderr, "      -d n  print diff ever n seconds\n");
