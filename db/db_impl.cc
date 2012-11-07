@@ -35,6 +35,7 @@
 #include "util/coding.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "leveldb/perf_count.h"
 
 namespace leveldb {
 
@@ -1301,11 +1302,14 @@ Status DBImpl::Get(const ReadOptions& options,
     LookupKey lkey(key, snapshot);
     if (mem->Get(lkey, value, &s)) {
       // Done
+        gPerfCounters->Inc(ePerfGetMem);
     } else if (imm != NULL && imm->Get(lkey, value, &s)) {
       // Done
+        gPerfCounters->Inc(ePerfGetImm);
     } else {
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
+      gPerfCounters->Inc(ePerfGetVersion);
     }
     mutex_.Lock();
   }
@@ -1317,6 +1321,9 @@ Status DBImpl::Get(const ReadOptions& options,
   mem->Unref();
   if (imm != NULL) imm->Unref();
   current->Unref();
+
+  gPerfCounters->Inc(ePerfApiGet);
+
   return s;
 }
 
@@ -1409,6 +1416,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     writers_.front()->cv.Signal();
   }
 
+  gPerfCounters->Inc(ePerfApiWrite);
+
   return status;
 }
 
@@ -1485,6 +1494,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   while (true) {
     if (!bg_error_.ok()) {
       // Yield previous error
+        gPerfCounters->Inc(ePerfWriteError);
       s = bg_error_;
       break;
     } else if (
@@ -1499,21 +1509,25 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
+      gPerfCounters->Inc(ePerfWriteSleep);
       mutex_.Lock();
     } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
+        gPerfCounters->Inc(ePerfWriteNoWait);
       break;
     } else if (imm_ != NULL) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
       Log(options_.info_log, "waiting 2...\n");
+      gPerfCounters->Inc(ePerfWriteWaitImm);
       MaybeScheduleCompaction();
       bg_cv_.Wait();
       Log(options_.info_log, "running 2...\n");
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "waiting...\n");
+      gPerfCounters->Inc(ePerfWriteWaitLevel0);
       bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
     } else {
@@ -1521,6 +1535,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = NULL;
+      gPerfCounters->Inc(ePerfWriteNewMem);
       s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
@@ -1670,6 +1685,9 @@ Status DB::Open(const Options& options, const std::string& dbname,
   } else {
     delete impl;
   }
+
+  gPerfCounters->Inc(ePerfApiOpen);
+
   return s;
 }
 

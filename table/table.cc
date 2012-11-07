@@ -137,6 +137,7 @@ void Table::ReadMeta(const Footer& footer) {
           if (iter->Valid() && iter->key() == Slice(key))
           {
               ReadFilter(iter->value(), policy);
+              gPerfCounters->Inc(ePerfBlockFilterRead);
               found=true;
           }   // if
       }   //if
@@ -251,8 +252,10 @@ Iterator* Table::BlockReader(void* arg,
       cache_handle = block_cache->Lookup(key);
       if (cache_handle != NULL) {
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
+        gPerfCounters->Inc(ePerfBlockCached);
       } else {
         s = ReadBlock(table->rep_->file, options, handle, &contents);
+        gPerfCounters->Inc(ePerfBlockRead);
         if (s.ok()) {
           block = new Block(contents);
           if (contents.cachable && options.fill_cache) {
@@ -305,6 +308,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
         handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
+        gPerfCounters->Inc(ePerfBlockFiltered);
     } else {
       Slice handle = iiter->value();
       Iterator* block_iter = BlockReader(this, options, iiter->value());
@@ -312,6 +316,8 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       if (block_iter->Valid()) {
         bool match;
         match=(*saver)(arg, block_iter->key(), block_iter->value());
+        if (!match && NULL!=filter)
+            gPerfCounters->Inc(ePerfBlockFilterFalse);
       }
 
       s = block_iter->status();

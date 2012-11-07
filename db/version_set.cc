@@ -17,6 +17,7 @@
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/logging.h"
+#include "leveldb/perf_count.h"
 
 namespace leveldb {
 
@@ -356,6 +357,9 @@ Status Version::Get(const ReadOptions& options,
         }
       }
     }
+
+    if (0!=num_files)
+        gPerfCounters->Inc(ePerfSearchLevel0 + level);
 
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != NULL && stats->seek_file == NULL) {

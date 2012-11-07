@@ -5,6 +5,7 @@
 #include "table/format.h"
 
 #include "leveldb/env.h"
+#include "leveldb/perf_count.h"
 #include "port/port.h"
 #include "table/block.h"
 #include "util/coding.h"
@@ -167,6 +168,8 @@ Status ReadBlock(RandomAccessFile* file,
   // clean up error and decide what to do with it
   if (!s.ok())
   {
+      gPerfCounters->Inc(ePerfReadBlockError);
+
       if (options.IsCompaction() && 0!=options.GetDBName().length())
       {
           // this process is slow.  assumption is that it does not happen often.
