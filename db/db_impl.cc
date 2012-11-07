@@ -1709,6 +1709,28 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
   if (result.ok()) {
     uint64_t number;
     FileType type;
+
+    // prune the table file directories
+    for (int level=0; level<config::kNumLevels; ++level)
+    {
+        std::string dirname;
+
+        filenames.clear();
+        dirname=MakeDirName2(dbname, level, "sst");
+        env->GetChildren(dirname, &filenames); // Ignoring errors on purpose
+        for (size_t i = 0; i < filenames.size(); i++) {
+            if (ParseFileName(filenames[i], &number, &type)) {
+                Status del = env->DeleteFile(dirname + "/" + filenames[i]);
+                if (result.ok() && !del.ok()) {
+                    result = del;
+                }   // if
+            }   // if
+        }   // for
+        env->DeleteDir(dirname);
+    }   // for
+
+    filenames.clear();
+    env->GetChildren(dbname, &filenames);
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) &&
           type != kDBLockFile) {  // Lock file will be deleted at end
