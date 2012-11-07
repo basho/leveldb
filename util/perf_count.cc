@@ -22,16 +22,31 @@
 
 #include <limits.h>
 #include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 #ifndef STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
 #include "leveldb/perf_count.h"
 #endif
 
 #include "util/coding.h"
-#include "util/crc32c.h"
+
+#ifdef OS_SOLARIS
+#  include <atomic.h>
+#endif
+
 
 namespace leveldb
 {
+
+// always have something active in gPerfCounters, eliminates
+//  need to test for "is shared object attached yet"
+static PerformanceCounters LocalStartupCounters;
+PerformanceCounters * gPerfCounters(&LocalStartupCounters);
+
 
     SstCounters::SstCounters()
         : m_IsReadOnly(false),
@@ -174,119 +189,213 @@ namespace leveldb
 
     }   // SstCounters::Dump
 
-    void
-    PerformanceCounters::Init()
+
+    // only used for local static objects, not shared memory objects
+    PerformanceCounters::PerformanceCounters()
     {
-        m_StructSize=sizeof(PerformanceCounters);
-        m_Version=eVersion;
-        m_ROFileOpen=0;
-        m_ROFileClose=0;
-        m_ROFileUnmap=0;
+        m_Version=ePerfVersion;
+        m_CounterSize=ePerfCountEnumSize;
+        // cast away "volatile"
+        memset((void*)m_Counter, 0, sizeof(m_Counter));
 
-        m_RWFileOpen=0;
-        m_RWFileClose=0;
-        m_RWFileUnmap=0;
+        return;
 
-        m_ApiOpen=0;
-        m_ApiGet=0;
-        m_ApiWrite=0;
+    }   // PerformanceCounters::PerformanceCounters
 
-        m_WriteSleep=0;
-        m_WriteWaitImm=0;
-        m_WriteWaitLevel0=0;
-        m_WriteNewMem=0;
-        m_WriteError=0;
-        m_WriteNoWait=0;
+    PerformanceCounters *
+    PerformanceCounters::Init(
+        bool IsReadOnly)
+    {
+        int ret_val;
+        PerformanceCounters * ret_ptr;
 
-        m_GetMem=0;
-        m_GetImm=0;
-        m_GetVersion=0;
+        ret_ptr=NULL;
 
-        m_SearchLevel[0]=0;
-        m_SearchLevel[1]=0;
-        m_SearchLevel[2]=0;
-        m_SearchLevel[3]=0;
-        m_SearchLevel[4]=0;
-        m_SearchLevel[5]=0;
-        m_SearchLevel[6]=0;
+        // attempt to attach/create to shared memory instance
+        m_PerfSharedId=shmget(ePerfKey, sizeof(PerformanceCounters), IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if (-1!=m_PerfSharedId)
+        {
+            ret_ptr=(PerformanceCounters *)shmat(m_PerfSharedId, NULL, (IsReadOnly ? SHM_RDONLY : 0));
+            if ((void*)-1 != ret_ptr)
+            {
+                // initialize?
+                if (0==ret_ptr->m_Version || ePerfCountEnumSize!=ret_ptr->m_CounterSize)
+                {
+                    if (!IsReadOnly)
+                    {
+                        memset(ret_ptr, 0, sizeof(PerformanceCounters));
+                        ret_ptr->m_Version=ePerfVersion;
+                        ret_ptr->m_CounterSize=ePerfCountEnumSize;
+                    }   // if
 
-        m_TableCached=0;
-        m_TableOpened=0;
-        m_TableGet=0;
+                    // bad version match to existing segment
+                    else
+                    {
+                        ret_ptr=(PerformanceCounters *)-1;
+                        errno=EINVAL;
+                    }   // else
+                }   // if
+            }   // if
 
-        m_BGCloseUnmap=0;
-        m_BGCompactImm=0;
-        m_BGNormal=0;
+            if ((void*)-1 != ret_ptr)
+            {
+                // make this available process wide
+                gPerfCounters=ret_ptr;
+            }   // if
+            else
+            {
+                ret_ptr=NULL;
+                m_LastError=errno;
+            }   // else
+        }   // if
+        else
+        {
+            m_LastError=errno;
+            ret_ptr=NULL;
+        }   // else
 
-        m_BlockFiltered=0;
-        m_BlockFilterFalse=0;
-        m_BlockCached=0;
-        m_BlockRead=0;
-        m_BlockFilterRead=0;
-        m_BlockValidGet=0;
+        return(ret_ptr);
 
-        m_Debug[0]=0;
-        m_Debug[1]=0;
-        m_Debug[2]=0;
-        m_Debug[3]=0;
-        m_Debug[4]=0;
     };  // PerformanceCounters::Init
+
+
+    uint64_t
+    PerformanceCounters::Inc(
+        unsigned Index)
+    {
+        uint64_t ret_val;
+
+        ret_val=0;
+        if (Index<m_CounterSize)
+        {
+            volatile uint64_t * val_ptr;
+
+            val_ptr=&m_Counter[Index];
+
+#ifdef OS_SOLARIS
+            atomic_add_int(val_ptr, 1);
+#else
+            __sync_add_and_fetch(val_ptr, 1);
+#endif
+            ret_val=*val_ptr;
+        }   // if
+
+        return(ret_val);
+    }   // PerformanceCounters::Inc
+
+
+    uint64_t
+    PerformanceCounters::Value(
+        unsigned Index) const
+    {
+        uint64_t ret_val;
+
+        ret_val=0;
+        if (Index<m_CounterSize)
+        {
+            ret_val=m_Counter[Index];
+        }   // if
+
+        return(ret_val);
+    }   // SstCounters::Value
+
+
+    volatile const uint64_t *
+    PerformanceCounters::GetPtr(
+        unsigned Index) const
+    {
+        const volatile uint64_t * ret_ptr;
+
+        if (Index<m_CounterSize)
+            ret_ptr=&m_Counter[Index];
+        else
+            ret_ptr=&m_BogusCounter;
+
+        return(ret_ptr);
+
+    }   // PerformanceCounters::GetPtr
+
+
+    const char *
+    PerformanceCounters::GetNamePtr(
+        unsigned Index)
+    {
+        const char * ret_ptr;
+
+        if (Index<ePerfCountEnumSize)
+            ret_ptr=m_PerfCounterNames[Index];
+        else
+            ret_ptr="???";
+
+        return(ret_ptr);
+
+    }   // PerformanceCounters::GetPtr
+
+
+    int PerformanceCounters::m_PerfSharedId=-1;
+    int PerformanceCounters::m_LastError=0;
+    volatile uint64_t PerformanceCounters::m_BogusCounter=0;
+    const char * PerformanceCounters::m_PerfCounterNames[]=
+    {
+        "ROFileOpen",
+        "ROFileClose",
+        "ROFileUnmap",
+        "RWFileOpen",
+        "RWFileClose",
+        "RWFileUnmap",
+        "ApiOpen",
+        "ApiGet",
+        "ApiWrite",
+        "WriteSleep",
+        "WriteWaitImm",
+        "WriteWaitLevel0",
+        "WriteNewMem",
+        "WriteError",
+        "WriteNoWait",
+        "GetMem",
+        "GetImm",
+        "GetVersion",
+        "SearchLevel[0]",
+        "SearchLevel[1]",
+        "SearchLevel[2]",
+        "SearchLevel[3]",
+        "SearchLevel[4]",
+        "SearchLevel[5]",
+        "SearchLevel[6]",
+        "TableCached",
+        "TableOpened",
+        "TableGet",
+        "BGCloseUnmap",
+        "BGCompactImm",
+        "BGNormal",
+        "BGCompactLevel0",
+        "BlockFiltered",
+        "BlockFilterFalse",
+        "BlockCached",
+        "BlockRead",
+        "BlockFilterRead",
+        "BlockValidGet",
+        "Debug[0]",
+        "Debug[1]",
+        "Debug[2]",
+        "Debug[3]",
+        "Debug[4]",
+        "ReadBlockError"
+    };
 
 
     void
     PerformanceCounters::Dump()
     {
-        printf(" m_StructSize: %u\n", m_StructSize);
+        int loop;
+
         printf(" m_Version: %u\n", m_Version);
+        printf(" m_CounterSize: %u\n", m_CounterSize);
 
-        printf(" m_ROFileOpen: %llu\n", m_ROFileOpen);
-        printf(" m_ROFileClose: %llu\n", m_ROFileClose);
-        printf(" m_ROFileUnmap: %llu\n", m_ROFileUnmap);
-
-        printf(" m_ApiOpen: %llu\n", m_ApiOpen);
-        printf(" m_ApiGet: %llu\n", m_ApiGet);
-        printf(" m_ApiWrite: %llu\n", m_ApiWrite);
-
-        printf(" m_WriteSleep: %llu\n", m_WriteSleep);
-        printf(" m_WriteWaitImm: %llu\n", m_WriteWaitImm);
-        printf(" m_WriteWaitLevel0: %llu\n", m_WriteWaitLevel0);
-        printf(" m_WriteNewMem: %llu\n", m_WriteNewMem);
-        printf(" m_WriteError: %llu\n", m_WriteError);
-        printf(" m_WriteNoWait: %llu\n", m_WriteNoWait);
-
-        printf(" m_GetMem: %llu\n", m_GetMem);
-        printf(" m_GetImm: %llu\n", m_GetImm);
-        printf(" m_GetVersion: %llu\n", m_GetVersion);
-
-        printf(" m_SearchLevel[0]: %llu\n", m_SearchLevel[0]);
-        printf(" m_SearchLevel[1]: %llu\n", m_SearchLevel[1]);
-        printf(" m_SearchLevel[2]: %llu\n", m_SearchLevel[2]);
-        printf(" m_SearchLevel[3]: %llu\n", m_SearchLevel[3]);
-        printf(" m_SearchLevel[4]: %llu\n", m_SearchLevel[4]);
-        printf(" m_SearchLevel[5]: %llu\n", m_SearchLevel[5]);
-        printf(" m_SearchLevel[6]: %llu\n", m_SearchLevel[6]);
-
-        printf(" m_TableCached: %llu\n", m_TableCached);
-        printf(" m_TableOpened: %llu\n", m_TableOpened);
-        printf(" m_TableGet: %llu\n", m_TableGet);
-
-        printf(" m_BGCloseUnmap: %llu\n", m_BGCloseUnmap);
-        printf(" m_BGCompactImm: %llu\n", m_BGCompactImm);
-        printf(" m_BGNormal: %llu\n", m_BGNormal);
-
-        printf(" m_BlockFiltered: %llu\n", m_BlockFiltered);
-        printf(" m_BlockFilterFalse: %llu\n", m_BlockFilterFalse);
-        printf(" m_BlockCached: %llu\n", m_BlockCached);
-        printf(" m_BlockRead: %llu\n", m_BlockRead);
-        printf(" m_BlockFilterRead: %llu\n", m_BlockFilterRead);
-        printf(" m_BlockValidGet: %llu\n", m_BlockValidGet);
-
-        printf(" m_Debug[0]: %llu\n", m_Debug[0]);
-        printf(" m_Debug[1]: %llu\n", m_Debug[1]);
-        printf(" m_Debug[2]: %llu\n", m_Debug[2]);
-        printf(" m_Debug[3]: %llu\n", m_Debug[3]);
-        printf(" m_Debug[4]: %llu\n", m_Debug[4]);
+        for (loop=0; loop<ePerfCountEnumSize; ++loop)
+        {
+            printf("  %s: %llu\n", m_PerfCounterNames[loop], m_Counter[loop]);
+        }   // loop
     };  // Dump
-
 
 }  // namespace leveldb
