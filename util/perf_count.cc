@@ -379,7 +379,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "Debug[1]",
         "Debug[2]",
         "Debug[3]",
-        "Debug[4]"
+        "Debug[4]",
         "ReadBlockError"
     };
 
