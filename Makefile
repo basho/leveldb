@@ -159,6 +159,9 @@ log_test: db/log_test.o $(LIBOBJECTS) $(TESTHARNESS)
 table_test: table/table_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) table/table_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
+perf_dump: tools/perf_dump.o $(LIBOBJECTS)
+	$(CXX) tools/perf_dump.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
+
 skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
