@@ -356,6 +356,7 @@ HardCRC(
     const char * BlockStart,
     size_t BlockSize)
 {
+#if defined(__x86_64__)
     size_t fullqwords, remainder;
     uint32_t ret_crc;
     char * src_c;
@@ -385,6 +386,9 @@ HardCRC(
     }   // for
 
     return(ret_crc ^ 0xffffffffu);
+#else
+    return(0);
+#endif
 
 }   // HardCRC
 

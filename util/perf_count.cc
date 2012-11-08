@@ -273,7 +273,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
             val_ptr=&m_Counter[Index];
 
 #ifdef OS_SOLARIS
-            atomic_add_int(val_ptr, 1);
+            atomic_add_64(val_ptr, 1);
 #else
             __sync_add_and_fetch(val_ptr, 1);
 #endif
