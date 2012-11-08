@@ -384,6 +384,26 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     };
 
 
+    int
+    PerformanceCounters::LookupCounter(
+        const char * Name)
+    {
+        int index,loop;
+
+        index=-1;
+
+        if (NULL!=Name && '\0'!=*Name)
+        {
+            for (loop=0; loop<ePerfCountEnumSize && -1==index; ++loop)
+            {
+                if (0==strcmp(m_PerfCounterNames[loop], Name))
+                    index=loop;
+            }   // loop
+        }   // if
+
+        return(index);
+    };
+
     void
     PerformanceCounters::Dump()
     {
