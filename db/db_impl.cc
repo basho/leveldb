@@ -1607,6 +1607,15 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   } else if (in == "sstables") {
     *value = versions_->current()->DebugString();
     return true;
+  } else if (-1!=gPerfCounters->LookupCounter(in.ToString().c_str())) {
+
+      char buf[66];
+      int index;
+
+      index=gPerfCounters->LookupCounter(in.ToString().c_str());
+      snprintf(buf, sizeof(buf), "%llu", gPerfCounters->Value(index));
+      value->append(buf);
+      return(true);
   }
 
   return false;
