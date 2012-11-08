@@ -207,6 +207,8 @@ public:
 
     static const char * GetNamePtr(unsigned Index);
 
+    int LookupCounter(const char * Name);
+
     void Dump();
 
 };  // struct PerformanceCounters
