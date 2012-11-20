@@ -724,7 +724,9 @@ PosixEnv::Schedule(
 
     // If the queue is currently empty, the background thread may currently be
     // waiting.
-    if (queue_.empty() || queue2_.empty() || queue3_.empty() || queue4_.empty()) {
+// 11/20/12 - have seen background threads stuck with full queues and threads waiting
+//    if (queue_.empty() || queue2_.empty() || queue3_.empty() || queue4_.empty())
+    {
         PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
     }
 
