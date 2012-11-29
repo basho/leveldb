@@ -30,9 +30,6 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
-#include <syslog.h>
-#include "leveldb/perf_count.h"
-
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -564,7 +561,7 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false);
+  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false, int priority=0);
 
   virtual void StartThread(void (*function)(void* arg), void* arg);
 
@@ -631,6 +628,28 @@ class PosixEnv : public Env {
 
   virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
 
+  virtual void SetWriteRate(uint64_t Rate)
+  {
+      // precaution against bad timers, failing drives, and floppy disks
+      if (Rate < 0xFFFFF)
+      {
+          PthreadCall("lock", pthread_mutex_lock(&mu_));
+
+          // scale up slowly ... small key counts cause big jumps
+          if (write_rate_usec_ < Rate)
+              write_rate_usec_+=(Rate - write_rate_usec_)/7;
+
+          // scale down to a lower rate slowly
+          else
+              write_rate_usec_-=(write_rate_usec_ - Rate)/7;
+
+          PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+      }   // if
+
+      return;
+  };
+
+  virtual uint64_t GetWriteRate() const {return(write_rate_usec_);};
 
  private:
   void PthreadCall(const char* label, int result) {
@@ -647,6 +666,7 @@ class PosixEnv : public Env {
     return NULL;
   }
 
+
   size_t page_size_;
   pthread_mutex_t mu_;
   pthread_cond_t bgsignal_;
@@ -656,22 +676,27 @@ class PosixEnv : public Env {
   pthread_t bgthread4_;    // imm_ to level 0 compactions
   bool started_bgthread_;
   volatile int bg_backlog_;// count of items on 3 compaction queues
+  volatile int bg_active_; // count of threads actually working compaction
   int64_t clock_res_;
 
   // Entry per Schedule() call
-  struct BGItem { void* arg; void (*function)(void*); };
+  struct BGItem { void* arg; void (*function)(void*); int priority;};
   typedef std::deque<BGItem> BGQueue;
   BGQueue queue_;     //normal compactions
   BGQueue queue2_;    // level 0 to level 1 compactions
   BGQueue queue3_;    //background unmap / close
   BGQueue queue4_;    // imm_ to level 0 compactions
 
+  void InsertQueue2(struct PosixEnv::BGItem & item);
+
+  volatile uint64_t write_rate_usec_; // recently experienced average time to
+                                      // write one key during background compaction
 };
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
                        started_bgthread_(false),
-                       bg_backlog_(0),
-                       clock_res_(1)
+                       bg_backlog_(0), bg_active_(0),
+                       clock_res_(1), write_rate_usec_(0)
 {
   struct timespec ts;
 
@@ -692,7 +717,8 @@ PosixEnv::Schedule(
     void (*function)(void*),
     void* arg,
     int state,
-    bool imm_flag)
+    bool imm_flag,
+    int priority)
 {
     PthreadCall("lock", pthread_mutex_lock(&mu_));
 
@@ -768,9 +794,9 @@ PosixEnv::Schedule(
                     }   // if
                     else
                     {
-                        queue2_.push_back(BGItem());
-                        queue2_.back().function = function;
-                        queue2_.back().arg = arg;
+                        BGItem item={arg, function, priority};
+
+                        InsertQueue2(item);
                     }   // else
                 }   // if
             }   // for
@@ -808,9 +834,9 @@ PosixEnv::Schedule(
             }   // if
             else
             {
-                queue2_.push_back(BGItem());
-                queue2_.back().function = function;
-                queue2_.back().arg = arg;
+                BGItem item={arg, function, priority};
+
+                InsertQueue2(item);
             }   // else
         }   // else
     }   // if
@@ -822,10 +848,40 @@ PosixEnv::Schedule(
         queue_.back().arg = arg;
     }   // else
 
-    bg_backlog_=queue4_.size()+queue2_.size()*2+queue_.size()*2;
+    bg_backlog_=queue4_.size()+queue2_.size()*2+queue_.size()*2+bg_active_;
 
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 }
+
+
+/**
+ * Poor man's std::priority_queue.  Said container appeared to not
+ * support direct access to underlying type ... which is needed.
+ */
+void
+PosixEnv::InsertQueue2(
+    PosixEnv::BGItem & item)
+{
+    BGQueue::iterator it;
+    bool looking;
+
+    // this is slow and painful with deque as underlying container
+    for (it=queue2_.begin(), looking=true; queue2_.end()!=it && looking; ++it)
+    {
+        if (it->priority<item.priority)
+        {
+            looking=false;
+            queue2_.insert(it, item);
+        }   // if
+    }   // for
+
+    if (looking)
+        queue2_.push_back(item);
+
+    return;
+
+}   // Posix::InsertQueue2
+
 
 void PosixEnv::BGThread()
 {
@@ -845,6 +901,16 @@ void PosixEnv::BGThread()
     {
         // Wait until there is an item that is ready to run
         PthreadCall("lock", pthread_mutex_lock(&mu_));
+
+        // ignore bg_active_ first time through loop (and if somehow corrupted)
+        if (0<bg_active_)
+        {
+            --bg_active_;
+            bg_backlog_=queue4_.size()+queue2_.size()*2+queue_.size()*2+bg_active_;
+        }   // if
+        else
+            bg_active_=0;
+
         while (queue_ptr->empty()) {
             PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
         }
@@ -852,7 +918,9 @@ void PosixEnv::BGThread()
         void (*function)(void*) = queue_ptr->front().function;
         void* arg = queue_ptr->front().arg;
         queue_ptr->pop_front();
-        bg_backlog_=queue4_.size()+queue2_.size()+queue_.size();
+
+        ++bg_active_;
+        bg_backlog_=queue4_.size()+queue2_.size()*2+queue_.size()*2+bg_active_;
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 

@@ -37,6 +37,7 @@
 #include "util/mutexlock.h"
 #include "leveldb/perf_count.h"
 
+
 namespace leveldb {
 
 // Information kept for every waiting writer
@@ -607,8 +608,11 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   if (0!=meta.num_entries && s.ok())
   {
+      // This SetWriteRate() call removed because this thread
+      //  has priority (others blocked on mutex) and thus created
+      //  misleading estimates of disk write speed
       // 2x since mem to disk, not disk to disk
-      versions_->SetWriteRate(2*stats.micros/meta.num_entries);
+      //      env_->SetWriteRate(2*stats.micros/meta.num_entries);
   }   // if
 
   return s;
@@ -718,11 +722,12 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  int state;
+  int state, priority;
   bool push;
 
   // decide which background thread gets the compaction job
   state=0;
+  priority=0;
   push=false;
 
   // writing of memory to disk: high priority
@@ -739,7 +744,10 @@ void DBImpl::MaybeScheduleCompaction() {
 
       // compaction of level 0 files:  high priority
       if (NULL!=c_ptr && c_ptr->level()==0)
+      {
           push=true;
+          priority=versions_->NumLevelFiles(0);
+      }   // if
       delete c_ptr;
   }   // if
 
@@ -763,7 +771,7 @@ void DBImpl::MaybeScheduleCompaction() {
     // No work to be done
   } else {
     bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_));
+    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_), priority);
   }
 }
 
@@ -1014,8 +1022,6 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
-  const uint64_t start_micros = env_->NowMicros();
-  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
   Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
       compact->compaction->num_input_files(0),
@@ -1037,6 +1043,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (0 == compact->compaction->level())
       pthread_rwlock_rdlock(&gThreadLock1);
+
+  const uint64_t start_micros = env_->NowMicros();
+  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
@@ -1078,6 +1087,16 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
       compact->current_output()->largest.DecodeFrom(key);
       compact->builder->Add(key, input->value());
+
+      // update throttle ... now, end of compaction may be too late
+      //   but not too often since NowMicros can be costly
+      size_t entry_count;
+      entry_count=compact->num_entries + compact->builder->NumEntries();
+
+      // imm_micros intentional NOT removed from time calculation,
+      //  gives better measure of overall activity / write overhead
+      if (1==(entry_count % 1000) && 1000<entry_count)
+          env_->SetWriteRate((env_->NowMicros() - start_micros)/entry_count);
 
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
@@ -1122,8 +1141,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   stats_[compact->compaction->level() + 1].Add(stats);
 
   if (status.ok()) {
+    // imm_micros intentional NOT removed from time calculation,
+    //  gives better measure of overall activity / write overhead
     if (0!=compact->num_entries)
-      versions_->SetWriteRate(stats.micros/compact->num_entries);
+        env_->SetWriteRate(env_->NowMicros() - start_micros/compact->num_entries);
     status = InstallCompactionResults(compact);
   }
   VersionSet::LevelSummaryStorage tmp;
@@ -1479,7 +1500,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   Status s;
   int throttle;
 
-  throttle=versions_->WriteThrottleUsec();
+  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
   if (0!=throttle)
   {
       mutex_.Unlock();
@@ -1519,14 +1540,14 @@ Status DBImpl::MakeRoomForWrite(bool force) {
     } else if (imm_ != NULL) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
-      Log(options_.info_log, "waiting 2...\n");
+      Log(options_.info_log, "waiting 2... %d\n", throttle);
       gPerfCounters->Inc(ePerfWriteWaitImm);
       MaybeScheduleCompaction();
       bg_cv_.Wait();
       Log(options_.info_log, "running 2...\n");
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
-      Log(options_.info_log, "waiting...\n");
+        Log(options_.info_log, "waiting...%d\n", throttle);
       gPerfCounters->Inc(ePerfWriteWaitLevel0);
       bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
