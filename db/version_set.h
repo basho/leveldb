@@ -217,13 +217,13 @@ class VersionSet {
 
   int WriteThrottleUsec(bool active_compaction)
   {
-      int penalty=current_->write_penalty_;
+      // background throttle in hundredths
+      uint64_t penalty=current_->write_penalty_ * 100;
       penalty+=env_->GetBackgroundBacklog();
       if (active_compaction)
-          ++penalty;
+          penalty+=100;
 
-      penalty*=3; // matthewv - 112812 trying to counter async NIF
-      return((int)(penalty * env_->GetWriteRate()));
+      return((int)env_->SmoothWriteRate((penalty * env_->GetWriteRate()))/100);
   }
 
 

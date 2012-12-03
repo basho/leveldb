@@ -1041,7 +1041,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  if (0 == compact->compaction->level())
+  bool is_level0_compaction=(0 == compact->compaction->level());
+
+  if (is_level0_compaction)
       pthread_rwlock_rdlock(&gThreadLock1);
 
   const uint64_t start_micros = env_->NowMicros();
@@ -1060,7 +1062,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
     // Prioritize immutable compaction work
-    imm_micros+=PrioritizeWork(0==compact->compaction->level());
+    imm_micros+=PrioritizeWork(is_level0_compaction);
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&
@@ -1096,7 +1098,21 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       // imm_micros intentional NOT removed from time calculation,
       //  gives better measure of overall activity / write overhead
       if (1==(entry_count % 1000) && 1000<entry_count)
+      {
           env_->SetWriteRate((env_->NowMicros() - start_micros)/entry_count);
+
+          // test for priority change
+          if (!is_level0_compaction)
+          {
+              // raise this compaction's priority if it is blocking a
+              //  dire compaction of level 0 files
+              if (config::kL0_SlowdownWritesTrigger < versions_->current()->NumFiles(0))
+              {
+                  pthread_rwlock_rdlock(&gThreadLock1);
+                  is_level0_compaction=true;
+              }   // if
+          }   // if
+      }   // if
 
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
@@ -1134,7 +1150,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
 
-  if (0 == compact->compaction->level())
+  if (is_level0_compaction)
       pthread_rwlock_unlock(&gThreadLock1);
 
   mutex_.Lock();
