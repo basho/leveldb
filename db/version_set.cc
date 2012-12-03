@@ -975,7 +975,10 @@ void VersionSet::Finalize(Version* v) {
 
       // don't screw around ... get data written to disk!
       if (config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
+      {
           score*=1000000.0;
+          penalty+=v->files_[level].size() - config::kL0_SlowdownWritesTrigger +1;
+      }   // if
 
       // compute penalty for write throttle if too many Level-0 files accumulating
       if (config::kL0_CompactionTrigger <= v->files_[level].size())

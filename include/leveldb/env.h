@@ -136,7 +136,8 @@ class Env {
       void (*function)(void* arg),
       void* arg,
       int state=0,
-      bool imm_flag=false) = 0;
+      bool imm_flag=false,
+      int priority=0) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
@@ -159,7 +160,19 @@ class Env {
   virtual void SleepForMicroseconds(int micros) = 0;
 
   // Where supported, give count of background jobs pending.
-  virtual int GetBackgroundBacklog() const {return(0);};
+  //  UNIT is HUNDREDTHS
+  virtual uint32_t GetBackgroundBacklog() const {return(0);};
+
+  // Riak specific call.  Rate is microseconds spent writing
+  // one key.  Usually the average time of many (like 1,000).
+  // Set during background compaction, but not Level-0 write.
+  virtual void SetWriteRate(uint64_t Rate) {};
+
+  virtual uint64_t SmoothWriteRate(uint64_t Rate) {return(Rate);};
+
+  // Riak specific call.  Return the current "smoothed"
+  // microseconds spent writing a key.
+  virtual uint64_t GetWriteRate() const {return(0);};
 
  private:
   // No copying allowed

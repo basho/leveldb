@@ -30,9 +30,6 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
-#include <syslog.h>
-#include "leveldb/perf_count.h"
-
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -41,6 +38,46 @@ namespace leveldb {
 
 pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
+pthread_mutex_t gThrottleMutex;
+uint64_t gThrottleSum[4];
+uint64_t gThrottleCount[4];
+uint64_t gThrottleSumPre;
+uint64_t gThrottleCountPre;
+
+static void *
+ThrottleThread(
+void * arg)
+{
+    Env * env;
+
+    env=(Env *)arg;
+
+    while(1)
+    {
+        // sleep 5 minutes
+        env->SleepForMicroseconds(5*60*1000000);
+
+        pthread_mutex_lock(&gThrottleMutex);
+        gThrottleSum[3]=gThrottleSum[2]/2;
+        gThrottleCount[3]=gThrottleCount[2]/2;
+
+        gThrottleSum[2]=gThrottleSum[1]/2;
+        gThrottleCount[2]=gThrottleCount[1]/2;
+
+        gThrottleSum[1]=gThrottleSum[0]/2;
+        gThrottleCount[1]=gThrottleCount[0]/2;
+
+        gThrottleSum[0]=0;
+        gThrottleCount[0]=0;
+
+        gThrottleSumPre=gThrottleSum[3]+gThrottleSum[2]+gThrottleSum[1];
+        gThrottleCountPre=gThrottleCount[3]+gThrottleCount[2]+gThrottleCount[1];
+        pthread_mutex_unlock(&gThrottleMutex);
+
+    }   // while
+}   // ThrottleThread
+
+
 
 
 namespace {
@@ -564,7 +601,7 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false);
+  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false, int priority=0);
 
   virtual void StartThread(void (*function)(void* arg), void* arg);
 
@@ -629,8 +666,62 @@ class PosixEnv : public Env {
   }  // SleepForMicroSeconds
 
 
-  virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
+  virtual uint32_t GetBackgroundBacklog() const {return(bg_backlog_);};
 
+  virtual void SetWriteRate(uint64_t Rate)
+  {
+      // precaution against bad timers, failing drives, and floppy disks
+      if (Rate < 0xFFFFF)
+      {
+          PthreadCall("lock", pthread_mutex_lock(&mu_));
+
+          // scale up slowly ... small key counts cause big jumps
+          if (write_rate_usec_ < Rate)
+              write_rate_usec_+=(Rate - write_rate_usec_)/10;
+
+          // scale down to a lower rate slowly
+          else
+              write_rate_usec_-=(write_rate_usec_ - Rate)/11;
+
+          PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+      }   // if
+
+      return;
+  };
+
+  virtual uint64_t GetWriteRate() const {return(write_rate_usec_);};
+
+  virtual uint64_t SmoothWriteRate(uint64_t Rate)
+  {
+      uint64_t ret_val;
+
+      PthreadCall("lock", pthread_mutex_lock(&gThrottleMutex));
+
+      // precaution against bad timers, failing drives, and floppy disks
+      if (Rate < 0xFFFFF && 0 != Rate)
+      {
+#if 0
+          // scale up slowly ... averaging entire system
+          if (gThrottleSum < Rate)
+              gThrottleSum+=(Rate - gThrottleSum)/101;
+
+          // scale down to a lower rate slowly
+          else
+              gThrottleSum-=(gThrottleSum - Rate)/101;
+#else
+          gThrottleSum[0]+=Rate;
+          ++gThrottleCount[0];
+#endif
+      }   // if
+
+      ret_val=(0!=(gThrottleCountPre+gThrottleCount[0]
+                  ? (gThrottleSumPre+gThrottleSum[0])/(gThrottleCountPre+gThrottleCount[0])
+                  : 0));
+
+      PthreadCall("unlock", pthread_mutex_unlock(&gThrottleMutex));
+
+      return(ret_val);
+  };
 
  private:
   void PthreadCall(const char* label, int result) {
@@ -647,6 +738,7 @@ class PosixEnv : public Env {
     return NULL;
   }
 
+
   size_t page_size_;
   pthread_mutex_t mu_;
   pthread_cond_t bgsignal_;
@@ -655,23 +747,50 @@ class PosixEnv : public Env {
   pthread_t bgthread3_;    // background unmap / close
   pthread_t bgthread4_;    // imm_ to level 0 compactions
   bool started_bgthread_;
-  volatile int bg_backlog_;// count of items on 3 compaction queues
+  volatile uint32_t bg_backlog_;// count of items on 3 compaction queues
+  volatile int bg_active_; // count of threads actually working compaction
   int64_t clock_res_;
 
   // Entry per Schedule() call
-  struct BGItem { void* arg; void (*function)(void*); };
+  struct BGItem { void* arg; void (*function)(void*); int priority;};
   typedef std::deque<BGItem> BGQueue;
   BGQueue queue_;     //normal compactions
   BGQueue queue2_;    // level 0 to level 1 compactions
   BGQueue queue3_;    //background unmap / close
   BGQueue queue4_;    // imm_ to level 0 compactions
 
+  void InsertQueue2(struct PosixEnv::BGItem & item);
+
+  void SetBacklog()
+  {
+      uint32_t cur_backlog;
+
+      // mutex mu_ is assumed locked.
+      cur_backlog=queue4_.size()+queue2_.size()+queue_.size()+bg_active_;
+
+      // scale to hundredths to gain fractions within integer math
+      cur_backlog*=100;
+
+      // scale up moderately
+      if (bg_backlog_ < cur_backlog)
+              bg_backlog_+=(cur_backlog - bg_backlog_)/3;
+
+      // scale down slower than up
+      else
+          bg_backlog_-=(bg_backlog_ - cur_backlog)/5;
+
+      return;
+  };
+
+
+  volatile uint64_t write_rate_usec_; // recently experienced average time to
+                                      // write one key during background compaction
 };
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
                        started_bgthread_(false),
-                       bg_backlog_(0),
-                       clock_res_(1)
+                       bg_backlog_(0), bg_active_(0),
+                       clock_res_(1), write_rate_usec_(0)
 {
   struct timespec ts;
 
@@ -692,7 +811,8 @@ PosixEnv::Schedule(
     void (*function)(void*),
     void* arg,
     int state,
-    bool imm_flag)
+    bool imm_flag,
+    int priority)
 {
     PthreadCall("lock", pthread_mutex_lock(&mu_));
 
@@ -768,9 +888,9 @@ PosixEnv::Schedule(
                     }   // if
                     else
                     {
-                        queue2_.push_back(BGItem());
-                        queue2_.back().function = function;
-                        queue2_.back().arg = arg;
+                        BGItem item={arg, function, priority};
+
+                        InsertQueue2(item);
                     }   // else
                 }   // if
             }   // for
@@ -808,9 +928,9 @@ PosixEnv::Schedule(
             }   // if
             else
             {
-                queue2_.push_back(BGItem());
-                queue2_.back().function = function;
-                queue2_.back().arg = arg;
+                BGItem item={arg, function, priority};
+
+                InsertQueue2(item);
             }   // else
         }   // else
     }   // if
@@ -822,10 +942,40 @@ PosixEnv::Schedule(
         queue_.back().arg = arg;
     }   // else
 
-    bg_backlog_=queue4_.size()+queue2_.size()*2+queue_.size()*2;
+    SetBacklog();
 
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 }
+
+
+/**
+ * Poor man's std::priority_queue.  Said container appeared to not
+ * support direct access to underlying type ... which is needed.
+ */
+void
+PosixEnv::InsertQueue2(
+    PosixEnv::BGItem & item)
+{
+    BGQueue::iterator it;
+    bool looking;
+
+    // this is slow and painful with deque as underlying container
+    for (it=queue2_.begin(), looking=true; queue2_.end()!=it && looking; ++it)
+    {
+        if (it->priority<item.priority)
+        {
+            looking=false;
+            queue2_.insert(it, item);
+        }   // if
+    }   // for
+
+    if (looking)
+        queue2_.push_back(item);
+
+    return;
+
+}   // Posix::InsertQueue2
+
 
 void PosixEnv::BGThread()
 {
@@ -845,6 +995,16 @@ void PosixEnv::BGThread()
     {
         // Wait until there is an item that is ready to run
         PthreadCall("lock", pthread_mutex_lock(&mu_));
+
+        // ignore bg_active_ first time through loop (and if somehow corrupted)
+        if (0<bg_active_)
+        {
+            --bg_active_;
+            SetBacklog();
+        }   // if
+        else
+            bg_active_=0;
+
         while (queue_ptr->empty()) {
             PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
         }
@@ -852,7 +1012,9 @@ void PosixEnv::BGThread()
         void (*function)(void*) = queue_ptr->front().function;
         void* arg = queue_ptr->front().arg;
         queue_ptr->pop_front();
-        bg_backlog_=queue4_.size()+queue2_.size()+queue_.size();
+
+        ++bg_active_;
+        SetBacklog();
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
@@ -993,7 +1155,8 @@ static Env* default_env[THREAD_BLOCKS];
 static unsigned count=0;
 static void InitDefaultEnv()
 {
-    int loop, fd;
+    int loop;
+    pthread_t tid;
 
     for (loop=0; loop<THREAD_BLOCKS; ++loop)
     {
@@ -1002,6 +1165,16 @@ static void InitDefaultEnv()
 
     pthread_rwlock_init(&gThreadLock0, NULL);
     pthread_rwlock_init(&gThreadLock1, NULL);
+    pthread_mutex_init(&gThrottleMutex, NULL);
+
+    for (loop=0; loop<4; ++loop)
+    {
+        gThrottleSum[loop]=0;
+        gThrottleCount[loop]=0;
+    }   // for
+    gThrottleSumPre=0;
+    gThrottleCountPre=0;
+    pthread_create(&tid, NULL,  &ThrottleThread, default_env[0]);
 
     // force the loading of code for both filters in case they
     //  are hidden in a shared library

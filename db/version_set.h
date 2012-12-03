@@ -215,27 +215,15 @@ class VersionSet {
   // being compacted, or zero if there is no such log file.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
-
-  void SetWriteRate(uint64_t Rate)
+  int WriteThrottleUsec(bool active_compaction)
   {
-      // take higher rate immediately
-      if (write_rate_usec_ < Rate)
-          write_rate_usec_=Rate;
+      // background throttle in hundredths
+      uint64_t penalty=current_->write_penalty_ * 100;
+      penalty+=env_->GetBackgroundBacklog();
+      if (active_compaction)
+          penalty+=100;
 
-      // scale down to a lower rate slowly
-      else
-          write_rate_usec_-=(write_rate_usec_ - Rate)/7;
-
-      return;
-  };
-  int WriteThrottleUsec()
-  {
-      int ret_msec=0;
-      int penalty=current_->write_penalty_;
-      penalty+=options_->env->GetBackgroundBacklog();
-
-      // divide by 10 so penalty becomes range of 1.? instead of 1?
-      return((int)((0!=penalty) ? ((penalty)*write_rate_usec_) : 0));
+      return((int)env_->SmoothWriteRate((penalty * env_->GetWriteRate()))/100);
   }
 
 
