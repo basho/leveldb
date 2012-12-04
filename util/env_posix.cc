@@ -564,7 +564,7 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false);
+  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false, int priority=0);
 
   virtual void StartThread(void (*function)(void* arg), void* arg);
 
@@ -659,12 +659,14 @@ class PosixEnv : public Env {
   int64_t clock_res_;
 
   // Entry per Schedule() call
-  struct BGItem { void* arg; void (*function)(void*); };
+  struct BGItem { void* arg; void (*function)(void*); int priority;};
   typedef std::deque<BGItem> BGQueue;
   BGQueue queue_;     //normal compactions
   BGQueue queue2_;    // level 0 to level 1 compactions
   BGQueue queue3_;    //background unmap / close
   BGQueue queue4_;    // imm_ to level 0 compactions
+
+  void InsertQueue2(struct PosixEnv::BGItem & item);
 
 };
 
@@ -692,7 +694,8 @@ PosixEnv::Schedule(
     void (*function)(void*),
     void* arg,
     int state,
-    bool imm_flag)
+    bool imm_flag,
+    int priority)
 {
     PthreadCall("lock", pthread_mutex_lock(&mu_));
 
@@ -766,9 +769,9 @@ PosixEnv::Schedule(
                     }   // if
                     else
                     {
-                        queue2_.push_back(BGItem());
-                        queue2_.back().function = function;
-                        queue2_.back().arg = arg;
+                        BGItem item={arg, function, priority};
+
+                        InsertQueue2(item);
                     }   // else
                 }   // if
             }   // for
@@ -806,9 +809,9 @@ PosixEnv::Schedule(
             }   // if
             else
             {
-                queue2_.push_back(BGItem());
-                queue2_.back().function = function;
-                queue2_.back().arg = arg;
+                BGItem item={arg, function, priority};
+
+                InsertQueue2(item);
             }   // else
         }   // else
     }   // if
@@ -824,6 +827,35 @@ PosixEnv::Schedule(
 
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 }
+
+/**
+ * Poor man's std::priority_queue.  Said container appeared to not
+ * support direct access to underlying type ... which is needed.
+ */
+void
+PosixEnv::InsertQueue2(
+    PosixEnv::BGItem & item)
+{
+    BGQueue::iterator it;
+    bool looking;
+
+    // this is slow and painful with deque as underlying container
+    for (it=queue2_.begin(), looking=true; queue2_.end()!=it && looking; ++it)
+    {
+        if (it->priority<item.priority)
+        {
+            looking=false;
+            queue2_.insert(it, item);
+        }   // if
+    }   // for
+
+    if (looking)
+        queue2_.push_back(item);
+
+    return;
+
+}   // Posix::InsertQueue2
+
 
 void PosixEnv::BGThread()
 {

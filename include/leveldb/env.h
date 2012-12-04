@@ -136,7 +136,8 @@ class Env {
       void (*function)(void* arg),
       void* arg,
       int state=0,
-      bool imm_flag=false) = 0;
+      bool imm_flag=false,
+      int priority=0) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
