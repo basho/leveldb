@@ -718,11 +718,12 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  int state;
+  int state, priority;
   bool push;
 
   // decide which background thread gets the compaction job
   state=0;
+  priority=0;
   push=false;
 
   // writing of memory to disk: high priority
@@ -739,7 +740,10 @@ void DBImpl::MaybeScheduleCompaction() {
 
       // compaction of level 0 files:  high priority
       if (NULL!=c_ptr && c_ptr->level()==0)
+      {
           push=true;
+          priority=versions_->NumLevelFiles(0);
+      }   // if
       delete c_ptr;
   }   // if
 
@@ -763,7 +767,7 @@ void DBImpl::MaybeScheduleCompaction() {
     // No work to be done
   } else {
     bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_));
+    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_), priority);
   }
 }
 
