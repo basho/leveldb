@@ -831,6 +831,10 @@ void PosixEnv::BGThread()
 {
     BGQueue * queue_ptr;
 
+    // avoid race condition of whether or not all 4 thread creations
+    //  have completed AND set bgthreadX_ values
+    PthreadCall("lock", pthread_mutex_lock(&mu_));
+
     // pick source of thread's work
     if (bgthread4_==pthread_self())
         queue_ptr=&queue4_;
@@ -840,6 +844,7 @@ void PosixEnv::BGThread()
         queue_ptr=&queue2_;
     else
         queue_ptr=&queue_;
+    PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
     while (true)
     {
