@@ -231,7 +231,7 @@ static Iterator* GetFileIterator(void* arg,
     return cache->NewIterator(options,
                               DecodeFixed64(file_value.data()),
                               DecodeFixed64(file_value.data() + 8),
-                              DecodeFixed64(file_value.data() + 16));
+                              DecodeFixed32(file_value.data() + 16));
   }
 }
 
