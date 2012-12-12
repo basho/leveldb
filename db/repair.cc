@@ -280,7 +280,7 @@ class Repairer {
     meta.number = next_file_number_++;
     meta.level = 0;
     Iterator* iter = mem->NewIterator();
-    status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta, kMaxSequenceNumber);
+    status = BuildTable(dbname_, env_, options_, icmp_.user_comparator(), table_cache_, iter, &meta, 0);
     delete iter;
     mem->Unref();
     mem = NULL;

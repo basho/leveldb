@@ -328,8 +328,8 @@ class EnvWrapper : public Env {
     return target_->LockFile(f, l);
   }
   Status UnlockFile(FileLock* l) { return target_->UnlockFile(l); }
-  void Schedule(void (*f)(void*), void* a) {
-    return target_->Schedule(f, a);
+  void Schedule(void (*f)(void*), void* a, int state=0, bool imm=false, int priority=0) {
+      return target_->Schedule(f, a, state, imm, priority);
   }
   void StartThread(void (*f)(void*), void* a) {
     return target_->StartThread(f, a);

@@ -26,6 +26,7 @@ class VersionEdit;
 extern Status BuildTable(const std::string& dbname,
                          Env* env,
                          const Options& options,
+                         const Comparator * user_comparator,
                          TableCache* table_cache,
                          Iterator* iter,
                          FileMetaData* meta,

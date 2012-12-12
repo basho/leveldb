@@ -24,7 +24,8 @@ class BloomTest {
   std::vector<std::string> keys_;
 
  public:
-  BloomTest() : policy_(NewBloomFilterPolicy(10)) { }
+//  BloomTest() : policy_(NewBloomFilterPolicy(10)) { }
+  BloomTest() : policy_(NewBloomFilterPolicy2(16)) { }
 
   ~BloomTest() {
     delete policy_;
@@ -125,7 +126,8 @@ TEST(BloomTest, VaryingLengths) {
     }
     Build();
 
-    ASSERT_LE(FilterSize(), (length * 10 / 8) + 40) << length;
+//    ASSERT_LE(FilterSize(), (length * 10 / 8) + 40) << length;
+    ASSERT_LE(FilterSize(), (length * 16 / 8) + 40) << length;
 
     // All added keys must match
     for (int i = 0; i < length; i++) {
