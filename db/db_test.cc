@@ -264,6 +264,20 @@ class DBTest {
     return result;
   }
 
+  std::string GetNoCache(const std::string& k, const Snapshot* snapshot = NULL) {
+    ReadOptions options;
+    options.snapshot = snapshot;
+    options.fill_cache=false;
+    std::string result;
+    Status s = db_->Get(options, k, &result);
+    if (s.IsNotFound()) {
+      result = "NOT_FOUND";
+    } else if (!s.ok()) {
+      result = s.ToString();
+    }
+    return result;
+  }
+
   // Return a string that contains all key,value pairs in order,
   // formatted like "(k1->v1)(k2->v2)".
   std::string Contents() {
@@ -544,6 +558,9 @@ TEST(DBTest, GetPicksCorrectFile) {
   } while (ChangeOptions());
 }
 
+#if 0
+// riak does not execute compaction due to reads
+
 TEST(DBTest, GetEncountersEmptyLevel) {
   do {
     // Arrange for the following to happen:
@@ -582,6 +599,7 @@ TEST(DBTest, GetEncountersEmptyLevel) {
     ASSERT_EQ(NumTableFilesAtLevel(0), 0);
   } while (ChangeOptions());
 }
+#endif
 
 TEST(DBTest, IterEmpty) {
   Iterator* iter = db_->NewIterator(ReadOptions());
@@ -906,7 +924,8 @@ TEST(DBTest, CompactionsGenerateMultipleFiles) {
   dbfull()->TEST_CompactRange(0, NULL, NULL);
 
   ASSERT_EQ(NumTableFilesAtLevel(0), 0);
-  ASSERT_GT(NumTableFilesAtLevel(1), 1);
+// not riak  ASSERT_GT(NumTableFilesAtLevel(1), 1);
+  ASSERT_EQ(NumTableFilesAtLevel(1), 1);  // yes riak
   for (int i = 0; i < 80; i++) {
     ASSERT_EQ(Get(Key(i)), values[i]);
   }
@@ -1169,7 +1188,7 @@ TEST(DBTest, DeletionMarkers1) {
   Put("foo", "v2");
   ASSERT_EQ(AllEntriesFor("foo"), "[ v2, DEL, v1 ]");
   ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level last-2
-  ASSERT_EQ(AllEntriesFor("foo"), "[ v2, DEL, v1 ]");
+  ASSERT_EQ(AllEntriesFor("foo"), "[ v2, v1 ]"); // riak 1.3, DEL merged out by BuildTable
   Slice z("z");
   dbfull()->TEST_CompactRange(last-2, NULL, &z);
   // DEL eliminated, but v1 remains because we aren't compacting that level
@@ -1522,7 +1541,7 @@ TEST(DBTest, BloomFilter) {
   // Lookup present keys.  Should rarely read from small sstable.
   env_->random_read_counter_.Reset();
   for (int i = 0; i < N; i++) {
-    ASSERT_EQ(Key(i), Get(Key(i)));
+    ASSERT_EQ(Key(i), GetNoCache(Key(i)));
   }
   int reads = env_->random_read_counter_.Read();
   fprintf(stderr, "%d present => %d reads\n", N, reads);
@@ -1532,7 +1551,7 @@ TEST(DBTest, BloomFilter) {
   // Lookup present keys.  Should rarely read from either sstable.
   env_->random_read_counter_.Reset();
   for (int i = 0; i < N; i++) {
-    ASSERT_EQ("NOT_FOUND", Get(Key(i) + ".missing"));
+    ASSERT_EQ("NOT_FOUND", GetNoCache(Key(i) + ".missing"));
   }
   reads = env_->random_read_counter_.Read();
   fprintf(stderr, "%d missing => %d reads\n", N, reads);

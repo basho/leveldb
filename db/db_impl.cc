@@ -563,7 +563,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     //  no compression for level 0.
     local_options=options_;
     local_options.compression=kNoCompression;
-    s = BuildTable(dbname_, env_, local_options, table_cache_, iter, &meta, smallest_snapshot);
+    s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
     mutex_.Lock();
   }
