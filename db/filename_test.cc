@@ -96,9 +96,10 @@ TEST(FileNameTest, Construction) {
   ASSERT_EQ(192, number);
   ASSERT_EQ(kLogFile, type);
 
-  fname = TableFileName("bar", 200);
+  fname = TableFileName("bar", 200, 1);
   ASSERT_EQ("bar/", std::string(fname.data(), 4));
-  ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
+  ASSERT_EQ("sst_1/", std::string(fname.substr(4,6)));
+  ASSERT_TRUE(ParseFileName(fname.c_str() + 10, &number, &type));
   ASSERT_EQ(200, number);
   ASSERT_EQ(kTableFile, type);
 

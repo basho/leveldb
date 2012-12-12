@@ -115,10 +115,17 @@ class CorruptionTest {
     ASSERT_GE(max_expected, correct);
   }
 
-  void Corrupt(FileType filetype, int offset, int bytes_to_corrupt) {
+  void Corrupt(FileType filetype, int offset, int bytes_to_corrupt, int level=0) {
     // Pick file to corrupt
     std::vector<std::string> filenames;
-    ASSERT_OK(env_.GetChildren(dbname_, &filenames));
+    std::string dirname;
+    if (leveldb::kTableFile!=filetype)
+        dirname=dbname_;
+    else
+        dirname=MakeDirName2(dbname_, level, "sst");
+
+    ASSERT_OK(env_.GetChildren(dirname, &filenames));
+
     uint64_t number;
     FileType type;
     std::string fname;
@@ -127,7 +134,7 @@ class CorruptionTest {
       if (ParseFileName(filenames[i], &number, &type) &&
           type == filetype &&
           int(number) > picked_number) {  // Pick latest file
-        fname = dbname_ + "/" + filenames[i];
+        fname = dirname + "/" + filenames[i];
         picked_number = number;
       }
     }
@@ -232,8 +239,8 @@ TEST(CorruptionTest, TableFile) {
   dbi->TEST_CompactRange(0, NULL, NULL);
   dbi->TEST_CompactRange(1, NULL, NULL);
 
-  Corrupt(kTableFile, 100, 1);
-  Check(99, 99);
+  Corrupt(kTableFile, 100, 1, 2);
+  Check(95, 99);
 }
 
 TEST(CorruptionTest, TableFileIndexData) {
@@ -241,7 +248,7 @@ TEST(CorruptionTest, TableFileIndexData) {
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
 
-  Corrupt(kTableFile, -2000, 500);
+  Corrupt(kTableFile, -2000, 500, 2);
   Reopen();
   Check(5000, 9999);
 }
@@ -298,8 +305,8 @@ TEST(CorruptionTest, CompactionInputError) {
   const int last = config::kMaxMemCompactLevel;
   ASSERT_EQ(1, Property("leveldb.num-files-at-level" + NumberToString(last)));
 
-  Corrupt(kTableFile, 100, 1);
-  Check(9, 9);
+  Corrupt(kTableFile, 100, 1, 2);
+  Check(5, 9);
 
   // Force compactions by writing lots of values
   Build(10000);
@@ -311,6 +318,8 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
   options.paranoid_checks = true;
   options.write_buffer_size = 1048576;
   Reopen(&options);
+
+  int current_corruption=Property("leveldb.ReadBlockError");
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
 
   // Fill levels >= 1 so memtable compaction outputs to level 1
@@ -324,8 +333,8 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
   dbi->TEST_CompactMemTable();
   ASSERT_EQ(1, Property("leveldb.num-files-at-level0"));
 
-  Corrupt(kTableFile, 100, 1);
-  Check(9, 9);
+  Corrupt(kTableFile, 100, 1, 0);
+  Check(5, 9);
 
   // Write must eventually fail because of corrupted table
   Status s;
@@ -333,14 +342,17 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
   for (int i = 0; i < 10000 && s.ok(); i++) {
     s = db_->Put(WriteOptions(), Key(i, &tmp1), Value(i, &tmp2));
   }
-  ASSERT_TRUE(!s.ok()) << "write did not fail in corrupted paranoid db";
+  if (s.ok())
+      ASSERT_NE(current_corruption, Property("leveldb.ReadBlockError")) << "no ReadBlockError seen";
+  else
+      ASSERT_TRUE(!s.ok()) << "write did not fail in corrupted paranoid db";
 }
 
 TEST(CorruptionTest, UnrelatedKeys) {
   Build(10);
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  Corrupt(kTableFile, 100, 1);
+  Corrupt(kTableFile, 100, 1, 2);
 
   std::string tmp1, tmp2;
   ASSERT_OK(db_->Put(WriteOptions(), Key(1000, &tmp1), Value(1000, &tmp2)));

@@ -17,6 +17,7 @@ namespace leveldb {
 Status BuildTable(const std::string& dbname,
                   Env* env,
                   const Options& options,
+                  const Comparator * user_comparator,
                   TableCache* table_cache,
                   Iterator* iter,
                   FileMetaData* meta,
@@ -25,7 +26,7 @@ Status BuildTable(const std::string& dbname,
   meta->file_size = 0;
   iter->SeekToFirst();
 
-  KeyRetirement retire(options.comparator, smallest_snapshot);
+  KeyRetirement retire(user_comparator, smallest_snapshot);
 
   std::string fname = TableFileName(dbname, meta->number, meta->level);
   if (iter->Valid()) {

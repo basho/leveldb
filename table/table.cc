@@ -268,6 +268,7 @@ Iterator* Table::BlockReader(void* arg,
       }
     } else {
       s = ReadBlock(table->rep_->file, options, handle, &contents);
+        gPerfCounters->Inc(ePerfBlockRead);
       if (s.ok()) {
         block = new Block(contents);
       }
