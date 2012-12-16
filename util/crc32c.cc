@@ -307,6 +307,7 @@ SoftCRC(uint32_t crc, const char* buf, size_t size)
   const uint8_t *p = reinterpret_cast<const uint8_t *>(buf);
   const uint8_t *e = p + size;
   uint32_t l = crc ^ 0xffffffffu;
+
 #define STEP1 do {                              \
     int c = (l & 0xff) ^ *p++;                  \
     l = table0_[c] ^ (l >> 8);                  \
