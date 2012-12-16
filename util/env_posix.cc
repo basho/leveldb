@@ -30,12 +30,6 @@
 #include "util/posix_logger.h"
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
-
-#include <syslog.h>
-#include "leveldb/perf_count.h"
-
-#include "util/env_riak.h"
-
 #include "util/env_riak.h"
 
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
