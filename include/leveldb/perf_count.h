@@ -161,6 +161,14 @@ enum PerformanceCountersEnum
 
     ePerfReadBlockError=43, //!< crc or compression error in ReadBlock (format.cc)
 
+    ePerfIterNew=44,        //!< Count of DBImpl::NewDBIterator calls
+    ePerfIterNext=45,       //!< Count of DBIter::Next calls
+    ePerfIterPrev=46,       //!< Count of DBIter::Prev calls
+    ePerfIterSeek=47,       //!< Count of DBIter::Seek calls
+    ePerfIterSeekFirst=48,  //!< Count of DBIter::SeekFirst calls
+    ePerfIterSeekLast=49,   //!< Count of DBIter::SeekLast calls
+    ePerfIterDelete=50,     //!< Count of DBIter::~DBIter
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values
