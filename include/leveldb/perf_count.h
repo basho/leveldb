@@ -169,6 +169,10 @@ enum PerformanceCountersEnum
     ePerfIterSeekLast=49,   //!< Count of DBIter::SeekLast calls
     ePerfIterDelete=50,     //!< Count of DBIter::~DBIter
 
+    ePerfElevelDirect=51,   //!< eleveldb's FindWaitingThread went direct to thread
+    ePerfElevelQueued=52,   //!< eleveldb's FindWaitingThread queued work item
+    ePerfElevelDequeued=53, //!< eleveldb's worker took item from backlog queue
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values

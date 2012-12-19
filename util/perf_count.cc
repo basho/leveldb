@@ -387,7 +387,10 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "DBIterSeek",
         "DBIterSeekFirst",
         "DBIterSeekLast",
-        "DBIterDelete"
+        "DBIterDelete",
+        "eleveldbDirect",
+        "eleveldbQueued",
+        "eleveldbDequeued"
 
     };
 
