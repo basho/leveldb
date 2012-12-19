@@ -1334,6 +1334,7 @@ Status DBImpl::Get(const ReadOptions& options,
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   SequenceNumber latest_snapshot;
   Iterator* internal_iter = NewInternalIterator(options, &latest_snapshot);
+  gPerfCounters->Inc(ePerfIterNew);
   return NewDBIterator(
       &dbname_, env_, user_comparator(), internal_iter,
       (options.snapshot != NULL

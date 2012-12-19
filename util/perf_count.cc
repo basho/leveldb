@@ -380,7 +380,18 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "Debug[2]",
         "Debug[3]",
         "Debug[4]",
-        "ReadBlockError"
+        "ReadBlockError",
+        "DBIterNew",
+        "DBIterNext",
+        "DBIterPrev",
+        "DBIterSeek",
+        "DBIterSeekFirst",
+        "DBIterSeekLast",
+        "DBIterDelete",
+        "eleveldbDirect",
+        "eleveldbQueued",
+        "eleveldbDequeued"
+
     };
 
 
