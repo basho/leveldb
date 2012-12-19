@@ -8,6 +8,7 @@
 #include "db/dbformat.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
+#include "leveldb/perf_count.h"
 #include "port/port.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
@@ -57,6 +58,7 @@ class DBIter: public Iterator {
         valid_(false) {
   }
   virtual ~DBIter() {
+    gPerfCounters->Inc(ePerfIterDelete);
     delete iter_;
   }
   virtual bool Valid() const { return valid_; }
@@ -129,6 +131,7 @@ inline bool DBIter::ParseKey(ParsedInternalKey* ikey) {
 void DBIter::Next() {
   assert(valid_);
 
+  gPerfCounters->Inc(ePerfIterNext);
   if (direction_ == kReverse) {  // Switch directions?
     direction_ = kForward;
     // iter_ is pointing just before the entries for this->key(),
@@ -187,6 +190,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
 void DBIter::Prev() {
   assert(valid_);
 
+  gPerfCounters->Inc(ePerfIterPrev);
   if (direction_ == kForward) {  // Switch directions?
     // iter_ is pointing at the current entry.  Scan backwards until
     // the key changes so we can use the normal reverse scanning code.
@@ -254,6 +258,7 @@ void DBIter::FindPrevUserEntry() {
 }
 
 void DBIter::Seek(const Slice& target) {
+  gPerfCounters->Inc(ePerfIterSeek);
   direction_ = kForward;
   ClearSavedValue();
   saved_key_.clear();
@@ -268,6 +273,7 @@ void DBIter::Seek(const Slice& target) {
 }
 
 void DBIter::SeekToFirst() {
+  gPerfCounters->Inc(ePerfIterSeekFirst);
   direction_ = kForward;
   ClearSavedValue();
   iter_->SeekToFirst();
@@ -279,6 +285,7 @@ void DBIter::SeekToFirst() {
 }
 
 void DBIter::SeekToLast() {
+  gPerfCounters->Inc(ePerfIterSeekLast);
   direction_ = kReverse;
   ClearSavedValue();
   iter_->SeekToLast();
