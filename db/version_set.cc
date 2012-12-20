@@ -273,7 +273,7 @@ struct Saver {
   SaverState state;
   const Comparator* ucmp;
   Slice user_key;
-  std::string* value;
+  Value* value;
 };
 }
 static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
@@ -300,7 +300,7 @@ static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
 
 Status Version::Get(const ReadOptions& options,
                     const LookupKey& k,
-                    std::string* value,
+                    Value* value,
                     GetStats* stats) {
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
