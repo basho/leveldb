@@ -98,7 +98,7 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
 static bool GetLevel(Slice* input, int* level) {
   uint32_t v;
   if (GetVarint32(input, &v) &&
-      v < config::kNumLevels) {
+      v < (unsigned)config::kNumLevels) {
     *level = v;
     return true;
   } else {

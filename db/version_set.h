@@ -230,7 +230,6 @@ class VersionSet {
   };
   int WriteThrottleUsec()
   {
-      int ret_msec=0;
       int penalty=current_->write_penalty_;
       penalty+=options_->env->GetBackgroundBacklog();
 
