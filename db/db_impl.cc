@@ -1047,8 +1047,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   Status status;
   ParsedInternalKey ikey;
   std::string current_user_key;
-  bool has_current_user_key = false;
-  SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
 
   KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
 
@@ -1576,7 +1574,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     in.remove_prefix(strlen("num-files-at-level"));
     uint64_t level;
     bool ok = ConsumeDecimalNumber(&in, &level) && in.empty();
-    if (!ok || level >= config::kNumLevels) {
+    if (!ok || level >= (uint64_t)config::kNumLevels) {
       return false;
     } else {
       char buf[100];

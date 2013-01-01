@@ -974,11 +974,11 @@ void VersionSet::Finalize(Version* v) {
           static_cast<double>(config::kL0_CompactionTrigger);
 
       // don't screw around ... get data written to disk!
-      if (config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
+      if ((size_t)config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
           score*=1000000.0;
 
       // compute penalty for write throttle if too many Level-0 files accumulating
-      if (config::kL0_CompactionTrigger <= v->files_[level].size())
+      if ((size_t)config::kL0_CompactionTrigger <= v->files_[level].size())
       {
           penalty+=v->files_[level].size() - config::kL0_CompactionTrigger +1;
       }   // if
@@ -1255,7 +1255,7 @@ Compaction* VersionSet::PickCompaction() {
 
     // this can get into tens of thousands after a repair
     //  keep it sane
-    if (options_->max_open_files < c->inputs_[0].size())
+    if ((size_t)options_->max_open_files < c->inputs_[0].size())
     {
         std::nth_element(c->inputs_[0].begin(),
                          c->inputs_[0].begin()+options_->max_open_files-1,

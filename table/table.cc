@@ -311,7 +311,6 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       // Not found
         gPerfCounters->Inc(ePerfBlockFiltered);
     } else {
-      Slice handle = iiter->value();
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {
