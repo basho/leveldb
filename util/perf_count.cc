@@ -34,6 +34,9 @@
 
 #include "util/coding.h"
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #ifdef OS_SOLARIS
 #  include <atomic.h>
 #endif
@@ -206,7 +209,6 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     PerformanceCounters::Init(
         bool IsReadOnly)
     {
-        int ret_val;
         PerformanceCounters * ret_ptr;
 
         ret_ptr=NULL;
@@ -425,7 +427,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
         for (loop=0; loop<ePerfCountEnumSize; ++loop)
         {
-            printf("  %s: %llu\n", m_PerfCounterNames[loop], m_Counter[loop]);
+            printf("  %s: %" PRIu64 "\n", m_PerfCounterNames[loop], m_Counter[loop]);
         }   // loop
     };  // Dump
 

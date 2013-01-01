@@ -49,7 +49,7 @@ static Status IOError(const std::string& context, int err_number) {
 // background routines to close and/or unmap files
 static void BGFileCloser(void* file_info);
 static void BGFileCloser2(void* file_info);
-static void BGFileUnmapper(void* file_info);
+// currently unused static void BGFileUnmapper(void* file_info);
 static void BGFileUnmapper2(void* file_info);
 
 // data needed by background routines for close/unmap
@@ -974,6 +974,7 @@ void BGFileCloser2(void * arg)
 
 }   // BGFileCloser2
 
+#if 0  // currently unused, remove due to compiler warning
 // this was a reference file:  unmap, purge page cache
 void BGFileUnmapper(void * arg)
 {
@@ -993,6 +994,7 @@ void BGFileUnmapper(void * arg)
     return;
 
 }   // BGFileUnmapper
+#endif
 
 // this was a new file:  unmap, hold in page cache
 void BGFileUnmapper2(void * arg)
@@ -1027,7 +1029,7 @@ static Env* default_env[THREAD_BLOCKS];
 static unsigned count=0;
 static void InitDefaultEnv()
 {
-    int loop, fd;
+    int loop;
 
     for (loop=0; loop<THREAD_BLOCKS; ++loop)
     {
