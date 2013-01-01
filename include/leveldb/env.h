@@ -166,6 +166,15 @@ class Env {
   // Riak specific:  Get object that is tracking various software counters
   virtual PerformanceCounters * GetPerformanceCounters() {return(gPerfCounters);};
 
+  // Riak specific call.  Rate is microseconds spent writing
+  // one key.  Usually the average time of many (like 1,000).
+  // Set during background compaction, but not Level-0 write.
+  virtual void SetWriteRate(uint64_t Rate) {};
+
+  // Riak specific call.  Return the current "smoothed"
+  // microseconds spent writing a key.
+  virtual uint64_t GetWriteRate() const {return(0);};
+
  private:
   // No copying allowed
   Env(const Env&);
