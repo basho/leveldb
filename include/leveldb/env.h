@@ -175,6 +175,9 @@ class Env {
   // microseconds spent writing a key.
   virtual uint64_t GetWriteRate() const {return(0);};
 
+  // Riak specific call.  Returns exponentailly smoothed rate
+  virtual uint64_t SmoothWriteRate(uint64_t Rate) {return(Rate);};
+
  private:
   // No copying allowed
   Env(const Env&);

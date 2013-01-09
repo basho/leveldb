@@ -39,6 +39,46 @@ namespace leveldb {
 pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
 
+pthread_mutex_t gThrottleMutex;
+uint64_t gThrottleSum[4];
+uint64_t gThrottleCount[4];
+uint64_t gThrottleSumPre;
+uint64_t gThrottleCountPre;
+
+static void *
+ThrottleThread(
+void * arg)
+{
+    Env * env;
+
+    env=(Env *)arg;
+
+    while(1)
+    {
+        // sleep 5 minutes
+        env->SleepForMicroseconds(5*60*1000000);
+
+        pthread_mutex_lock(&gThrottleMutex);
+        gThrottleSum[3]=gThrottleSum[2];       // /2;
+        gThrottleCount[3]=gThrottleCount[2];   // /2;
+
+        gThrottleSum[2]=gThrottleSum[1];       // /2;
+        gThrottleCount[2]=gThrottleCount[1];   // /2;
+
+        gThrottleSum[1]=gThrottleSum[0]/3;     // /2;
+        gThrottleCount[1]=gThrottleCount[0]/3; // /2;
+
+        gThrottleSum[0]=0;
+        gThrottleCount[0]=0;
+
+        gThrottleSumPre=gThrottleSum[3]+gThrottleSum[2]+gThrottleSum[1];
+        gThrottleCountPre=gThrottleCount[3]+gThrottleCount[2]+gThrottleCount[1];
+        pthread_mutex_unlock(&gThrottleMutex);
+
+    }   // while
+}   // ThrottleThread
+
+
 
 namespace {
 
@@ -635,6 +675,7 @@ class PosixEnv : public Env {
       {
           PthreadCall("lock", pthread_mutex_lock(&mu_));
 
+#if 0        // leave smoothing to exponential
           // scale up slowly ... small key counts cause big jumps
           if (write_rate_usec_ < Rate)
               write_rate_usec_+=(Rate - write_rate_usec_)/10;
@@ -642,6 +683,9 @@ class PosixEnv : public Env {
           // scale down to a lower rate slowly
           else
               write_rate_usec_-=(write_rate_usec_ - Rate)/11;
+#else
+          write_rate_usec_=Rate;
+#endif
 
           PthreadCall("unlock", pthread_mutex_unlock(&mu_));
       }   // if
@@ -650,6 +694,38 @@ class PosixEnv : public Env {
   };
 
   virtual uint64_t GetWriteRate() const {return(write_rate_usec_);};
+
+  virtual uint64_t SmoothWriteRate(uint64_t Rate)
+  {
+      uint64_t ret_val;
+
+      PthreadCall("lock", pthread_mutex_lock(&gThrottleMutex));
+
+      // precaution against bad timers, failing drives, and floppy disks
+      if (Rate < 0xFFFFF /*&& 0 != Rate*/)
+      {
+#if 0
+          // scale up slowly ... averaging entire system
+          if (gThrottleSum < Rate)
+              gThrottleSum+=(Rate - gThrottleSum)/101;
+
+          // scale down to a lower rate slowly
+          else
+              gThrottleSum-=(gThrottleSum - Rate)/101;
+#else
+          gThrottleSum[0]+=Rate;
+          ++gThrottleCount[0];
+#endif
+      }   // if
+
+      ret_val=(0!=(gThrottleCountPre+gThrottleCount[0]
+                  ? (gThrottleSumPre+gThrottleSum[0])/(gThrottleCountPre+gThrottleCount[0])
+                  : 0));
+
+      PthreadCall("unlock", pthread_mutex_unlock(&gThrottleMutex));
+
+      return(ret_val);
+  };
 
 
  private:
@@ -699,6 +775,7 @@ class PosixEnv : public Env {
       // scale to hundredths to gain fractions within integer math
       cur_backlog*=100;
 
+#if 0    // leave all smoothing to exponential formula
       // scale up moderately
       if (bg_backlog_ < cur_backlog)
               bg_backlog_+=(cur_backlog - bg_backlog_)/3;
@@ -706,6 +783,9 @@ class PosixEnv : public Env {
       // scale down slower than up
       else
           bg_backlog_-=(bg_backlog_ - cur_backlog)/5;
+#else
+      bg_backlog_=cur_backlog;
+#endif
 
       return;
   };
@@ -1090,6 +1170,7 @@ static unsigned count=0;
 static void InitDefaultEnv()
 {
     int loop;
+    pthread_t tid;
 
     for (loop=0; loop<THREAD_BLOCKS; ++loop)
     {
@@ -1098,6 +1179,16 @@ static void InitDefaultEnv()
 
     pthread_rwlock_init(&gThreadLock0, NULL);
     pthread_rwlock_init(&gThreadLock1, NULL);
+    pthread_mutex_init(&gThrottleMutex, NULL);
+
+    for (loop=0; loop<4; ++loop)
+    {
+        gThrottleSum[loop]=0;
+        gThrottleCount[loop]=0;
+    }   // for
+    gThrottleSumPre=0;
+    gThrottleCountPre=0;
+    pthread_create(&tid, NULL,  &ThrottleThread, default_env[0]);
 
     // force the loading of code for both filters in case they
     //  are hidden in a shared library

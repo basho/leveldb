@@ -1547,7 +1547,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
+#if 0   // see if this impacts smoothing or helps (but keep the counts)
       env_->SleepForMicroseconds(1000);
+#endif
       allow_delay = false;  // Do not delay a single write more than once
       gPerfCounters->Inc(ePerfWriteSleep);
       mutex_.Lock();

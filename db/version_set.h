@@ -223,7 +223,8 @@ class VersionSet {
       if (active_compaction)
           penalty+=100;
 
-      return((int)(penalty * env_->GetWriteRate()))/100;
+//      return((int)(penalty * env_->GetWriteRate()))/100;
+      return((int)env_->SmoothWriteRate((penalty * env_->GetWriteRate()))/100);
   }
 
 
