@@ -1099,7 +1099,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       //  gives better measure of overall activity / write overhead
       if (1==(entry_count % 1000) && 1000<entry_count)
       {
-          env_->SetWriteRate((env_->NowMicros() - start_micros)/entry_count);
+//          env_->SetWriteRate((env_->NowMicros() - start_micros)/entry_count);
 
           // test for priority change
           if (!is_level0_compaction)

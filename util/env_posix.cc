@@ -65,8 +65,8 @@ void * arg)
         gThrottleSum[2]=gThrottleSum[1];       // /2;
         gThrottleCount[2]=gThrottleCount[1];   // /2;
 
-        gThrottleSum[1]=gThrottleSum[0]/3;     // /2;
-        gThrottleCount[1]=gThrottleCount[0]/3; // /2;
+        gThrottleSum[1]=gThrottleSum[0];       // /3;     // /2;
+        gThrottleCount[1]=gThrottleCount[0];   // /3; // /2;
 
         gThrottleSum[0]=0;
         gThrottleCount[0]=0;
@@ -651,7 +651,7 @@ class PosixEnv : public Env {
     {
         micros=(micros/clock_res_ +1)*clock_res_;
         ts.tv_sec=micros/1000000;
-        ts.tv_nsec=(micros - ts.tv_sec) *1000;
+        ts.tv_nsec=(micros - ts.tv_sec*1000000) *1000;
 
         do
         {
@@ -702,7 +702,7 @@ class PosixEnv : public Env {
       PthreadCall("lock", pthread_mutex_lock(&gThrottleMutex));
 
       // precaution against bad timers, failing drives, and floppy disks
-      if (Rate < 0xFFFFF /*&& 0 != Rate*/)
+      if (Rate < 0xFFFFF && 0 != Rate)
       {
 #if 0
           // scale up slowly ... averaging entire system

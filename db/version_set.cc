@@ -30,7 +30,8 @@ static const int64_t kMaxGrandParentOverlapBytes = 25 * kTargetFileSize;
 // Maximum number of bytes in all compacted files.  We avoid expanding
 // the lower level file set of a compaction if it would make the
 // total compaction cover more than this many bytes.
-static const int64_t kExpandedCompactionByteSizeLimit = 15 * kTargetFileSize;
+//static const int64_t kExpandedCompactionByteSizeLimit = 15 * kTargetFileSize;
+static const int64_t kExpandedCompactionByteSizeLimit = 55 * kTargetFileSize;
 
 static double MaxBytesForLevel(int level) {
   // Note: the result for level zero is not really used since we set
@@ -1003,8 +1004,8 @@ void VersionSet::Finalize(Version* v) {
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
 
-  if (50<penalty)
-      penalty=50;
+  if (500<penalty)
+      penalty=500;
   v->write_penalty_ = penalty;
 
 }
