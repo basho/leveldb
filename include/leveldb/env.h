@@ -169,7 +169,7 @@ class Env {
   // Riak specific call.  Rate is microseconds spent writing
   // one key.  Usually the average time of many (like 1,000).
   // Set during background compaction, but not Level-0 write.
-  virtual void SetWriteRate(uint64_t Rate) {};
+  virtual void SetWriteRate(uint64_t Micros, uint64_t Keys) {};
 
   // Riak specific call.  Return the current "smoothed"
   // microseconds spent writing a key.

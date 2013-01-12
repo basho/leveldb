@@ -30,6 +30,8 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
+#include <syslog.h>
+
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -40,16 +42,21 @@ pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
 
 pthread_mutex_t gThrottleMutex;
-uint64_t gThrottleSum[4];
-uint64_t gThrottleCount[4];
-uint64_t gThrottleSumPre;
-uint64_t gThrottleCountPre;
+struct
+{
+    uint64_t m_Micros;
+    uint64_t m_Keys;
+    uint64_t m_Backlog;
+    uint64_t m_Compactions;
+} gThrottleData[4];
+uint64_t gThrottleRate;
 
 static void *
 ThrottleThread(
 void * arg)
 {
     Env * env;
+    uint64_t denom1, denom2;
 
     env=(Env *)arg;
 
@@ -59,20 +66,39 @@ void * arg)
         env->SleepForMicroseconds(5*60*1000000);
 
         pthread_mutex_lock(&gThrottleMutex);
-        gThrottleSum[3]=gThrottleSum[2];       // /2;
-        gThrottleCount[3]=gThrottleCount[2];   // /2;
+        gThrottleData[3]=gThrottleData[2];
+        gThrottleData[2]=gThrottleData[1];
+        gThrottleData[1]=gThrottleData[0];
 
-        gThrottleSum[2]=gThrottleSum[1];       // /2;
-        gThrottleCount[2]=gThrottleCount[1];   // /2;
+        memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
 
-        gThrottleSum[1]=gThrottleSum[0];       // /3;     // /2;
-        gThrottleCount[1]=gThrottleCount[0];   // /3; // /2;
+        denom1=gThrottleData[1].m_Keys + gThrottleData[2].m_Keys + gThrottleData[3].m_Keys;
+        if (0!=denom1)
+        {
 
-        gThrottleSum[0]=0;
-        gThrottleCount[0]=0;
+            // average write time for level 1+ compactions per key
+            gThrottleRate=
+                (gThrottleData[1].m_Micros + gThrottleData[2].m_Micros + gThrottleData[3].m_Micros)
+                / denom1;
 
-        gThrottleSumPre=gThrottleSum[3]+gThrottleSum[2]+gThrottleSum[1];
-        gThrottleCountPre=gThrottleCount[3]+gThrottleCount[2]+gThrottleCount[1];
+
+            denom2=gThrottleData[1].m_Compactions + gThrottleData[2].m_Compactions + gThrottleData[3].m_Compactions;
+            if (0==denom2)
+                denom2=1;
+
+            // times the average number of tasks waiting
+            gThrottleRate*=
+                (gThrottleData[1].m_Backlog + gThrottleData[2].m_Backlog + gThrottleData[3].m_Backlog) / denom2;
+        }   // if
+        else
+        {
+            gThrottleRate=0;
+        }   // else
+
+        syslog(LOG_ERR, "Throttle data: %llu, %llu, %llu, %llu, %llu",
+               gThrottleData[1].m_Micros, gThrottleData[1].m_Keys, gThrottleData[1].m_Backlog,
+               gThrottleData[1].m_Compactions, gThrottleRate);
+
         pthread_mutex_unlock(&gThrottleMutex);
 
     }   // while
@@ -668,24 +694,17 @@ class PosixEnv : public Env {
 
   virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
 
-  virtual void SetWriteRate(uint64_t Rate)
+    virtual void SetWriteRate(uint64_t Micros, uint64_t Keys)
   {
       // precaution against bad timers, failing drives, and floppy disks
-      if (Rate < 0xFFFFF)
+//      if (Rate < 0xFFFFF)
       {
           PthreadCall("lock", pthread_mutex_lock(&mu_));
 
-#if 0        // leave smoothing to exponential
-          // scale up slowly ... small key counts cause big jumps
-          if (write_rate_usec_ < Rate)
-              write_rate_usec_+=(Rate - write_rate_usec_)/10;
-
-          // scale down to a lower rate slowly
-          else
-              write_rate_usec_-=(write_rate_usec_ - Rate)/11;
-#else
-          write_rate_usec_=Rate;
-#endif
+          gThrottleData[0].m_Micros+=Micros;
+          gThrottleData[0].m_Keys+=Keys;
+          gThrottleData[0].m_Backlog+=GetBackgroundBacklog();
+          gThrottleData[0].m_Compactions+=1;
 
           PthreadCall("unlock", pthread_mutex_unlock(&mu_));
       }   // if
@@ -693,8 +712,8 @@ class PosixEnv : public Env {
       return;
   };
 
-  virtual uint64_t GetWriteRate() const {return(write_rate_usec_);};
-
+  virtual uint64_t GetWriteRate() const {return(gThrottleRate);};
+#if 0
   virtual uint64_t SmoothWriteRate(uint64_t Rate)
   {
       uint64_t ret_val;
@@ -726,7 +745,7 @@ class PosixEnv : public Env {
 
       return(ret_val);
   };
-
+#endif
 
  private:
   void PthreadCall(const char* label, int result) {
@@ -771,9 +790,6 @@ class PosixEnv : public Env {
 
       // mutex mu_ is assumed locked.
       cur_backlog=queue4_.size()+queue2_.size()+queue_.size()+bg_active_;
-
-      // scale to hundredths to gain fractions within integer math
-      cur_backlog*=100;
 
 #if 0    // leave all smoothing to exponential formula
       // scale up moderately
@@ -1181,13 +1197,9 @@ static void InitDefaultEnv()
     pthread_rwlock_init(&gThreadLock1, NULL);
     pthread_mutex_init(&gThrottleMutex, NULL);
 
-    for (loop=0; loop<4; ++loop)
-    {
-        gThrottleSum[loop]=0;
-        gThrottleCount[loop]=0;
-    }   // for
-    gThrottleSumPre=0;
-    gThrottleCountPre=0;
+    memset(&gThrottleData, 0, sizeof(gThrottleData));
+    gThrottleRate=0;
+
     pthread_create(&tid, NULL,  &ThrottleThread, default_env[0]);
 
     // force the loading of code for both filters in case they
