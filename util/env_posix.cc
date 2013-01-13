@@ -42,13 +42,16 @@ pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
 
 pthread_mutex_t gThrottleMutex;
-struct
+
+#define THROTTLE_INTERVALS 32
+#define THROTTLE_TIME 60*1000000
+struct ThrottleData_t
 {
     uint64_t m_Micros;
     uint64_t m_Keys;
     uint64_t m_Backlog;
     uint64_t m_Compactions;
-} gThrottleData[4];
+} gThrottleData[THROTTLE_INTERVALS];
 uint64_t gThrottleRate;
 
 static void *
@@ -56,50 +59,69 @@ ThrottleThread(
 void * arg)
 {
     Env * env;
-    uint64_t denom1, denom2;
+    uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
+    int replace_idx, loop;
+    uint64_t new_throttle;
 
     env=(Env *)arg;
+    replace_idx=2;
 
     while(1)
     {
         // sleep 5 minutes
-        env->SleepForMicroseconds(5*60*1000000);
+        env->SleepForMicroseconds(THROTTLE_TIME);
 
         pthread_mutex_lock(&gThrottleMutex);
-        gThrottleData[3]=gThrottleData[2];
-        gThrottleData[2]=gThrottleData[1];
-        gThrottleData[1]=gThrottleData[0];
-
+        gThrottleData[replace_idx]=gThrottleData[0];
         memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
+        pthread_mutex_unlock(&gThrottleMutex);
 
-        denom1=gThrottleData[1].m_Keys + gThrottleData[2].m_Keys + gThrottleData[3].m_Keys;
-        if (0!=denom1)
+        tot_micros=0;
+        tot_keys=0;
+        tot_backlog=0;
+        tot_compact=0;
+
+        // this could be faster by keeping running totals and
+        //  subtracting [replace_idx] before copying [0] into it,
+        //  then adding new [replace_idx].  But that needs more
+        //  time for testing.
+        for (loop=2; loop<THROTTLE_INTERVALS; ++loop)
         {
+            tot_micros+=gThrottleData[loop].m_Micros;
+            tot_keys+=gThrottleData[loop].m_Keys;
+            tot_backlog+=gThrottleData[loop].m_Backlog;
+            tot_compact+=gThrottleData[loop].m_Compactions;
+        }   // for
+
+        if (0!=tot_keys)
+        {
+            if (0==tot_compact)
+                tot_compact=1;
 
             // average write time for level 1+ compactions per key
-            gThrottleRate=
-                (gThrottleData[1].m_Micros + gThrottleData[2].m_Micros + gThrottleData[3].m_Micros)
-                / denom1;
+            //   times the average number of tasks waiting
+            new_throttle=(tot_micros / tot_keys)
+                * (tot_backlog / tot_compact);
 
-
-            denom2=gThrottleData[1].m_Compactions + gThrottleData[2].m_Compactions + gThrottleData[3].m_Compactions;
-            if (0==denom2)
-                denom2=1;
-
-            // times the average number of tasks waiting
-            gThrottleRate*=
-                (gThrottleData[1].m_Backlog + gThrottleData[2].m_Backlog + gThrottleData[3].m_Backlog) / denom2;
         }   // if
         else
         {
-            gThrottleRate=0;
+            new_throttle=0;
         }   // else
 
-        syslog(LOG_ERR, "Throttle data: %llu, %llu, %llu, %llu, %llu",
-               gThrottleData[1].m_Micros, gThrottleData[1].m_Keys, gThrottleData[1].m_Backlog,
-               gThrottleData[1].m_Compactions, gThrottleRate);
+        // raise the throttle slowly
+        if (gThrottleRate < new_throttle)
+            gThrottleRate+=(new_throttle - gThrottleRate)/7;
+        else
+            gThrottleRate=new_throttle;
 
-        pthread_mutex_unlock(&gThrottleMutex);
+        syslog(LOG_ERR, "Throttle data: %llu, %llu, %llu, %llu, %llu",
+               gThrottleData[replace_idx].m_Micros, gThrottleData[replace_idx].m_Keys, gThrottleData[replace_idx].m_Backlog,
+               gThrottleData[replace_idx].m_Compactions, gThrottleRate);
+
+        ++replace_idx;
+        if (THROTTLE_INTERVALS==replace_idx)
+            replace_idx=2;
 
     }   // while
 }   // ThrottleThread
