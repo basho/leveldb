@@ -109,11 +109,13 @@ void * arg)
             new_throttle=0;
         }   // else
 
-        // raise the throttle slowly
+        // change the throttle slowly
         if (gThrottleRate < new_throttle)
             gThrottleRate+=(new_throttle - gThrottleRate)/7;
         else
-            gThrottleRate=new_throttle;
+            gThrottleRate-=(gThrottleRate - new_throttle)/7;
+
+        // in case of restart with heavy inbound
 
         syslog(LOG_ERR, "Throttle data: %llu, %llu, %llu, %llu, %llu",
                gThrottleData[replace_idx].m_Micros, gThrottleData[replace_idx].m_Keys, gThrottleData[replace_idx].m_Backlog,

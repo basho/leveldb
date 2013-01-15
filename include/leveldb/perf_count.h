@@ -211,6 +211,7 @@ public:
     static PerformanceCounters * Init(bool IsReadOnly);
 
     uint64_t Inc(unsigned Index);
+    uint64_t Dec(unsigned Index);
 
     // return value of a counter
     uint64_t Value(unsigned Index) const;

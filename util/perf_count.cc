@@ -275,7 +275,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
             val_ptr=&m_Counter[Index];
 
 #ifdef OS_SOLARIS
-            atomic_add_64(val_ptr, 1);
+            atomic_inc_64(val_ptr);
 #else
             __sync_add_and_fetch(val_ptr, 1);
 #endif
@@ -284,6 +284,31 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
         return(ret_val);
     }   // PerformanceCounters::Inc
+
+
+    uint64_t
+    PerformanceCounters::Dec(
+        unsigned Index)
+    {
+        uint64_t ret_val;
+
+        ret_val=0;
+        if (Index<m_CounterSize)
+        {
+            volatile uint64_t * val_ptr;
+
+            val_ptr=&m_Counter[Index];
+
+#ifdef OS_SOLARIS
+            atomic_dec_64(val_ptr);
+#else
+            __sync_sub_and_fetch(val_ptr, 1);
+#endif
+            ret_val=*val_ptr;
+        }   // if
+
+        return(ret_val);
+    }   // PerformanceCounters::Dec
 
 
     uint64_t
