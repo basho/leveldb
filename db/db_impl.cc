@@ -1404,7 +1404,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       MutexLock l(&throttle_mutex_);
 
       // throttle is per key write, how many in batch?
-      env_->SleepForMicroseconds(throttle * WriteBatchInternal::Count(my_batch));
+      //  (batch multiplier killed AAE, removed)
+      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
   }   // if
 
   Writer w(&mutex_);
