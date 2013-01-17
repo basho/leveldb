@@ -1159,8 +1159,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   if (status.ok()) {
     // imm_micros intentional NOT removed from time calculation,
     //  gives better measure of overall activity / write overhead
-    if (0!=compact->num_entries && !is_level0_compaction)
-        env_->SetWriteRate((env_->NowMicros() - start_micros), compact->num_entries);
+    if (0!=compact->num_entries)
+      env_->SetWriteRate((env_->NowMicros() - start_micros), compact->num_entries,
+			 is_level0_compaction);
     status = InstallCompactionResults(compact);
   }
   VersionSet::LevelSummaryStorage tmp;

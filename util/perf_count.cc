@@ -312,6 +312,31 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
 
     uint64_t
+    PerformanceCounters::Add(
+        unsigned Index,
+        uint64_t Amount)
+    {
+        uint64_t ret_val;
+
+        ret_val=0;
+        if (Index<m_CounterSize)
+        {
+            volatile uint64_t * val_ptr;
+
+            val_ptr=&m_Counter[Index];
+
+#ifdef OS_SOLARIS
+            ret_val=atomic_add_64_nv(val_ptr, Amount);
+#else
+            ret_val=__sync_add_and_fetch(val_ptr, Amount);
+#endif
+        }   // if
+
+        return(ret_val);
+    }   // PerformanceCounters::Add
+
+
+    uint64_t
     PerformanceCounters::Value(
         unsigned Index) const
     {
@@ -325,6 +350,24 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
         return(ret_val);
     }   // SstCounters::Value
+
+
+    void
+    PerformanceCounters::Set(
+        unsigned Index,
+        uint64_t Amount)
+    {
+        if (Index<m_CounterSize)
+        {
+            volatile uint64_t * val_ptr;
+
+            val_ptr=&m_Counter[Index];
+
+            *val_ptr=Amount;
+        }   // if
+
+        return;
+    }   // PerformanceCounters::Set
 
 
     volatile const uint64_t *
@@ -417,8 +460,19 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "DBIterDelete",
         "eleveldbDirect",
         "eleveldbQueued",
-        "eleveldbDequeued"
-
+        "eleveldbDequeued",
+        "elevelRefCreate",
+        "elevelRefDelete",
+        "ThrottleGauge",
+        "ThrottleCounter",
+        "ThrottleMicros0",
+        "ThrottleKeys0",
+        "ThrottleBacklog0",
+        "ThrottleCompacts0",
+        "ThrottleMicros1",
+        "ThrottleKeys1",
+        "ThrottleBacklog1",
+        "ThrottleCompacts1"
     };
 
 

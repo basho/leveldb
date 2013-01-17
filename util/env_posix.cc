@@ -44,7 +44,9 @@ pthread_rwlock_t gThreadLock1;
 pthread_mutex_t gThrottleMutex;
 
 #define THROTTLE_INTERVALS 32
-#define THROTTLE_TIME 60*1000000
+#define THROTTLE_SECONDS 60
+#define THROTTLE_TIME THROTTLE_SECONDS*1000000
+
 struct ThrottleData_t
 {
     uint64_t m_Micros;
@@ -72,8 +74,8 @@ void * arg)
         env->SleepForMicroseconds(THROTTLE_TIME);
 
         pthread_mutex_lock(&gThrottleMutex);
-        gThrottleData[replace_idx]=gThrottleData[0];
-        memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
+        gThrottleData[replace_idx]=gThrottleData[1];
+        memset(&gThrottleData[1], 0, sizeof(gThrottleData[1]));
         pthread_mutex_unlock(&gThrottleMutex);
 
         tot_micros=0;
@@ -93,6 +95,7 @@ void * arg)
             tot_compact+=gThrottleData[loop].m_Compactions;
         }   // for
 
+	// non-level0 data available?
         if (0!=tot_keys)
         {
             if (0==tot_compact)
@@ -104,6 +107,17 @@ void * arg)
                 * (tot_backlog / tot_compact);
 
         }   // if
+
+	// attempt to most recent level0
+	//  (only use most recent level0 until level1+ data becomes available,
+	//   useful on restart of heavily loaded server)
+	else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
+	{
+            pthread_mutex_lock(&gThrottleMutex);
+            new_throttle=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys)
+	      * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
+            pthread_mutex_unlock(&gThrottleMutex);
+	}   // else if
         else
         {
             new_throttle=0;
@@ -115,17 +129,28 @@ void * arg)
         else
             gThrottleRate-=(gThrottleRate - new_throttle)/7;
 
+        gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
+        gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
+
         // in case of restart with heavy inbound
 
         syslog(LOG_ERR, "Throttle data: %llu, %llu, %llu, %llu, %llu",
                gThrottleData[replace_idx].m_Micros, gThrottleData[replace_idx].m_Keys, gThrottleData[replace_idx].m_Backlog,
                gThrottleData[replace_idx].m_Compactions, gThrottleRate);
 
+        // prepare for next interval
+        pthread_mutex_lock(&gThrottleMutex);
+        memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
+        pthread_mutex_unlock(&gThrottleMutex);
+
         ++replace_idx;
         if (THROTTLE_INTERVALS==replace_idx)
             replace_idx=2;
 
     }   // while
+
+    return(NULL);
+
 }   // ThrottleThread
 
 
@@ -718,20 +743,37 @@ class PosixEnv : public Env {
 
   virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
 
-    virtual void SetWriteRate(uint64_t Micros, uint64_t Keys)
+    virtual void SetWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
   {
-      // precaution against bad timers, failing drives, and floppy disks
-//      if (Rate < 0xFFFFF)
-      {
-          PthreadCall("lock", pthread_mutex_lock(&mu_));
+      PthreadCall("lock", pthread_mutex_lock(&mu_));
 
+      if (IsLevel0)
+      {
           gThrottleData[0].m_Micros+=Micros;
           gThrottleData[0].m_Keys+=Keys;
           gThrottleData[0].m_Backlog+=GetBackgroundBacklog();
           gThrottleData[0].m_Compactions+=1;
 
-          PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+          gPerfCounters->Add(ePerfThrottleMicros0, Micros);
+          gPerfCounters->Add(ePerfThrottleKeys0, Keys);
+          gPerfCounters->Add(ePerfThrottleBacklog0, GetBackgroundBacklog());
+          gPerfCounters->Inc(ePerfThrottleCompacts0);
       }   // if
+
+      else
+      {
+          gThrottleData[1].m_Micros+=Micros;
+          gThrottleData[1].m_Keys+=Keys;
+          gThrottleData[1].m_Backlog+=GetBackgroundBacklog();
+          gThrottleData[1].m_Compactions+=1;
+
+          gPerfCounters->Add(ePerfThrottleMicros1, Micros);
+          gPerfCounters->Add(ePerfThrottleKeys1, Keys);
+          gPerfCounters->Add(ePerfThrottleBacklog1, GetBackgroundBacklog());
+          gPerfCounters->Inc(ePerfThrottleCompacts1);
+      }   // else
+
+      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
       return;
   };

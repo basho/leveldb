@@ -173,6 +173,23 @@ enum PerformanceCountersEnum
     ePerfElevelQueued=52,   //!< eleveldb's FindWaitingThread queued work item
     ePerfElevelDequeued=53, //!< eleveldb's worker took item from backlog queue
 
+    ePerfElevelRefCreate=54,//!< eleveldb RefObject constructed
+    ePerfElevelRefDelete=55,//!< eleveldb RefObject destructed
+
+    ePerfThrottleGauge=56,  //!< current throttle value
+    ePerfThrottleCounter=57,//!< running throttle by seconds
+
+    ePerfThrottleMicros0=58,//!< level 0 micros spent compacting
+    ePerfThrottleKeys0=59,  //!< level 0 keys processed
+    ePerfThrottleBacklog0=60,//!< backlog at time of posting (level0)
+    ePerfThrottleCompacts0=61,//!< number of level 0 compactions
+
+    ePerfThrottleMicros1=62,//!< level 1+ micros spent compacting
+    ePerfThrottleKeys1=63,  //!< level 1+ keys processed
+    ePerfThrottleBacklog1=64,//!< backlog at time of posting (level1+)
+    ePerfThrottleCompacts1=65,//!< number of level 1+ compactions
+
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values
@@ -213,8 +230,14 @@ public:
     uint64_t Inc(unsigned Index);
     uint64_t Dec(unsigned Index);
 
+    // add value to the counter
+    uint64_t Add(unsigned Index, uint64_t Amount);
+
     // return value of a counter
     uint64_t Value(unsigned Index) const;
+
+    // set a value
+    void Set(unsigned Index, uint64_t);
 
     volatile const uint64_t * GetPtr(unsigned Index) const;
 
