@@ -607,8 +607,13 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   if (0!=meta.num_entries && s.ok())
   {
+      // This SetWriteRate() call removed because this thread
+      //  has priority (others blocked on mutex) and thus created
+      //  misleading estimates of disk write speed
       // 2x since mem to disk, not disk to disk
-      versions_->SetWriteRate(2*stats.micros/meta.num_entries);
+      //      env_->SetWriteRate(2*stats.micros/meta.num_entries);
+      // 2x since mem to disk, not disk to disk
+      // env_->SetWriteRate(2*stats.micros/meta.num_entries);
   }   // if
 
   return s;
@@ -1018,8 +1023,6 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
-  const uint64_t start_micros = env_->NowMicros();
-  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
   Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
       compact->compaction->num_input_files(0),
@@ -1039,8 +1042,14 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  if (0 == compact->compaction->level())
+  bool is_level0_compaction=(0 == compact->compaction->level());
+
+  if (is_level0_compaction)
       pthread_rwlock_rdlock(&gThreadLock1);
+
+  const uint64_t start_micros = env_->NowMicros();
+  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
+
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
@@ -1053,7 +1062,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
     // Prioritize immutable compaction work
-    imm_micros+=PrioritizeWork(0==compact->compaction->level());
+    imm_micros+=PrioritizeWork(is_level0_compaction);
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&
@@ -1080,6 +1089,30 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
       compact->current_output()->largest.DecodeFrom(key);
       compact->builder->Add(key, input->value());
+
+      // update throttle ... now, end of compaction may be too late
+      //   but not too often since NowMicros can be costly
+      size_t entry_count;
+      entry_count=compact->num_entries + compact->builder->NumEntries();
+
+      // imm_micros intentional NOT removed from time calculation,
+      //  gives better measure of overall activity / write overhead
+      if (1==(entry_count % 1000) && 1000<entry_count)
+      {
+//          env_->SetWriteRate((env_->NowMicros() - start_micros)/entry_count);
+
+          // test for priority change
+          if (!is_level0_compaction)
+          {
+              // raise this compaction's priority if it is blocking a
+              //  dire compaction of level 0 files
+              if (config::kL0_SlowdownWritesTrigger < versions_->current()->NumFiles(0))
+              {
+                  pthread_rwlock_rdlock(&gThreadLock1);
+                  is_level0_compaction=true;
+              }   // if
+          }   // if
+      }   // if
 
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
@@ -1117,15 +1150,18 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
 
-  if (0 == compact->compaction->level())
+  if (is_level0_compaction)
       pthread_rwlock_unlock(&gThreadLock1);
 
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
 
   if (status.ok()) {
+    // imm_micros intentional NOT removed from time calculation,
+    //  gives better measure of overall activity / write overhead
     if (0!=compact->num_entries)
-      versions_->SetWriteRate(stats.micros/compact->num_entries);
+      env_->SetWriteRate((env_->NowMicros() - start_micros), compact->num_entries,
+			 is_level0_compaction);
     status = InstallCompactionResults(compact);
   }
   VersionSet::LevelSummaryStorage tmp;
@@ -1360,6 +1396,19 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
+  int throttle;
+
+  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
+  if (0!=throttle)
+  {
+      /// slowing each call down sequentially
+      MutexLock l(&throttle_mutex_);
+
+      // throttle is per key write, how many in batch?
+      //  (batch multiplier killed AAE, removed)
+      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
+  }   // if
+
   Writer w(&mutex_);
   w.batch = my_batch;
   w.sync = options.sync;
@@ -1480,16 +1529,6 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   assert(!writers_.empty());
   bool allow_delay = !force;
   Status s;
-  int throttle;
-
-  throttle=versions_->WriteThrottleUsec();
-  if (0!=throttle)
-  {
-      mutex_.Unlock();
-      /// slowing things down
-      env_->SleepForMicroseconds(throttle);
-      mutex_.Lock();
-  }   // if
 
   // hint to background compaction.
   level0_good=(versions_->NumLevelFiles(0) < config::kL0_CompactionTrigger);
@@ -1510,7 +1549,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
+#if 0   // see if this impacts smoothing or helps (but keep the counts)
       env_->SleepForMicroseconds(1000);
+#endif
       allow_delay = false;  // Do not delay a single write more than once
       gPerfCounters->Inc(ePerfWriteSleep);
       mutex_.Lock();
