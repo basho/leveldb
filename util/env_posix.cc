@@ -30,7 +30,6 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
-#include <syslog.h>
 
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
@@ -43,9 +42,10 @@ pthread_rwlock_t gThreadLock1;
 
 pthread_mutex_t gThrottleMutex;
 
-#define THROTTLE_INTERVALS 32
+#define THROTTLE_INTERVALS 63
 #define THROTTLE_SECONDS 60
 #define THROTTLE_TIME THROTTLE_SECONDS*1000000
+#define THROTTLE_SCALING 17
 
 struct ThrottleData_t
 {
@@ -125,18 +125,12 @@ void * arg)
 
         // change the throttle slowly
         if (gThrottleRate < new_throttle)
-            gThrottleRate+=(new_throttle - gThrottleRate)/7;
+            gThrottleRate+=(new_throttle - gThrottleRate)/THROTTLE_SCALING;
         else
-            gThrottleRate-=(gThrottleRate - new_throttle)/7;
+            gThrottleRate-=(gThrottleRate - new_throttle)/THROTTLE_SCALING;
 
         gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
         gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
-
-        // in case of restart with heavy inbound
-
-        syslog(LOG_ERR, "Throttle data: %llu, %llu, %llu, %llu, %llu",
-               gThrottleData[replace_idx].m_Micros, gThrottleData[replace_idx].m_Keys, gThrottleData[replace_idx].m_Backlog,
-               gThrottleData[replace_idx].m_Compactions, gThrottleRate);
 
         // prepare for next interval
         pthread_mutex_lock(&gThrottleMutex);
