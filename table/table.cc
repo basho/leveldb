@@ -110,6 +110,8 @@ void Table::ReadMeta(const Footer& footer) {
   std::string key;
 
   first=true;
+  next=NULL;
+
   do
   {
       found=false;

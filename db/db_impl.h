@@ -121,6 +121,7 @@ class DBImpl : public DB {
 
   // State below is protected by mutex_
   port::Mutex mutex_;
+  port::Mutex throttle_mutex_;   // used by write throttle to force sequential waits on callers
   port::AtomicPointer shutting_down_;
   port::CondVar bg_cv_;          // Signalled when background work finishes
   MemTable* mem_;

@@ -30,6 +30,7 @@
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
 
+
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -38,6 +39,114 @@ namespace leveldb {
 
 pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
+
+pthread_mutex_t gThrottleMutex;
+
+#define THROTTLE_INTERVALS 63
+#define THROTTLE_SECONDS 60
+#define THROTTLE_TIME THROTTLE_SECONDS*1000000
+#define THROTTLE_SCALING 17
+
+struct ThrottleData_t
+{
+    uint64_t m_Micros;
+    uint64_t m_Keys;
+    uint64_t m_Backlog;
+    uint64_t m_Compactions;
+} gThrottleData[THROTTLE_INTERVALS];
+uint64_t gThrottleRate;
+
+static void *
+ThrottleThread(
+void * arg)
+{
+    Env * env;
+    uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
+    int replace_idx, loop;
+    uint64_t new_throttle;
+
+    env=(Env *)arg;
+    replace_idx=2;
+
+    while(1)
+    {
+        // sleep 5 minutes
+        env->SleepForMicroseconds(THROTTLE_TIME);
+
+        pthread_mutex_lock(&gThrottleMutex);
+        gThrottleData[replace_idx]=gThrottleData[1];
+        memset(&gThrottleData[1], 0, sizeof(gThrottleData[1]));
+        pthread_mutex_unlock(&gThrottleMutex);
+
+        tot_micros=0;
+        tot_keys=0;
+        tot_backlog=0;
+        tot_compact=0;
+
+        // this could be faster by keeping running totals and
+        //  subtracting [replace_idx] before copying [0] into it,
+        //  then adding new [replace_idx].  But that needs more
+        //  time for testing.
+        for (loop=2; loop<THROTTLE_INTERVALS; ++loop)
+        {
+            tot_micros+=gThrottleData[loop].m_Micros;
+            tot_keys+=gThrottleData[loop].m_Keys;
+            tot_backlog+=gThrottleData[loop].m_Backlog;
+            tot_compact+=gThrottleData[loop].m_Compactions;
+        }   // for
+
+	// non-level0 data available?
+        if (0!=tot_keys)
+        {
+            if (0==tot_compact)
+                tot_compact=1;
+
+            // average write time for level 1+ compactions per key
+            //   times the average number of tasks waiting
+            new_throttle=(tot_micros / tot_keys)
+                * (tot_backlog / tot_compact);
+
+        }   // if
+
+	// attempt to most recent level0
+	//  (only use most recent level0 until level1+ data becomes available,
+	//   useful on restart of heavily loaded server)
+	else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
+	{
+            pthread_mutex_lock(&gThrottleMutex);
+            new_throttle=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys)
+	      * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
+            pthread_mutex_unlock(&gThrottleMutex);
+	}   // else if
+        else
+        {
+            new_throttle=0;
+        }   // else
+
+        // change the throttle slowly
+        if (gThrottleRate < new_throttle)
+            gThrottleRate+=(new_throttle - gThrottleRate)/THROTTLE_SCALING;
+        else
+            gThrottleRate-=(gThrottleRate - new_throttle)/THROTTLE_SCALING;
+
+        gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
+        gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
+
+        // prepare for next interval
+        pthread_mutex_lock(&gThrottleMutex);
+        memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
+        pthread_mutex_unlock(&gThrottleMutex);
+
+        ++replace_idx;
+        if (THROTTLE_INTERVALS==replace_idx)
+            replace_idx=2;
+
+    }   // while
+
+    return(NULL);
+
+}   // ThrottleThread
+
 
 
 namespace {
@@ -611,7 +720,7 @@ class PosixEnv : public Env {
     {
         micros=(micros/clock_res_ +1)*clock_res_;
         ts.tv_sec=micros/1000000;
-        ts.tv_nsec=(micros - ts.tv_sec) *1000;
+        ts.tv_nsec=(micros - ts.tv_sec*1000000) *1000;
 
         do
         {
@@ -628,6 +737,75 @@ class PosixEnv : public Env {
 
   virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
 
+    virtual void SetWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
+  {
+      PthreadCall("lock", pthread_mutex_lock(&mu_));
+
+      if (IsLevel0)
+      {
+          gThrottleData[0].m_Micros+=Micros;
+          gThrottleData[0].m_Keys+=Keys;
+          gThrottleData[0].m_Backlog+=GetBackgroundBacklog();
+          gThrottleData[0].m_Compactions+=1;
+
+          gPerfCounters->Add(ePerfThrottleMicros0, Micros);
+          gPerfCounters->Add(ePerfThrottleKeys0, Keys);
+          gPerfCounters->Add(ePerfThrottleBacklog0, GetBackgroundBacklog());
+          gPerfCounters->Inc(ePerfThrottleCompacts0);
+      }   // if
+
+      else
+      {
+          gThrottleData[1].m_Micros+=Micros;
+          gThrottleData[1].m_Keys+=Keys;
+          gThrottleData[1].m_Backlog+=GetBackgroundBacklog();
+          gThrottleData[1].m_Compactions+=1;
+
+          gPerfCounters->Add(ePerfThrottleMicros1, Micros);
+          gPerfCounters->Add(ePerfThrottleKeys1, Keys);
+          gPerfCounters->Add(ePerfThrottleBacklog1, GetBackgroundBacklog());
+          gPerfCounters->Inc(ePerfThrottleCompacts1);
+      }   // else
+
+      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+
+      return;
+  };
+
+  virtual uint64_t GetWriteRate() const {return(gThrottleRate);};
+#if 0
+  virtual uint64_t SmoothWriteRate(uint64_t Rate)
+  {
+      uint64_t ret_val;
+
+      PthreadCall("lock", pthread_mutex_lock(&gThrottleMutex));
+
+      // precaution against bad timers, failing drives, and floppy disks
+      if (Rate < 0xFFFFF && 0 != Rate)
+      {
+#if 0
+          // scale up slowly ... averaging entire system
+          if (gThrottleSum < Rate)
+              gThrottleSum+=(Rate - gThrottleSum)/101;
+
+          // scale down to a lower rate slowly
+          else
+              gThrottleSum-=(gThrottleSum - Rate)/101;
+#else
+          gThrottleSum[0]+=Rate;
+          ++gThrottleCount[0];
+#endif
+      }   // if
+
+      ret_val=(0!=(gThrottleCountPre+gThrottleCount[0]
+                  ? (gThrottleSumPre+gThrottleSum[0])/(gThrottleCountPre+gThrottleCount[0])
+                  : 0));
+
+      PthreadCall("unlock", pthread_mutex_unlock(&gThrottleMutex));
+
+      return(ret_val);
+  };
+#endif
 
  private:
   void PthreadCall(const char* label, int result) {
@@ -653,6 +831,7 @@ class PosixEnv : public Env {
   pthread_t bgthread4_;    // imm_ to level 0 compactions
   bool started_bgthread_;
   volatile int bg_backlog_;// count of items on 3 compaction queues
+  volatile int bg_active_; // count of threads actually working compaction
   int64_t clock_res_;
 
   // Entry per Schedule() call
@@ -665,12 +844,37 @@ class PosixEnv : public Env {
 
   void InsertQueue2(struct PosixEnv::BGItem & item);
 
+  void SetBacklog()
+  {
+      uint32_t cur_backlog;
+
+      // mutex mu_ is assumed locked.
+      cur_backlog=queue4_.size()+queue2_.size()+queue_.size()+bg_active_;
+
+#if 0    // leave all smoothing to exponential formula
+      // scale up moderately
+      if (bg_backlog_ < cur_backlog)
+              bg_backlog_+=(cur_backlog - bg_backlog_)/3;
+
+      // scale down slower than up
+      else
+          bg_backlog_-=(bg_backlog_ - cur_backlog)/5;
+#else
+      bg_backlog_=cur_backlog;
+#endif
+
+      return;
+  };
+
+  volatile uint64_t write_rate_usec_; // recently experienced average time to
+                                      // write one key during background compaction
+
 };
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
                        started_bgthread_(false),
-                       bg_backlog_(0),
-                       clock_res_(1)
+                       bg_backlog_(0), bg_active_(0),
+                       clock_res_(1), write_rate_usec_(0)
 {
   struct timespec ts;
 
@@ -822,7 +1026,7 @@ PosixEnv::Schedule(
         queue_.back().arg = arg;
     }   // else
 
-    bg_backlog_=queue4_.size()+queue2_.size()*2+queue_.size()*2;
+    SetBacklog();
 
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 }
@@ -879,6 +1083,16 @@ void PosixEnv::BGThread()
     {
         // Wait until there is an item that is ready to run
         PthreadCall("lock", pthread_mutex_lock(&mu_));
+
+        // ignore bg_active_ first time through loop (and if somehow corrupted)
+        if (0<bg_active_)
+        {
+            --bg_active_;
+            SetBacklog();
+        }   // if
+        else
+            bg_active_=0;
+
         while (queue_ptr->empty()) {
             PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
         }
@@ -886,7 +1100,9 @@ void PosixEnv::BGThread()
         void (*function)(void*) = queue_ptr->front().function;
         void* arg = queue_ptr->front().arg;
         queue_ptr->pop_front();
-        bg_backlog_=queue4_.size()+queue2_.size()+queue_.size();
+
+        ++bg_active_;
+        SetBacklog();
 
         PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
@@ -1030,6 +1246,7 @@ static unsigned count=0;
 static void InitDefaultEnv()
 {
     int loop;
+    pthread_t tid;
 
     for (loop=0; loop<THREAD_BLOCKS; ++loop)
     {
@@ -1038,6 +1255,12 @@ static void InitDefaultEnv()
 
     pthread_rwlock_init(&gThreadLock0, NULL);
     pthread_rwlock_init(&gThreadLock1, NULL);
+    pthread_mutex_init(&gThrottleMutex, NULL);
+
+    memset(&gThrottleData, 0, sizeof(gThrottleData));
+    gThrottleRate=0;
+
+    pthread_create(&tid, NULL,  &ThrottleThread, default_env[0]);
 
     // force the loading of code for both filters in case they
     //  are hidden in a shared library
