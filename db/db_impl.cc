@@ -37,6 +37,9 @@
 #include "util/mutexlock.h"
 #include "leveldb/perf_count.h"
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 namespace leveldb {
 
 // Information kept for every waiting writer
@@ -1657,7 +1660,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
       int index;
 
       index=gPerfCounters->LookupCounter(in.ToString().c_str());
-      snprintf(buf, sizeof(buf), "%llu", gPerfCounters->Value(index));
+      snprintf(buf, sizeof(buf), "%" PRIu64 , gPerfCounters->Value(index));
       value->append(buf);
       return(true);
   }

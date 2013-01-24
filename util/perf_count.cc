@@ -186,7 +186,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         printf("      m_Version: %u\n", m_Version);
         printf("  m_CounterSize: %u\n", m_CounterSize);
         for (loop=0; loop<m_CounterSize; ++loop)
-            printf("    Counter[%2u]: %llu\n", loop, m_Counter[loop]);
+            printf("    Counter[%2u]: %" PRIu64 "\n", loop, m_Counter[loop]);
 
         return;
 
