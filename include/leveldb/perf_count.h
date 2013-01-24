@@ -27,6 +27,12 @@
 #include <string>
 #include "leveldb/status.h"
 
+#if defined(__i686) || defined(_WIN32)
+  #define CNTR_FMT "u"
+#else
+  #define CNTR_FMT "llu"
+#endif
+
 namespace leveldb {
 
 // We want 32 bit counters on 32 bit platforms, 64 bit otherwise.

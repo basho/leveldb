@@ -1657,7 +1657,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
       int index;
 
       index=gPerfCounters->LookupCounter(in.ToString().c_str());
-      snprintf(buf, sizeof(buf), "%u", gPerfCounters->Value(index));
+      snprintf(buf, sizeof(buf), "%" CNTR_FMT, gPerfCounters->Value(index));
       value->append(buf);
       return(true);
   }

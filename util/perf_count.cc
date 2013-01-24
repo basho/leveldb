@@ -188,7 +188,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         printf("      m_Version: %u\n", m_Version);
         printf("  m_CounterSize: %u\n", m_CounterSize);
         for (loop=0; loop<m_CounterSize; ++loop)
-            printf("    Counter[%2u]: %u\n", loop, m_Counter[loop]);
+            printf("    Counter[%2u]: %" CNTR_FMT "\n", loop, m_Counter[loop]);
 
         return;
 
@@ -508,7 +508,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
         for (loop=0; loop<ePerfCountEnumSize; ++loop)
         {
-            printf("  %s: %u\n", m_PerfCounterNames[loop], m_Counter[loop]);
+            printf("  %s: %" CNTR_FMT "\n", m_PerfCounterNames[loop], m_Counter[loop]);
         }   // loop
     };  // Dump
 
