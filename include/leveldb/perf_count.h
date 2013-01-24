@@ -27,7 +27,7 @@
 #include <string>
 #include "leveldb/status.h"
 
-#if defined(__i686) || defined(_WIN32)
+#if INTPTR_MAX == INT32_MAX
   #define CNTR_FMT "u"
 #else
   #define CNTR_FMT "llu"
