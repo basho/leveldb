@@ -58,8 +58,8 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     {
         memset(m_Counter, 0, sizeof(m_Counter));
 
-        m_Counter[eSstCountKeySmallest]=ULLONG_MAX;
-        m_Counter[eSstCountValueSmallest]=ULLONG_MAX;
+        m_Counter[eSstCountKeySmallest]=CounterInfo::MAX_VALUE;
+        m_Counter[eSstCountValueSmallest]=CounterInfo::MAX_VALUE;
 
         return;
 
@@ -76,7 +76,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         PutVarint32(&Dst, m_CounterSize);
 
         for(loop=0; loop<eSstCountEnumSize; ++loop)
-            PutVarint64(&Dst, m_Counter[loop]);
+            PutVarint64(&Dst, (uint64_t)m_Counter[loop]);
     }   // SstCounters::EncodeTo
 
 
@@ -101,7 +101,9 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
         for (loop=0; good && loop<eSstCountEnumSize; ++loop)
         {
-            good=GetVarint64(&cursor, &m_Counter[loop]);
+            uint64_t val;
+            good=GetVarint64(&cursor, &val);
+            m_Counter[loop] = (CounterInt) val;
         }   // for
 
         // if (!good) change ret_status to bad
@@ -111,11 +113,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // SstCounters::DecodeFrom
 
 
-    uint64_t
+    SstCounters::CounterInt
     SstCounters::Inc(
         unsigned Index)
     {
-        uint64_t ret_val;
+        CounterInt ret_val;
 
         ret_val=0;
         if (!m_IsReadOnly && Index<m_CounterSize)
@@ -128,12 +130,12 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // SstCounters::Inc
 
 
-    uint64_t
+    SstCounters::CounterInt
     SstCounters::Add(
         unsigned Index,
-        uint64_t Amount)
+        SstCounters::CounterInt Amount)
     {
-        uint64_t ret_val;
+        CounterInt ret_val;
 
         ret_val=0;
         if (!m_IsReadOnly && Index<m_CounterSize)
@@ -146,11 +148,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // SstCounters::Add
 
 
-    uint64_t
+    SstCounters::CounterInt
     SstCounters::Value(
         unsigned Index) const
     {
-        uint64_t ret_val;
+        CounterInt ret_val;
 
         ret_val=0;
         if (Index<m_CounterSize)
@@ -165,7 +167,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     void
     SstCounters::Set(
         unsigned Index,
-        uint64_t Value)
+        SstCounters::CounterInt Value)
     {
         if (Index<m_CounterSize)
         {
@@ -186,7 +188,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         printf("      m_Version: %u\n", m_Version);
         printf("  m_CounterSize: %u\n", m_CounterSize);
         for (loop=0; loop<m_CounterSize; ++loop)
-            printf("    Counter[%2u]: %" PRIu64 "\n", loop, m_Counter[loop]);
+            printf("    Counter[%2u]: %u\n", loop, m_Counter[loop]);
 
         return;
 
@@ -261,16 +263,16 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     };  // PerformanceCounters::Init
 
 
-    uint64_t
+    PerformanceCounters::CounterInt
     PerformanceCounters::Inc(
         unsigned Index)
     {
-        uint64_t ret_val;
+        CounterInt ret_val;
 
         ret_val=0;
         if (Index<m_CounterSize)
         {
-            volatile uint64_t * val_ptr;
+            volatile CounterInt * val_ptr;
 
             val_ptr=&m_Counter[Index];
 
@@ -286,16 +288,16 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // PerformanceCounters::Inc
 
 
-    uint64_t
+    PerformanceCounters::CounterInt
     PerformanceCounters::Dec(
         unsigned Index)
     {
-        uint64_t ret_val;
+        CounterInt ret_val;
 
         ret_val=0;
         if (Index<m_CounterSize)
         {
-            volatile uint64_t * val_ptr;
+            volatile CounterInt * val_ptr;
 
             val_ptr=&m_Counter[Index];
 
@@ -311,17 +313,17 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // PerformanceCounters::Dec
 
 
-    uint64_t
+    PerformanceCounters::CounterInt
     PerformanceCounters::Add(
         unsigned Index,
-        uint64_t Amount)
+        PerformanceCounters::CounterInt Amount)
     {
-        uint64_t ret_val;
+        CounterInt ret_val;
 
         ret_val=0;
         if (Index<m_CounterSize)
         {
-            volatile uint64_t * val_ptr;
+            volatile CounterInt * val_ptr;
 
             val_ptr=&m_Counter[Index];
 
@@ -336,11 +338,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // PerformanceCounters::Add
 
 
-    uint64_t
+    PerformanceCounters::CounterInt
     PerformanceCounters::Value(
         unsigned Index) const
     {
-        uint64_t ret_val;
+        CounterInt ret_val;
 
         ret_val=0;
         if (Index<m_CounterSize)
@@ -355,11 +357,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     void
     PerformanceCounters::Set(
         unsigned Index,
-        uint64_t Amount)
+        PerformanceCounters::CounterInt Amount)
     {
         if (Index<m_CounterSize)
         {
-            volatile uint64_t * val_ptr;
+            volatile CounterInt * val_ptr;
 
             val_ptr=&m_Counter[Index];
 
@@ -370,11 +372,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
     }   // PerformanceCounters::Set
 
 
-    volatile const uint64_t *
+    volatile const PerformanceCounters::CounterInt *
     PerformanceCounters::GetPtr(
         unsigned Index) const
     {
-        const volatile uint64_t * ret_ptr;
+        const volatile CounterInt * ret_ptr;
 
         if (Index<m_CounterSize)
             ret_ptr=&m_Counter[Index];
@@ -404,7 +406,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
     int PerformanceCounters::m_PerfSharedId=-1;
     int PerformanceCounters::m_LastError=0;
-    volatile uint64_t PerformanceCounters::m_BogusCounter=0;
+    volatile PerformanceCounters::CounterInt PerformanceCounters::m_BogusCounter=0;
     const char * PerformanceCounters::m_PerfCounterNames[]=
     {
         "ROFileOpen",
@@ -506,7 +508,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
         for (loop=0; loop<ePerfCountEnumSize; ++loop)
         {
-            printf("  %s: %" PRIu64 "\n", m_PerfCounterNames[loop], m_Counter[loop]);
+            printf("  %s: %u\n", m_PerfCounterNames[loop], m_Counter[loop]);
         }   // loop
     };  // Dump
 
