@@ -992,7 +992,7 @@ void VersionSet::Finalize(Version* v) {
       // compute aggressive penalty for write throttle, things go bad if higher
       //  levels are allowed to backup ... especially Level-1
       if (1<=score)
-          penalty+=(static_cast<int>(score))*5;
+          penalty+=(static_cast<int>(score))*2; // was 5;
     }
 
     if (score > best_score) {
