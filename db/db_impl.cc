@@ -37,7 +37,10 @@
 #include "util/mutexlock.h"
 #include "leveldb/perf_count.h"
 
-namespace leveldb {
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
+-namespace leveldb {
 
 // Information kept for every waiting writer
 struct DBImpl::Writer {
