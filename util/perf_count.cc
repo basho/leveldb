@@ -274,7 +274,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             val_ptr=&m_Counter[Index];
 
-# if __WORDSIZE == 64
+# if ULONG_MAX != 4294967295UL
 #ifdef OS_SOLARIS
             atomic_inc_64(val_ptr);
 #else
@@ -312,7 +312,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             val_ptr=&m_Counter[Index];
 
-# if __WORDSIZE == 64
+# if ULONG_MAX != 4294967295UL
 #ifdef OS_SOLARIS
             atomic_dec_64(val_ptr);
 #else
@@ -351,7 +351,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             val_ptr=&m_Counter[Index];
 
-# if __WORDSIZE == 64
+# if ULONG_MAX != 4294967295UL
 #ifdef OS_SOLARIS
             ret_val=atomic_add_64_nv(val_ptr, Amount);
 #else
