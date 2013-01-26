@@ -274,10 +274,23 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             val_ptr=&m_Counter[Index];
 
+# if ULONG_MAX != 4294967295UL
 #ifdef OS_SOLARIS
             atomic_inc_64(val_ptr);
 #else
             __sync_add_and_fetch(val_ptr, 1);
+#endif
+#else
+            // hack fest for 64 bit semi-atomic on 32bit machine
+            uint32_t ret_32, * ptr_32;
+
+            ptr_32=(uint32_t *)&val_ptr;
+            ret_32=__sync_add_and_fetch(ptr_32, 1);
+            if (0==ret_32)
+            {
+                ++ptr_32;
+                __sync_add_and_fetch(ptr_32, 1);
+            }   // if
 #endif
             ret_val=*val_ptr;
         }   // if
@@ -299,10 +312,23 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             val_ptr=&m_Counter[Index];
 
+# if ULONG_MAX != 4294967295UL
 #ifdef OS_SOLARIS
             atomic_dec_64(val_ptr);
 #else
             __sync_sub_and_fetch(val_ptr, 1);
+#endif
+#else
+            // hack fest for 64 bit semi-atomic on 32bit machine
+            uint32_t ret_32, * ptr_32;
+
+            ptr_32=(uint32_t *)&val_ptr;
+            ret_32=__sync_sub_and_fetch(ptr_32, 1);
+            if (0xFFFFFFFF==ret_32)
+            {
+                ++ptr_32;
+                __sync_sub_and_fetch(ptr_32, 1);
+            }   // if
 #endif
             ret_val=*val_ptr;
         }   // if
@@ -325,10 +351,26 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             val_ptr=&m_Counter[Index];
 
+# if ULONG_MAX != 4294967295UL
 #ifdef OS_SOLARIS
             ret_val=atomic_add_64_nv(val_ptr, Amount);
 #else
             ret_val=__sync_add_and_fetch(val_ptr, Amount);
+#endif
+#else
+            // hack fest for 64 bit semi-atomic on 32bit machine
+            uint32_t old_32, ret_32, * ptr_32;
+
+            ptr_32=(uint32_t *)&val_ptr;
+            old_32=*ptr_32;
+            ret_32=__sync_add_and_fetch(ptr_32, Amount);
+            if (ret_32<old_32)
+            {
+                ++ptr_32;
+                __sync_add_and_fetch(ptr_32, 1);
+            }   // if
+
+            ret_val=*val_ptr;
 #endif
         }   // if
 
