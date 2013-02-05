@@ -37,7 +37,6 @@ struct LRUHandle {
   size_t key_length;
   volatile uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
-  struct timeval last_access;
   char key_data[1];   // Beginning of key
 
   Slice key() const {
@@ -274,7 +273,6 @@ Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
     __sync_add_and_fetch(&e->refs, 1);
 #endif
     // was ... e->refs++;
-    gettimeofday(&e->last_access, NULL);
   }
 
   return reinterpret_cast<Cache::Handle*>(e);
@@ -297,7 +295,6 @@ Cache::Handle* LRUCache::Insert(
   e->key_length = key.size();
   e->hash = hash;
   e->refs = 2;  // One from LRUCache, one for the returned handle
-  gettimeofday(&e->last_access, NULL);
   memcpy(e->key_data, key.data(), key.size());
 
   WriteLock l(&mutex_);
@@ -320,18 +317,18 @@ Cache::Handle* LRUCache::Insert(
 
     // sequential scan when over capacity is overall faster
     //  than requiring write lock to rearrange LRU on every read
-    low_ptr=lru_.next;
+    low_ptr=NULL;
     for (cursor=lru_.next;
-         cursor!=&lru_; cursor=cursor->next)
+         NULL==low_ptr && cursor!=&lru_;
+         cursor=cursor->next)
     {
-        if ((timercmp(&cursor->last_access, &low_ptr->last_access, <) && cursor->refs <= 1)
-            || cursor->refs < low_ptr->refs)
+        if (cursor->refs <= 1)
             low_ptr=cursor;
     }   // for
     // removing item that still has active references is
     //  quite harmful since the removal does not change
     //  usage.  Result can be accidental flush of entire cache.
-    if (&lru_!=low_ptr && low_ptr->refs <= 1)
+    if (NULL!=low_ptr && &lru_!=low_ptr && low_ptr->refs <= 1)
     {
         one_removed=true;
         LRU_Remove(low_ptr);
