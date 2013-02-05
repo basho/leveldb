@@ -27,7 +27,26 @@
 #include <string>
 #include "leveldb/status.h"
 
+#if INTPTR_MAX == INT32_MAX
+  #define CNTR_FMT "u"
+#else
+  #define CNTR_FMT "llu"
+#endif
+
 namespace leveldb {
+
+// We want 32 bit counters on 32 bit platforms, 64 bit otherwise.
+template<int> struct CounterInfoTpl {
+    typedef uint64_t Type;
+    static const Type MAX_VALUE = Type(-1); 
+};
+
+template<> struct CounterInfoTpl<4> {
+    typedef uint32_t Type;
+    static const Type MAX_VALUE = Type(-1);
+};
+
+typedef CounterInfoTpl<sizeof(void*)> CounterInfo;
 
 enum SstCountEnum
 {
@@ -57,12 +76,14 @@ enum SstCountEnum
 
 class SstCounters
 {
+public:
+    typedef CounterInfo::Type CounterInt;
 protected:
     bool m_IsReadOnly;         //!< set when data decoded from a file
     uint32_t m_Version;        //!< object revision identification
     uint32_t m_CounterSize;    //!< number of objects in m_Counter
 
-    uint64_t m_Counter[eSstCountEnumSize];
+    CounterInt m_Counter[eSstCountEnumSize];
 
 public:
     // constructors / destructor
@@ -75,16 +96,16 @@ public:
     Status DecodeFrom(const Slice& src);
 
     // increment the counter
-    uint64_t Inc(unsigned Index);
+    CounterInt Inc(unsigned Index);
 
     // add value to the counter
-    uint64_t Add(unsigned Index, uint64_t Amount);
+    CounterInt Add(unsigned Index, CounterInt Amount);
 
     // return value of a counter
-    uint64_t Value(unsigned Index) const;
+    CounterInt Value(unsigned Index) const;
 
     // set a value
-    void Set(unsigned Index, uint64_t);
+    void Set(unsigned Index, CounterInt);
 
     // return number of counters
     uint32_t Size() const {return(m_CounterSize);};
@@ -206,16 +227,16 @@ struct PerformanceCounters
 {
 public:
     static int m_LastError;
-
+    typedef CounterInfo::Type CounterInt;
 protected:
     uint32_t m_Version;        //!< object revision identification
     uint32_t m_CounterSize;    //!< number of objects in m_Counter
 
-    volatile uint64_t m_Counter[ePerfCountEnumSize];
+    volatile CounterInt m_Counter[ePerfCountEnumSize];
 
     static const char * m_PerfCounterNames[];
     static int m_PerfSharedId;
-    static volatile uint64_t m_BogusCounter;  //!< for out of range GetPtr calls
+    static volatile CounterInt m_BogusCounter;  //!< for out of range GetPtr calls
 
 public:
     // only called for local object, not for shared memory
@@ -227,19 +248,19 @@ public:
 
     static PerformanceCounters * Init(bool IsReadOnly);
 
-    uint64_t Inc(unsigned Index);
-    uint64_t Dec(unsigned Index);
+    CounterInt Inc(unsigned Index);
+    CounterInt Dec(unsigned Index);
 
     // add value to the counter
-    uint64_t Add(unsigned Index, uint64_t Amount);
+    CounterInt Add(unsigned Index, CounterInt Amount);
 
     // return value of a counter
-    uint64_t Value(unsigned Index) const;
+    CounterInt Value(unsigned Index) const;
 
     // set a value
-    void Set(unsigned Index, uint64_t);
+    void Set(unsigned Index, CounterInt);
 
-    volatile const uint64_t * GetPtr(unsigned Index) const;
+    volatile const CounterInt * GetPtr(unsigned Index) const;
 
     static const char * GetNamePtr(unsigned Index);
 
