@@ -1175,9 +1175,7 @@ void BGFileCloser2(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-//    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
-
+    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
 #endif
 
     if (0 != file_ptr->unused_)
@@ -1224,9 +1222,7 @@ void BGFileUnmapper2(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-//    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
-
+    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
 #endif
 
     delete file_ptr;
