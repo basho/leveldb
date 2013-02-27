@@ -1293,14 +1293,6 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
-    // force the loading of code for both filters in case they
-    //  are hidden in a shared library
-    const FilterPolicy * ptr;
-    ptr=NewBloomFilterPolicy(16);
-    delete ptr;
-    ptr=NewBloomFilterPolicy2(16);
-    delete ptr;
-
 }
 
 Env* Env::Default() {

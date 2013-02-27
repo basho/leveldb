@@ -350,7 +350,6 @@ TableBuilder2::WriteBlock2(
     BlockHandle handle;
     Rep* r = rep_;
 
-#if 1
     size_t total_size;
     RiakBufferPtr dest_ptr;
 
@@ -380,7 +379,6 @@ TableBuilder2::WriteBlock2(
     r->index_block.Add(state.m_LastKey, Slice(handle_encoding));
     r->sst_counters.Inc(eSstCountIndexKeys);
 
-#if 1
 // this allows multiple memcpy
     // let next block into this portion of code
     {
@@ -390,7 +388,6 @@ TableBuilder2::WriteBlock2(
         m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
         m_CondVar.SignalAll();
     }   // mutex scope
-#endif
 
     if (r->status.ok())
     {
@@ -410,7 +407,6 @@ TableBuilder2::WriteBlock2(
         }   // if
     }   // if
 
-#if 1
     // buffer done, put back in pile
     {
         port::MutexLock lock(m_CvMutex);
@@ -418,62 +414,6 @@ TableBuilder2::WriteBlock2(
         state.reset();
         m_CondVar.SignalAll();
     }   // mutex scope
-#else
-    // buffer done, put back in pile
-    {
-        port::MutexLock lock(m_CvMutex);
-
-        state.reset();
-        m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
-        m_CondVar.SignalAll();
-    }   // mutex scope
-#endif
-#else
-
-    handle.set_offset(r->offset);
-    handle.set_size(state.m_Block.CurrentBuffer().size());
-    r->status = r->file->Append(state.m_Block.CurrentBuffer());
-    if (r->status.ok())
-    {
-        char trailer[kBlockTrailerSize];
-        trailer[0] = state.m_Type;
-        EncodeFixed32(trailer+1, crc32c::Mask(state.m_Crc));
-        r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
-        if (r->status.ok())
-        {
-            r->offset += state.m_Block.CurrentBuffer().size() + kBlockTrailerSize;
-        }   // if
-    }   // if
-
-    if (r->status.ok())
-    {
-        if (r->filter_block != NULL)
-        {
-            uint64_t timer2=rep_->options.env->NowMicros();
-            // push all the keys into filter
-            r->filter_block->AddKeys(state.m_FiltLengths, state.m_FiltKeys);
-            r->filter_block->StartBlock(r->offset);
-        }   // if
-
-        std::string handle_encoding;
-        handle.EncodeTo(&handle_encoding);
-        assert(true==state.m_KeyShortened);
-        r->index_block.Add(state.m_LastKey, Slice(handle_encoding));
-        r->sst_counters.Inc(eSstCountIndexKeys);
-    }   // if
-
-
-    // buffer done, put back in pile
-    {
-        port::MutexLock lock(m_CvMutex);
-
-        state.reset();
-        m_NextWrite=(m_NextWrite +1 ) % eTB2Buffers;
-        m_CondVar.SignalAll();
-    }   // mutex scope
-#endif
-
-#endif
 
     return;
 

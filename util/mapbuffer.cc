@@ -812,21 +812,6 @@ RiakBufferFile::UnMap(
 
 
 /**
- * Open file
- * @date 10/10/12 Created
- * @author matthewv
- */
-Status
-RiakBufferFile::Open(
-    const std::string & Filename,        //!< full path of file to create
-    bool AdviseKeep,                     //!< true for POSIX_FADV_WILLNEED, false _DONTNEED
-    size_t WriteBufferSize,              //!< will use this times 1.1 as default map size
-    size_t PageSize)                     //!< operating system page size
-{
-    Status ret_stat;
-
-
-/**
  * Perform sync requested by buffer
  * @date 10/12/12 Created
  * @author matthewv
