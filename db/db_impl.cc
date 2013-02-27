@@ -31,6 +31,7 @@
 #include "port/port.h"
 #include "table/block.h"
 #include "table/merger.h"
+#include "table/table_builder2.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/logging.h"
@@ -945,7 +946,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   std::string fname = TableFileName(dbname_, file_number, compact->compaction->level()+1);
   Status s = env_->NewWritableFile(fname, &compact->outfile);
   if (s.ok()) {
-    compact->builder = new TableBuilder(options_, compact->outfile);
+    compact->builder = new TableBuilder2(options_, compact->outfile);
   }
   return s;
 }

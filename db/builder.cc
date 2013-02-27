@@ -11,6 +11,7 @@
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
+#include "table/table_builder2.h"
 
 namespace leveldb {
 
@@ -36,7 +37,7 @@ Status BuildTable(const std::string& dbname,
       return s;
     }
 
-    TableBuilder* builder = new TableBuilder(options, file);
+    TableBuilder* builder = new TableBuilder2(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
