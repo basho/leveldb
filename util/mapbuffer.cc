@@ -204,8 +204,8 @@ RiakWriteBuffer::get(
     // just in case someone tries to get a pointer before writing:
     if (NULL!=m_Base)
     {
-        assert(m_Offset<=Offset && Offset<m_Offset+m_Size);
-        if (m_Offset<=Offset && Offset<m_Offset+m_Size)
+        assert(m_Offset<=Offset && Offset<m_Offset+(off_t)m_Size);
+        if (m_Offset<=Offset && Offset<m_Offset+(off_t)m_Size)
         {
             off_t map_offset;
 
@@ -550,9 +550,7 @@ RiakBufferFile::Allocate(
     {
         port::MutexLock lock(m_Mutex);
         off_t assigned_off;
-        bool done;
 
-        done=false;
         assigned_off=m_NextOffset;
         m_NextOffset+=DataSize;
 

@@ -245,6 +245,7 @@ class WritableFile {
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;
   virtual Status Allocate(size_t, RiakBufferPtr&) {return(Status::NotSupported("WritableFile::Allocate() not supported"));};
+  virtual bool SupportsBuilder2() const {return(false);};
 
  private:
   // No copying allowed

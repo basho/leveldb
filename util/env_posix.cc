@@ -1207,7 +1207,7 @@ void BGFileCloser2(void * arg)
 
 }   // BGFileCloser2
 
-#if 0  // currently unused, remove due to compiler warning
+
 // this was a reference file:  unmap, purge page cache
 void BGFileUnmapper(void * arg)
 {
@@ -1218,8 +1218,8 @@ void BGFileUnmapper(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-    if (-1 != file_ptr->fd_)
-        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+//    if (-1 != file_ptr->fd_)
+//        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
 #endif
 
     delete file_ptr;
@@ -1228,7 +1228,7 @@ void BGFileUnmapper(void * arg)
     return;
 
 }   // BGFileUnmapper
-#endif
+
 
 // this was a new file:  unmap, hold in page cache
 void BGFileUnmapper2(void * arg)

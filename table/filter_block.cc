@@ -36,8 +36,8 @@ void FilterBlockBuilder::StartBlock(uint64_t block_offset) {
     last_offset_=block_offset;
 }
 
-void FilterBlockBuilder::AddKey(const Slice& key) {
-  Slice k = key;
+void FilterBlockBuilder::AddKey(const Slice& key)
+{
   std::string transform_temp;
   Slice transform_key;
 

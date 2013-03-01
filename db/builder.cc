@@ -12,6 +12,7 @@
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
 #include "table/table_builder2.h"
+#include "util/mapbuffer.h"
 
 namespace leveldb {
 
@@ -37,7 +38,14 @@ Status BuildTable(const std::string& dbname,
       return s;
     }
 
-    TableBuilder* builder = new TableBuilder2(options, file);
+    // not all file systems (such as the memenv) support Allocate()
+    TableBuilder * builder;
+    RiakBufferPtr temp_ptr;
+    if (file->SupportsBuilder2())
+        builder = new TableBuilder2(options, file);
+    else
+        builder = new TableBuilder(options, file);
+
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();

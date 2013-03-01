@@ -118,11 +118,10 @@ void InternalFilterPolicy::CreateFilter(const Slice* keys, int n,
                                         std::string* dst) const {
   // We rely on the fact that the code in table.cc does not mind us
   // adjusting keys[].
-  Slice* mkey = const_cast<Slice*>(keys);
   user_policy_->CreateFilter(keys, n, dst);
 }
 
-    Slice InternalFilterPolicy::TransformKey(const Slice & Key, std::string & Buffer) const {
+Slice InternalFilterPolicy::TransformKey(const Slice & Key, std::string & Buffer) const {
   return user_policy_->TransformKey(ExtractUserKey(Key), Buffer);
 }
 

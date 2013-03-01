@@ -156,10 +156,9 @@ void
 TableBuilder2::Flush()
 {
     BlockNState * block_ptr(NULL);
-    Rep* r = rep_;
-    assert(!r->closed);
-    if (!ok()) return;
 
+    assert(!rep_->closed);
+    if (ok())
     {
         port::MutexLock lock(m_CvMutex);
 
@@ -223,6 +222,18 @@ TableBuilder2::WorkerThread()
                         again=false;
                         m_Blocks[idx].m_State=BlockNState::eBNStateCompress;
                     }   // else if
+
+                    // last block is done, finish it off
+                    else if (m_Finish && idx==m_NextWrite && BlockNState::eBNStateKeyWait==m_Blocks[idx].m_State
+                             && BlockNState::eBNStateEmpty==m_Blocks[(idx+1) % eTB2Buffers].m_State)
+                    {
+                        rep_->options.comparator->FindShortSuccessor(&m_Blocks[idx].m_LastKey);
+                        assert(false==m_Blocks[idx].m_KeyShortened);
+                        m_Blocks[idx].m_KeyShortened=true;
+
+                        again=false;
+                        m_Blocks[idx].m_State=BlockNState::eBNStateWriting;
+                    }   // else if
                 }   // for
             }   // if
 
@@ -262,8 +273,6 @@ TableBuilder2::CompressBlock(
 {
     assert(BlockNState::eBNStateCompress==state.m_State);
     bool our_write(false);
-
-    uint64_t timer=rep_->options.env->NowMicros();
 
     assert(ok());
     Rep* r = rep_;
@@ -329,7 +338,10 @@ TableBuilder2::CompressBlock(
     if (our_write && BlockNState::eBNStateWriting==state.m_State)
         WriteBlock2(state);
     else
+    {
+        port::MutexLock lock(m_CvMutex);
         m_CondVar.SignalAll();
+    }   // else
 
     return;
 
@@ -345,7 +357,6 @@ TableBuilder2::WriteBlock2(
     //    type: uint8
     //    crc: uint32
     assert(BlockNState::eBNStateWriting==state.m_State);
-    uint64_t timer=rep_->options.env->NowMicros();
 
     BlockHandle handle;
     Rep* r = rep_;
@@ -367,7 +378,6 @@ TableBuilder2::WriteBlock2(
 
     if (r->filter_block != NULL)
     {
-        uint64_t timer2=rep_->options.env->NowMicros();
         // push all the keys into filter
         r->filter_block->AddKeys(state.m_FiltLengths, state.m_FiltKeys);
         r->filter_block->StartBlock(r->offset);
@@ -423,37 +433,20 @@ TableBuilder2::WriteBlock2(
 Status
 TableBuilder2::Finish()
 {
-    Rep* r = rep_;
     int loop, idx;
-    uint64_t timer=rep_->options.env->NowMicros();
 
     Flush();
-    assert(!r->closed);
+    assert(!rep_->closed);
     // set by TableBuilder::Finish()  r->closed = true;
 
-    // encode the last key of last block added
-    idx=(m_NextAdd+eTB2Buffers-1) % eTB2Buffers;
+    // let all workers complete
     {
         port::MutexLock lock(m_CvMutex);
 
-        if (BlockNState::eBNStateEmpty!=m_Blocks[idx].m_State)
-        {
-            r->options.comparator->FindShortSuccessor(&m_Blocks[idx].m_LastKey);
-            assert(false==m_Blocks[idx].m_KeyShortened);
-            m_Blocks[idx].m_KeyShortened=true;
+        m_Finish=true;
+        m_CondVar.SignalAll();
+    }
 
-            // if block's progress is waiting for this key ... mark it ready
-            if (BlockNState::eBNStateKeyWait==m_Blocks[idx].m_State)
-            {
-                m_Blocks[idx].m_State=BlockNState::eBNStateReady;
-                m_CondVar.SignalAll();
-            }   // if
-        }   // if
-    }   // mutex
-
-    // let all workers complete
-    m_Finish=true;
-    m_CondVar.SignalAll();
     for (loop=0; loop<eTB2Threads; ++loop)
     {
         pthread_join(m_Writers[loop], NULL);
@@ -464,12 +457,11 @@ TableBuilder2::Finish()
 
     return(status);
 
-
-//    return(TableBuilder::Finish());
-
 }
 
-void TableBuilder2::Abandon() {
+
+void
+TableBuilder2::Abandon() {
   Rep* r = rep_;
   assert(!r->closed);
   r->closed = true;
