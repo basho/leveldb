@@ -32,7 +32,6 @@
 #include "leveldb/perf_count.h"
 #include "util/env_riak.h"
 
-
 #if _XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L
 #define HAVE_FADVISE
 #endif
@@ -1324,7 +1323,5 @@ HasSSE4_2()
 #endif
 
 }   // HasSSE4_2
-
-
 
 }  // namespace leveldb

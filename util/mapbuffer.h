@@ -152,6 +152,7 @@ public:
                         size_t WriteBufferSize, size_t PageSize);
 
     virtual Status Allocate(size_t DataSize, RiakBufferPtr & OutPtr);
+
     virtual bool SupportsBuilder2() const {return(true);};
 
     virtual Status Append(const Slice& data);
