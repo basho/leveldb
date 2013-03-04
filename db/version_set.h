@@ -70,7 +70,7 @@ class Version {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-  Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
+  Status Get(const ReadOptions&, const LookupKey& key, Value* val,
              GetStats* stats);
 
   // Adds "stats" into the current state.  Returns true if a new

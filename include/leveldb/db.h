@@ -38,6 +38,17 @@ struct Range {
   Range(const Slice& s, const Slice& l) : start(s), limit(l) { }
 };
 
+// Abstract holder for a DB value.
+// This allows callers to manage their own value buffers and have
+// DB values copied directly into those buffers.
+class Value {
+ public:
+  virtual Value& assign(const char* data, size_t size) = 0;
+
+ protected:
+  virtual ~Value();
+};
+
 // A DB is a persistent ordered map from keys to values.
 // A DB is safe for concurrent access from multiple threads without
 // any external synchronization.
@@ -82,6 +93,8 @@ class DB {
   // May return some other Status on an error.
   virtual Status Get(const ReadOptions& options,
                      const Slice& key, std::string* value) = 0;
+  virtual Status Get(const ReadOptions& options,
+                     const Slice& key, Value* value) = 0;
 
   // Return a heap-allocated iterator over the contents of the database.
   // The result of NewIterator() is initially invalid (caller must
