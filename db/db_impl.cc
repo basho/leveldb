@@ -88,6 +88,22 @@ struct DBImpl::CompactionState {
   }
 };
 
+Value::~Value() {}
+
+class StringValue : public Value {
+ public:
+  explicit StringValue(std::string& val) : value_(val) {}
+  ~StringValue() {}
+
+  StringValue& assign(const char* data, size_t size) {
+    value_.assign(data, size);
+    return *this;
+  }
+
+ private:
+  std::string& value_;
+};
+
 // Fix user-supplied options to be reasonable
 template <class T,class V>
 static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
@@ -1317,6 +1333,13 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
 Status DBImpl::Get(const ReadOptions& options,
                    const Slice& key,
                    std::string* value) {
+  StringValue stringvalue(*value);
+  return DBImpl::Get(options, key, &stringvalue);
+}
+
+Status DBImpl::Get(const ReadOptions& options,
+                   const Slice& key,
+                   Value* value) {
   Status s;
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
