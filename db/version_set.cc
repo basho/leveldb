@@ -22,25 +22,31 @@
 namespace leveldb {
 
 #if 1
+// branch mv-level-work1, March 2013
+//
+// Notes:
+//
 static struct
 {
-    uint64_t m_TargetFileSize;
-    uint64_t m_MaxGrandParentOverlapBytes;
-    uint64_t m_ExpandedCompactionByteSizeLimit;
-    uint64_t m_MaxBytesForLevel;
-    uint64_t m_MaxFileSizeForLevel;
-    bool m_OverlappedFiles;
+    uint64_t m_TargetFileSize;                   //!< mostly useless
+    uint64_t m_MaxGrandParentOverlapBytes;       //!< needs tuning, but not essential
+                                                 //!<   since moves eliminated
+    uint64_t m_ExpandedCompactionByteSizeLimit;  //!< needs tuning
+    uint64_t m_MaxBytesForLevel;                 //!< ignored if m_OverlappedFiles is true
+    uint64_t m_MaxFileSizeForLevel;              //!< google really applies this to file
+                                                 //!<   to file size of NEXT level
+    bool m_OverlappedFiles;                      //!< false means sst files are sorted
+                                                 //!<   and do not overlap
 } gLevelTraits[config::kNumLevels]=
+
+// level-0 file size of 300,000,000 applies to output files of this level
+//   being written to level-1.  The value is 5 times the default maximum
+//   write buffer size of 60,000,000.  Why five times:  4 level-0 files typically compact
+//   to one level-1 file and are each slightly larger than 60,000,000.
+// level-1 file size of 1,500,000,000 applies to output file of this level
+//   being writtne to level-2.  The value is five times the 300,000,000 of level-1.
+
 {
-#if 0
-    {10485760,  262144000,  576716800,       209715200, 104857600, true},
-    {10485760,  262144000,  576716800,       419430400, 209715200, true},
-    {10485760,  262144000,  576716800,      4194304000, 314572800, true},
-    {10485760,  262144000,  576716800,     41943040000, 419430400, false},
-    {10485760,  262144000,  576716800,    419430400000, 524288000, false},
-    {10485760,  262144000,  576716800,   4194304000000, 629145600, false},
-    {10485760,  262144000,  576716800,  41943040000000, 734003200, false}
-#else
     {10485760,  262144000,  576716800,       209715200, 300000000, true},
     {10485760,  262144000,  576716800,       419430400,1500000000, true},
     {10485760,  262144000,  576716800,      4194304000, 314572800, true},
@@ -48,12 +54,12 @@ static struct
     {10485760,  262144000,  576716800,    419430400000, 524288000, false},
     {10485760,  262144000,  576716800,   4194304000000, 629145600, false},
     {10485760,  262144000,  576716800,  41943040000000, 734003200, false}
-#endif
 };
 
 
 
 #else
+// slightly modified version of Google's original
 static const int64_t kTargetFileSize = 10 * 1048576;
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
