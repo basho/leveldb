@@ -33,7 +33,7 @@ static struct
                                                  //!<   since moves eliminated
     uint64_t m_ExpandedCompactionByteSizeLimit;  //!< needs tuning
     uint64_t m_MaxBytesForLevel;                 //!< ignored if m_OverlappedFiles is true
-    uint64_t m_MaxFileSizeForLevel;              //!< google really applies this to file
+    uint64_t m_MaxFileSizeForLevel;              //!< google really applies this
                                                  //!<   to file size of NEXT level
     bool m_OverlappedFiles;                      //!< false means sst files are sorted
                                                  //!<   and do not overlap
@@ -44,7 +44,7 @@ static struct
 //   write buffer size of 60,000,000.  Why five times:  4 level-0 files typically compact
 //   to one level-1 file and are each slightly larger than 60,000,000.
 // level-1 file size of 1,500,000,000 applies to output file of this level
-//   being writtne to level-2.  The value is five times the 300,000,000 of level-1.
+//   being written to level-2.  The value is five times the 300,000,000 of level-1.
 
 {
     {10485760,  262144000,  576716800,       209715200, 300000000, true},
@@ -1133,7 +1133,7 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
       } else if (icmp_.Compare(files[i]->smallest, ikey) > 0) {
         // Entire file is after "ikey", so ignore
         if (!gLevelTraits[level].m_OverlappedFiles) {
-          // Files other than level 0 are sorted by meta->smallest, so
+          // Non-overlapped files are sorted by meta->smallest, so
           // no further files in this level will contain data for
           // "ikey".
           break;
@@ -1309,7 +1309,8 @@ Compaction* VersionSet::PickCompaction() {
   c->input_version_ = current_;
   c->input_version_->Ref();
 
-  // Files in level 0 may overlap each other, so pick up all overlapping ones
+  // m_OverlappedFiles==true levels have files that
+  //   may overlap each other, so pick up all overlapping ones
   if (gLevelTraits[level].m_OverlappedFiles) {
     InternalKey smallest, largest;
     GetRange(c->inputs_[0], &smallest, &largest);
@@ -1464,6 +1465,11 @@ bool Compaction::IsTrivialMove() const {
           num_input_files(1) == 0 &&
           TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
 #else
+  // removed this functionality when creating gLevelTraits[].m_OverlappedFiles
+  //  flag.  "Move" was intented by Google to delay compaction by moving small
+  //  files in-between non-overlapping sorted files.  New concept is to delay
+  //  all compactions by creating larger log files before starting to thrash
+  //  disk by maintaining smaller sorted files.  Less thrash -> higher throughput
   return(false);
 #endif
 
