@@ -21,6 +21,45 @@
 
 namespace leveldb {
 
+#if 1
+// branch mv-level-work1, March 2013
+//
+// Notes:
+//
+static struct
+{
+    uint64_t m_TargetFileSize;                   //!< mostly useless
+    uint64_t m_MaxGrandParentOverlapBytes;       //!< needs tuning, but not essential
+                                                 //!<   since moves eliminated
+    uint64_t m_ExpandedCompactionByteSizeLimit;  //!< needs tuning
+    uint64_t m_MaxBytesForLevel;                 //!< ignored if m_OverlappedFiles is true
+    uint64_t m_MaxFileSizeForLevel;              //!< google really applies this
+                                                 //!<   to file size of NEXT level
+    bool m_OverlappedFiles;                      //!< false means sst files are sorted
+                                                 //!<   and do not overlap
+} gLevelTraits[config::kNumLevels]=
+
+// level-0 file size of 300,000,000 applies to output files of this level
+//   being written to level-1.  The value is 5 times the default maximum
+//   write buffer size of 60,000,000.  Why five times:  4 level-0 files typically compact
+//   to one level-1 file and are each slightly larger than 60,000,000.
+// level-1 file size of 1,500,000,000 applies to output file of this level
+//   being written to level-2.  The value is five times the 300,000,000 of level-1.
+
+{
+    {10485760,  262144000,  576716800,       209715200, 300000000, true},
+    {10485760,  262144000,  576716800,       419430400,1500000000, true},
+    {10485760,  262144000,  576716800,      4194304000, 314572800, true},
+    {10485760,  262144000,  576716800,     41943040000, 419430400, false},
+    {10485760,  262144000,  576716800,    419430400000, 524288000, false},
+    {10485760,  262144000,  576716800,   4194304000000, 629145600, false},
+    {10485760,  262144000,  576716800,  41943040000000, 734003200, false}
+};
+
+
+
+#else
+// slightly modified version of Google's original
 static const int64_t kTargetFileSize = 10 * 1048576;
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
@@ -50,6 +89,9 @@ static double MaxBytesForLevel(int level) {
 static uint64_t MaxFileSizeForLevel(int level) {
   return(kTargetFileSize*(level+1)*10);
 }
+#endif
+
+
 
 static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
   int64_t sum = 0;
@@ -245,22 +287,35 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
 
 void Version::AddIterators(const ReadOptions& options,
                            std::vector<Iterator*>* iters) {
-  // Merge all level zero files together since they may overlap
-  for (size_t i = 0; i < files_[0].size(); i++) {
-    iters->push_back(
-        vset_->table_cache_->NewIterator(
-            options, files_[0][i]->number, files_[0][i]->file_size, 0));
-  }
 
-  // For levels > 0, we can use a concatenating iterator that sequentially
-  // walks through the non-overlapping files in the level, opening them
-  // lazily.
-  for (int level = 1; level < config::kNumLevels; level++) {
-    if (!files_[level].empty()) {
-      iters->push_back(NewConcatenatingIterator(options, level));
-    }
-  }
-}
+    int level;
+
+    for (level=0; level < config::kNumLevels; ++level)
+    {
+        if (gLevelTraits[level].m_OverlappedFiles)
+        {
+            // Merge all level files together since they may overlap
+            for (size_t i = 0; i < files_[level].size(); i++)
+            {
+                iters->push_back(
+                    vset_->table_cache_->NewIterator(
+                        options, files_[level][i]->number, files_[level][i]->file_size, level));
+            }   // for
+        }   // if
+
+        else
+        {
+            // For sorted levels, we can use a concatenating iterator that sequentially
+            // walks through the non-overlapping files in the level, opening them
+            // lazily.
+            if (!files_[level].empty())
+            {
+                iters->push_back(NewConcatenatingIterator(options, level));
+            }   // if
+        }   // else
+    }   // for
+}   // Version::NewConcatenatingIterator
+
 
 // Callback from TableCache::Get()
 namespace {
@@ -324,8 +379,8 @@ Status Version::Get(const ReadOptions& options,
 
     // Get the list of files to search in this level
     FileMetaData* const* files = &files_[level][0];
-    if (level == 0) {
-      // Level-0 files may overlap each other.  Find all files that
+    if (gLevelTraits[level].m_OverlappedFiles) {
+      // Level files may overlap each other.  Find all files that
       // overlap user_key and process them in order from newest to oldest.
       tmp.reserve(num_files);
       for (uint32_t i = 0; i < num_files; i++) {
@@ -430,7 +485,9 @@ void Version::Unref() {
 bool Version::OverlapInLevel(int level,
                              const Slice* smallest_user_key,
                              const Slice* largest_user_key) {
-  return SomeFileOverlapsRange(vset_->icmp_, (level > 0), files_[level],
+  return SomeFileOverlapsRange(vset_->icmp_,
+                               !gLevelTraits[level].m_OverlappedFiles,
+                               files_[level],
                                smallest_user_key, largest_user_key);
 }
 
@@ -438,6 +495,8 @@ int Version::PickLevelForMemTableOutput(
     const Slice& smallest_user_key,
     const Slice& largest_user_key) {
   int level = 0;
+#if 0
+// test if level 1 m_OverlappedFiles is false, proceded only then
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
     // Push to next level if there is no overlap in next level,
     // and the #bytes overlapping in the level after that are limited.
@@ -450,12 +509,13 @@ int Version::PickLevelForMemTableOutput(
       }
       GetOverlappingInputs(level + 2, &start, &limit, &overlaps);
       const int64_t sum = TotalFileSize(overlaps);
-      if (sum > kMaxGrandParentOverlapBytes) {
+      if (sum > gLevelTraits[level].m_MaxGrandParentOverlapBytes) {
         break;
       }
       level++;
     }
   }
+#endif
   return level;
 }
 
@@ -484,8 +544,8 @@ void Version::GetOverlappingInputs(
       // "f" is completely after specified range; skip it
     } else {
       inputs->push_back(f);
-      if (level == 0) {
-        // Level-0 files may overlap each other.  So check if the newly
+      if (gLevelTraits[level].m_OverlappedFiles) {
+        // Level files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
         if (begin != NULL && user_cmp->Compare(file_start, user_begin) < 0) {
           user_begin = file_start;
@@ -670,7 +730,7 @@ class VersionSet::Builder {
 
 #ifndef NDEBUG
       // Make sure there is no overlap in levels > 0
-      if (level > 0) {
+      if (!gLevelTraits[level].m_OverlappedFiles) {
         for (uint32_t i = 1; i < v->files_[level].size(); i++) {
           const InternalKey& prev_end = v->files_[level][i-1]->largest;
           const InternalKey& this_begin = v->files_[level][i]->smallest;
@@ -959,7 +1019,7 @@ void VersionSet::Finalize(Version* v) {
 
   for (int level = 0; level < config::kNumLevels-1; level++) {
     double score;
-    if (level == 0) {
+    if (gLevelTraits[level].m_OverlappedFiles) {
       // We treat level-0 specially by bounding the number of files
       // instead of number of bytes for two reasons:
       //
@@ -975,7 +1035,8 @@ void VersionSet::Finalize(Version* v) {
           static_cast<double>(config::kL0_CompactionTrigger);
 
       // don't screw around ... get data written to disk!
-      if ((size_t)config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
+      if (0==level
+          && (size_t)config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
           score*=1000000.0;
 
       // compute penalty for write throttle if too many Level-0 files accumulating
@@ -987,7 +1048,7 @@ void VersionSet::Finalize(Version* v) {
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-      score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
+      score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
       // compute aggressive penalty for write throttle, things go bad if higher
       //  levels are allowed to backup ... especially Level-1
@@ -1071,8 +1132,8 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
         result += files[i]->file_size;
       } else if (icmp_.Compare(files[i]->smallest, ikey) > 0) {
         // Entire file is after "ikey", so ignore
-        if (level > 0) {
-          // Files other than level 0 are sorted by meta->smallest, so
+        if (!gLevelTraits[level].m_OverlappedFiles) {
+          // Non-overlapped files are sorted by meta->smallest, so
           // no further files in this level will contain data for
           // "ikey".
           break;
@@ -1175,15 +1236,19 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   options.dbname = dbname_;
   options.env = env_;
 
+  int which_limit;
+
   // Level-0 files have to be merged together.  For other levels,
   // we will make a concatenating iterator per level.
   // TODO(opt): use concatenating iterator for level-0 if there is no overlap
-  const int space = (c->level() == 0 ? c->inputs_[0].size() + 1 : 2);
+  const int space = (gLevelTraits[c->level()].m_OverlappedFiles ? c->inputs_[0].size() + 1 : 2);
   Iterator** list = new Iterator*[space];
   int num = 0;
-  for (int which = 0; which < 2; which++) {
+
+  which_limit=gLevelTraits[c->level()+1].m_OverlappedFiles ? 1 : 2;
+  for (int which = 0; which < which_limit; which++) {
     if (!c->inputs_[which].empty()) {
-      if (c->level() + which == 0) {
+      if (gLevelTraits[c->level() + which].m_OverlappedFiles) {
         const std::vector<FileMetaData*>& files = c->inputs_[which];
         for (size_t i = 0; i < files.size(); i++) {
           list[num++] = table_cache_->NewIterator(
@@ -1244,14 +1309,15 @@ Compaction* VersionSet::PickCompaction() {
   c->input_version_ = current_;
   c->input_version_->Ref();
 
-  // Files in level 0 may overlap each other, so pick up all overlapping ones
-  if (level == 0) {
+  // m_OverlappedFiles==true levels have files that
+  //   may overlap each other, so pick up all overlapping ones
+  if (gLevelTraits[level].m_OverlappedFiles) {
     InternalKey smallest, largest;
     GetRange(c->inputs_[0], &smallest, &largest);
     // Note that the next call will discard the file we placed in
     // c->inputs_[0] earlier and replace it with an overlapping set
     // which will include the picked file.
-    current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
+    current_->GetOverlappingInputs(level, &smallest, &largest, &c->inputs_[0]);
     assert(!c->inputs_[0].empty());
 
     // this can get into tens of thousands after a repair
@@ -1277,52 +1343,55 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   InternalKey smallest, largest;
   GetRange(c->inputs_[0], &smallest, &largest);
 
-  current_->GetOverlappingInputs(level+1, &smallest, &largest, &c->inputs_[1]);
+  if (!gLevelTraits[level+1].m_OverlappedFiles)
+  {
+      current_->GetOverlappingInputs(level+1, &smallest, &largest, &c->inputs_[1]);
 
-  // Get entire range covered by compaction
-  InternalKey all_start, all_limit;
-  GetRange2(c->inputs_[0], c->inputs_[1], &all_start, &all_limit);
+      // Get entire range covered by compaction
+      InternalKey all_start, all_limit;
+      GetRange2(c->inputs_[0], c->inputs_[1], &all_start, &all_limit);
 
-  // See if we can grow the number of inputs in "level" without
-  // changing the number of "level+1" files we pick up.
-  if (!c->inputs_[1].empty()) {
-    std::vector<FileMetaData*> expanded0;
-    current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
-    const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
-    const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
-    const int64_t expanded0_size = TotalFileSize(expanded0);
-    if (expanded0.size() > c->inputs_[0].size() &&
-        inputs1_size + expanded0_size < kExpandedCompactionByteSizeLimit) {
-      InternalKey new_start, new_limit;
-      GetRange(expanded0, &new_start, &new_limit);
-      std::vector<FileMetaData*> expanded1;
-      current_->GetOverlappingInputs(level+1, &new_start, &new_limit,
-                                     &expanded1);
-      if (expanded1.size() == c->inputs_[1].size()) {
-        Log(options_->info_log,
-            "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
-            level,
-            int(c->inputs_[0].size()),
-            int(c->inputs_[1].size()),
-            long(inputs0_size), long(inputs1_size),
-            int(expanded0.size()),
-            int(expanded1.size()),
-            long(expanded0_size), long(inputs1_size));
-        smallest = new_start;
-        largest = new_limit;
-        c->inputs_[0] = expanded0;
-        c->inputs_[1] = expanded1;
-        GetRange2(c->inputs_[0], c->inputs_[1], &all_start, &all_limit);
+      // See if we can grow the number of inputs in "level" without
+      // changing the number of "level+1" files we pick up.
+      if (!c->inputs_[1].empty()) {
+          std::vector<FileMetaData*> expanded0;
+          current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
+          const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
+          const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
+          const int64_t expanded0_size = TotalFileSize(expanded0);
+          if (expanded0.size() > c->inputs_[0].size() &&
+              inputs1_size + expanded0_size < gLevelTraits[level].m_ExpandedCompactionByteSizeLimit) {
+              InternalKey new_start, new_limit;
+              GetRange(expanded0, &new_start, &new_limit);
+              std::vector<FileMetaData*> expanded1;
+              current_->GetOverlappingInputs(level+1, &new_start, &new_limit,
+                                             &expanded1);
+              if (expanded1.size() == c->inputs_[1].size()) {
+                  Log(options_->info_log,
+                      "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
+                      level,
+                      int(c->inputs_[0].size()),
+                      int(c->inputs_[1].size()),
+                      long(inputs0_size), long(inputs1_size),
+                      int(expanded0.size()),
+                      int(expanded1.size()),
+                      long(expanded0_size), long(inputs1_size));
+                  smallest = new_start;
+                  largest = new_limit;
+                  c->inputs_[0] = expanded0;
+                  c->inputs_[1] = expanded1;
+                  GetRange2(c->inputs_[0], c->inputs_[1], &all_start, &all_limit);
+              }
+          }
       }
-    }
-  }
 
-  // Compute the set of grandparent files that overlap this compaction
-  // (parent == level+1; grandparent == level+2)
-  if (level + 2 < config::kNumLevels) {
-    current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
-                                   &c->grandparents_);
-  }
+      // Compute the set of grandparent files that overlap this compaction
+      // (parent == level+1; grandparent == level+2)
+      if (level + 2 < config::kNumLevels) {
+          current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
+                                         &c->grandparents_);
+      }
+  }   // if
 
   if (false) {
     Log(options_->info_log, "Compacting %d '%s' .. '%s'",
@@ -1350,7 +1419,7 @@ Compaction* VersionSet::CompactRange(
   }
 
   // Avoid compacting too much in one shot in case the range is large.
-  const uint64_t limit = MaxFileSizeForLevel(level);
+  const uint64_t limit = gLevelTraits[level].m_MaxFileSizeForLevel;
   uint64_t total = 0;
   for (size_t i = 0; i < inputs.size(); i++) {
     uint64_t s = inputs[i]->file_size;
@@ -1371,7 +1440,7 @@ Compaction* VersionSet::CompactRange(
 
 Compaction::Compaction(int level)
     : level_(level),
-      max_output_file_size_(MaxFileSizeForLevel(level)),
+      max_output_file_size_(gLevelTraits[level].m_MaxFileSizeForLevel),
       input_version_(NULL),
       grandparent_index_(0),
       seen_key_(false),
@@ -1391,9 +1460,19 @@ bool Compaction::IsTrivialMove() const {
   // Avoid a move if there is lots of overlapping grandparent data.
   // Otherwise, the move could create a parent file that will require
   // a very expensive merge later on.
+#if 0
   return (num_input_files(0) == 1 &&
           num_input_files(1) == 0 &&
-          TotalFileSize(grandparents_) <= kMaxGrandParentOverlapBytes);
+          TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
+#else
+  // removed this functionality when creating gLevelTraits[].m_OverlappedFiles
+  //  flag.  "Move" was intented by Google to delay compaction by moving small
+  //  files in-between non-overlapping sorted files.  New concept is to delay
+  //  all compactions by creating larger log files before starting to thrash
+  //  disk by maintaining smaller sorted files.  Less thrash -> higher throughput
+  return(false);
+#endif
+
 }
 
 void Compaction::AddInputDeletions(VersionEdit* edit) {
@@ -1405,24 +1484,37 @@ void Compaction::AddInputDeletions(VersionEdit* edit) {
 }
 
 bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
-  // Maybe use binary search to find right entry instead of linear search?
-  const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();
-  for (int lvl = level_ + 2; lvl < config::kNumLevels; lvl++) {
-    const std::vector<FileMetaData*>& files = input_version_->files_[lvl];
-    for (; level_ptrs_[lvl] < files.size(); ) {
-      FileMetaData* f = files[level_ptrs_[lvl]];
-      if (user_cmp->Compare(user_key, f->largest.user_key()) <= 0) {
-        // We've advanced far enough
-        if (user_cmp->Compare(user_key, f->smallest.user_key()) >= 0) {
-          // Key falls in this file's range, so definitely not base level
-          return false;
+    bool ret_flag;
+
+    ret_flag=true;
+
+    if (gLevelTraits[level_].m_OverlappedFiles
+        || gLevelTraits[level_+1].m_OverlappedFiles)
+    {
+        ret_flag=false;
+    }   // if
+    else
+    {
+        // Maybe use binary search to find right entry instead of linear search?
+        const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();
+        for (int lvl = level_ + 2; lvl < config::kNumLevels; lvl++) {
+            const std::vector<FileMetaData*>& files = input_version_->files_[lvl];
+            for (; level_ptrs_[lvl] < files.size(); ) {
+                FileMetaData* f = files[level_ptrs_[lvl]];
+                if (user_cmp->Compare(user_key, f->largest.user_key()) <= 0) {
+                    // We've advanced far enough
+                    if (user_cmp->Compare(user_key, f->smallest.user_key()) >= 0) {
+                        // Key falls in this file's range, so definitely not base level
+                        return false;
+                    }
+                    break;
+                }
+                level_ptrs_[lvl]++;
+            }
         }
-        break;
-      }
-      level_ptrs_[lvl]++;
-    }
-  }
-  return true;
+    }   // else
+
+    return ret_flag;
 }
 
 bool Compaction::ShouldStopBefore(const Slice& internal_key) {
@@ -1438,7 +1530,7 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key) {
   }
   seen_key_ = true;
 
-  if (overlapped_bytes_ > kMaxGrandParentOverlapBytes) {
+  if (overlapped_bytes_ > gLevelTraits[level_].m_MaxGrandParentOverlapBytes) {
     // Too much overlap for current output; start new output
     overlapped_bytes_ = 0;
     return true;
