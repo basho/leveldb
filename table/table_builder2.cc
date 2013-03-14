@@ -7,9 +7,12 @@
 #include "table/table_builder2.h"
 #include "table/table_builder_rep.h"
 
+#include <unistd.h>
 #include <assert.h>
 #include <sstream>
 #include <syslog.h>
+#include <errno.h>
+#include <pthread.h>
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
@@ -26,9 +29,11 @@ namespace leveldb {
 
 TableBuilder2::TableBuilder2(
     const Options& options,
-    WritableFile* file)
+    WritableFile* file,
+    int PriorityLevel)
     : TableBuilder(options, file), m_Abort(false), m_Finish(false),
-    m_CondVar(&m_CvMutex), m_NextAdd(0), m_NextWrite(0)
+    m_CondVar(&m_CvMutex), m_NextAdd(0), m_NextWrite(0),
+    m_PriorityLevel(PriorityLevel)
 {
     int loop, ret_val;
 
@@ -364,6 +369,63 @@ TableBuilder2::WriteBlock2(
     size_t total_size;
     RiakBufferPtr dest_ptr;
 
+#if 1
+    if (0!=m_PriorityLevel)
+    {
+        bool again;
+        int ret_val;
+        struct timespec timeout;
+
+        do
+        {
+            again=false;
+
+            // pause to potentially hand off disk to
+            //  memtable threads
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
+            clock_gettime(CLOCK_REALTIME, &timeout);
+            timeout.tv_sec+=1;
+            ret_val=pthread_rwlock_timedwrlock(&gThreadLock0, &timeout);
+#else
+xx
+            // ugly spin lock
+            ret_val=pthread_rwlock_trywrlock(&gThreadLock0);
+            if (EBUSY==ret_val)
+            {
+                ret_val=ETIMEDOUT;
+                env_->SleepForMicroseconds(10000);  // 10milliseconds
+            }   // if
+#endif
+            if (0==ret_val)
+                pthread_rwlock_unlock(&gThreadLock0);
+            again=(ETIMEDOUT==ret_val);
+
+            // Give priorities to level 0 compactions, unless
+            //  this compaction is blocking a level 0 in this database
+            if (1<m_PriorityLevel && !again)
+            {
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
+                clock_gettime(CLOCK_REALTIME, &timeout);
+                timeout.tv_sec+=1;
+                ret_val=pthread_rwlock_timedwrlock(&gThreadLock1, &timeout);
+#else
+                // ugly spin lock
+                ret_val=pthread_rwlock_trywrlock(&gThreadLock1);
+                if (EBUSY==ret_val)
+                {
+                    ret_val=ETIMEDOUT;
+                    env_->SleepForMicroseconds(10000);  // 10milliseconds
+                }   // if
+#endif
+
+                if (0==ret_val)
+                    pthread_rwlock_unlock(&gThreadLock1);
+                again=again || (ETIMEDOUT==ret_val);
+            }   // if
+        } while(again);
+    }   // if
+
+#endif
     //
     // activities that must be performed in file sequence
     //

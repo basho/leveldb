@@ -948,7 +948,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
                                    compact->compaction->level()<2, options_.write_buffer_size);
 
   if (s.ok()) {
-    compact->builder = new TableBuilder2(options_, compact->outfile);
+      compact->builder = new TableBuilder2(options_, compact->outfile, compact->compaction->level()+1);
   }
   return s;
 }

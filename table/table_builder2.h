@@ -36,7 +36,7 @@ private:
 
 
 public:
-    TableBuilder2(const Options& options, WritableFile* file);
+    TableBuilder2(const Options& options, WritableFile* file, int PriorityLevel);
 
     // REQUIRES: Either Finish() or Abandon() has been called.
     virtual ~TableBuilder2();
@@ -117,6 +117,7 @@ protected:
     BlockNState m_Blocks[eTB2Buffers];
     volatile unsigned m_NextAdd;                          //!< m_Block for Add, changed only by Add thread(s)
     volatile unsigned m_NextWrite;
+    int m_PriorityLevel;                          //!< level of output file builder2 is creating
 
     volatile uint64_t m_TimerReadWait;
 

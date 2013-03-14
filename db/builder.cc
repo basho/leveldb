@@ -42,7 +42,7 @@ Status BuildTable(const std::string& dbname,
     TableBuilder * builder;
     RiakBufferPtr temp_ptr;
     if (file->SupportsBuilder2())
-        builder = new TableBuilder2(options, file);
+        builder = new TableBuilder2(options, file, meta->level);
     else
         builder = new TableBuilder(options, file);
 
