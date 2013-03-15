@@ -31,7 +31,7 @@ private:
     enum
     {
         eTB2Threads=4,    //!< number of compression threads
-        eTB2Buffers=12,   //!< number of shared block buffers
+        eTB2Buffers=256,   //!< number of shared block buffers (was 12)
     };
 
 

@@ -63,6 +63,8 @@ TableBuilder2::~TableBuilder2()
 }   // TableBuilder2::~TableBuilder2
 
 
+// reminder:  only one thread calling Add(), but it interacts with background
+//            threads performing write operations
 void
 TableBuilder2::Add(
     const Slice& key,
@@ -156,7 +158,7 @@ TableBuilder2::Add(
 }
 
 
-
+// Flush() is only called by singleton read thread.
 void
 TableBuilder2::Flush()
 {
@@ -369,7 +371,7 @@ TableBuilder2::WriteBlock2(
     size_t total_size;
     RiakBufferPtr dest_ptr;
 
-#if 1
+#if 0
     if (0!=m_PriorityLevel)
     {
         bool again;
@@ -387,7 +389,6 @@ TableBuilder2::WriteBlock2(
             timeout.tv_sec+=1;
             ret_val=pthread_rwlock_timedwrlock(&gThreadLock0, &timeout);
 #else
-xx
             // ugly spin lock
             ret_val=pthread_rwlock_trywrlock(&gThreadLock0);
             if (EBUSY==ret_val)
