@@ -1677,6 +1677,18 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   } else if (in == "sstables") {
     *value = versions_->current()->DebugString();
     return true;
+  } else if (in == "total-bytes") {
+    char buf[50];
+    double total = 0;
+    for (int level = 0; level < config::kNumLevels; level++) {
+      int files = versions_->NumLevelFiles(level);
+      if (stats_[level].micros > 0 || files > 0) {
+        total += versions_->NumLevelBytes(level);
+      }
+    }
+    snprintf(buf, sizeof(buf), "%.0f", total);
+    value->append(buf);
+    return true;
   } else if (-1!=gPerfCounters->LookupCounter(in.ToString().c_str())) {
 
       char buf[66];
