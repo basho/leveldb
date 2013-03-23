@@ -1050,10 +1050,10 @@ void VersionSet::Finalize(Version* v) {
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
       score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
-      // compute aggressive penalty for write throttle, things go bad if higher
-      //  levels are allowed to backup ... especially Level-1
+      //  riak 1.4:  new overlapped levels remove the requirement for
+      //    aggressive penalties here, hence the retirement of "*2" and previous "*5".
       if (1<=score)
-          penalty+=(static_cast<int>(score))*2; // was 5;
+          penalty+=(static_cast<int>(score));// was *2; // was 5;
     }
 
     if (score > best_score) {
