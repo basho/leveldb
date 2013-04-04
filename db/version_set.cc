@@ -49,7 +49,7 @@ static struct
     {10485760,  262144000,  576716800,      209715200, 300000000, true},
     {10485760,  262144000,  576716800,      419430400,1500000000, true},
     {10485760,  262144000,  576716800,     4194304000, 314572800, true},
-    {10485760,  262144000,  576716800,     4194304000, 419430400, false},
+    {10485760,  262144000,  576716800,     2097152000, 419430400, false},
     {10485760,  262144000,  576716800,    41943040000, 524288000, false},
     {10485760,  262144000,  576716800,   419430400000, 629145600, false},
     {10485760,  262144000,  576716800,  4194304000000, 734003200, false}
@@ -1016,8 +1016,8 @@ void VersionSet::Finalize(Version* v) {
 
       //  riak 1.4:  new overlapped levels remove the requirement for
       //    aggressive penalties here, hence the retirement of "*2" and previous "*5".
-      if (1.6<score)
-          penalty+=(static_cast<int>(score));// was *2; // was *5;
+      if (2.6<score)
+          penalty+=(static_cast<int>(score))-1;// was *2; // was *5;
     }
 
     if (score > best_score) {
