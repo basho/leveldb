@@ -21,7 +21,6 @@
 
 namespace leveldb {
 
-#if 1
 // branch mv-level-work1, March 2013
 //
 // Notes:
@@ -47,49 +46,14 @@ static struct
 //   being written to level-2.  The value is five times the 300,000,000 of level-1.
 
 {
-    {10485760,  262144000,  576716800,       209715200, 300000000, true},
-    {10485760,  262144000,  576716800,       419430400,1500000000, true},
-    {10485760,  262144000,  576716800,      4194304000, 314572800, true},
-    {10485760,  262144000,  576716800,     41943040000, 419430400, false},
-    {10485760,  262144000,  576716800,    419430400000, 524288000, false},
-    {10485760,  262144000,  576716800,   4194304000000, 629145600, false},
-    {10485760,  262144000,  576716800,  41943040000000, 734003200, false}
+    {10485760,  262144000,  576716800,      209715200, 300000000, true},
+    {10485760,  262144000,  576716800,      419430400,1500000000, true},
+    {10485760,  262144000,  576716800,     4194304000, 314572800, true},
+    {10485760,  262144000,  576716800,     2097152000, 419430400, false},
+    {10485760,  262144000,  576716800,    41943040000, 524288000, false},
+    {10485760,  262144000,  576716800,   419430400000, 629145600, false},
+    {10485760,  262144000,  576716800,  4194304000000, 734003200, false}
 };
-
-
-
-#else
-// slightly modified version of Google's original
-static const int64_t kTargetFileSize = 10 * 1048576;
-
-// Maximum bytes of overlaps in grandparent (i.e., level+2) before we
-// stop building a single file in a level->level+1 compaction.
-static const int64_t kMaxGrandParentOverlapBytes = 25 * kTargetFileSize;
-
-// Maximum number of bytes in all compacted files.  We avoid expanding
-// the lower level file set of a compaction if it would make the
-// total compaction cover more than this many bytes.
-//static const int64_t kExpandedCompactionByteSizeLimit = 15 * kTargetFileSize;
-static const int64_t kExpandedCompactionByteSizeLimit = 55 * kTargetFileSize;
-
-static double MaxBytesForLevel(int level) {
-  // Note: the result for level zero is not really used since we set
-  // the level-0 compaction threshold based on number of files.
-  double result = 200 * 1048576.0;
-  if (1==level) result*=2.0;
-  while (level > 1) {
-    result *= 10.0;
-    level--;
-  }
-  return result;
-}
-
-// Note:  appears lower level of compaction sets size
-//        for all files ... need to verify
-static uint64_t MaxFileSizeForLevel(int level) {
-  return(kTargetFileSize*(level+1)*10);
-}
-#endif
 
 
 
@@ -1040,9 +1004,9 @@ void VersionSet::Finalize(Version* v) {
           score*=1000000.0;
 
       // compute penalty for write throttle if too many Level-0 files accumulating
-      if ((size_t)config::kL0_CompactionTrigger <= v->files_[level].size())
+      if ((size_t)config::kL0_CompactionTrigger < v->files_[level].size())
       {
-          penalty+=v->files_[level].size() - config::kL0_CompactionTrigger +1;
+          penalty+=v->files_[level].size() - config::kL0_CompactionTrigger;
       }   // if
 
     } else {
@@ -1052,8 +1016,8 @@ void VersionSet::Finalize(Version* v) {
 
       //  riak 1.4:  new overlapped levels remove the requirement for
       //    aggressive penalties here, hence the retirement of "*2" and previous "*5".
-      if (1<=score)
-          penalty+=(static_cast<int>(score));// was *2; // was 5;
+      if (2.6<score)
+          penalty+=(static_cast<int>(score))-1;// was *2; // was *5;
     }
 
     if (score > best_score) {
@@ -1518,23 +1482,31 @@ bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
 }
 
 bool Compaction::ShouldStopBefore(const Slice& internal_key) {
-  // Scan to find earliest grandparent file that contains key.
-  const InternalKeyComparator* icmp = &input_version_->vset_->icmp_;
-  while (grandparent_index_ < grandparents_.size() &&
-      icmp->Compare(internal_key,
-                    grandparents_[grandparent_index_]->largest.Encode()) > 0) {
-    if (seen_key_) {
-      overlapped_bytes_ += grandparents_[grandparent_index_]->file_size;
+  if (!gLevelTraits[level()+1].m_OverlappedFiles)
+  {
+    // Scan to find earliest grandparent file that contains key.
+    const InternalKeyComparator* icmp = &input_version_->vset_->icmp_;
+    while (grandparent_index_ < grandparents_.size() &&
+	   icmp->Compare(internal_key,
+			 grandparents_[grandparent_index_]->largest.Encode()) > 0) {
+      if (seen_key_) {
+	overlapped_bytes_ += grandparents_[grandparent_index_]->file_size;
+      }
+      grandparent_index_++;
     }
-    grandparent_index_++;
-  }
-  seen_key_ = true;
+    seen_key_ = true;
 
-  if (overlapped_bytes_ > gLevelTraits[level_].m_MaxGrandParentOverlapBytes) {
-    // Too much overlap for current output; start new output
-    overlapped_bytes_ = 0;
-    return true;
-  } else {
+    if (overlapped_bytes_ > gLevelTraits[level_].m_MaxGrandParentOverlapBytes) {
+      // Too much overlap for current output; start new output
+      overlapped_bytes_ = 0;
+      return true;
+    } else {
+      return false;
+    }
+  }  // if
+  else
+  {
+    // overlapped levels do NOT split their output file
     return false;
   }
 }
