@@ -33,9 +33,9 @@ TableCache::TableCache(const std::string& dbname,
       options_(options),
 
       // convert file handle limit into a size limit
-      //  based upon historical kTargetFileSize from version_set.cc
-//      cache_(NewLRUCache2(entries * (2*1048576)))
-      cache_(NewLRUCache2(entries))
+      //  based upon sampling of metadata data sizes across
+      //  levels and various load characteristics
+      cache_(NewLRUCache(entries * (4*1048576)))
 {
 }
 
@@ -69,8 +69,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       tf->file = file;
       tf->table = table;
 
-//      *handle = cache_->Insert(key, tf, file_size, &DeleteEntry);
-      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
+      *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
+//      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
       gPerfCounters->Inc(ePerfTableOpened);
     }
   }
