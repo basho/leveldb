@@ -248,13 +248,25 @@ Cache::Handle* LRUCache::Insert(
     Unref(old);
   }
 
-  while (usage_ > capacity_ && lru_.next != &lru_) {
+
+  // Riak - matthewv: code added to remove old only if it was not active.
+  //  Had scenarios where file cache would be largely or totally drained
+  //  because an active object does NOT reduce usage_ upon delete.  So
+  //  the while loop would basically delete everything.
+  bool one_removed;
+
+  one_removed=true;
+  while (usage_ > capacity_ && lru_.next != &lru_ && one_removed)
+  {
     LRUHandle* old = lru_.next;
+    one_removed=false;
+
     if (old->refs <= 1)
     {
         LRU_Remove(old);
         table_.Remove(old->key(), old->hash);
         Unref(old);
+        one_removed=true;
     }   // if
   }
 
