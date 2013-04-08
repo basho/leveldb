@@ -133,20 +133,48 @@ class HandleTable {
 };
 
 // A single shard of sharded cache.
-class LRUCache {
+class LRUCache : public Cache {
  public:
   LRUCache();
   ~LRUCache();
 
+  static inline uint32_t HashSlice(const Slice& s) {
+    return Hash(s.data(), s.size(), 0);
+  }
   // Separate from constructor so caller can easily make an array of LRUCache
   void SetCapacity(size_t capacity) { capacity_ = capacity; }
+
+  size_t GetCapacity() const {return(capacity_);};
+  size_t GetUsage() const {return(usage_);};
+
+  // Cache methods to allow direct use for single shard
+  virtual Cache::Handle* Insert(const Slice& key,
+                        void* value, size_t charge,
+                        void (*deleter)(const Slice& key, void* value))
+        {return(Insert(key, HashSlice(key), value, charge, deleter));};
+
+  virtual Cache::Handle* Lookup(const Slice& key)
+        {return(Lookup(key, HashSlice(key)));};
+
+  virtual void Release(Cache::Handle* handle);
+  virtual void Erase(const Slice& key)
+       {Erase(key, HashSlice(key));};
+  virtual void* Value(Handle* handle) {
+    return reinterpret_cast<LRUHandle*>(handle)->value;
+  }
+
+  virtual uint64_t NewId() {
+    return (++last_id_);
+  }
+
+  virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
 
   // Like Cache methods, but with an extra "hash" parameter.
   Cache::Handle* Insert(const Slice& key, uint32_t hash,
                         void* value, size_t charge,
                         void (*deleter)(const Slice& key, void* value));
   Cache::Handle* Lookup(const Slice& key, uint32_t hash);
-  void Release(Cache::Handle* handle);
+
   void Erase(const Slice& key, uint32_t hash);
 
  private:
@@ -339,6 +367,13 @@ class ShardedLRUCache : public Cache {
 
 Cache* NewLRUCache(size_t capacity) {
   return new ShardedLRUCache(capacity);
+}
+
+Cache* NewLRUCache2(size_t capacity) {
+    LRUCache * cache;
+    cache=new LRUCache();
+    cache->SetCapacity(capacity);
+    return cache;
 }
 
 }  // namespace leveldb

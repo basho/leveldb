@@ -35,7 +35,10 @@ TableCache::TableCache(const std::string& dbname,
       // convert file handle limit into a size limit
       //  based upon sampling of metadata data sizes across
       //  levels and various load characteristics
-      cache_(NewLRUCache(entries * (4*1048576)))
+      // Use NewLRUCache2 because it is NOT sharded.  Sharding
+      //  does horrible things to file cache due to hash function
+      //  not being very good and "capacity" does not split well
+      cache_(NewLRUCache2(entries * (4*1048576)))
 {
 }
 
