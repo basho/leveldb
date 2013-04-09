@@ -280,23 +280,23 @@ Cache::Handle* LRUCache::Insert(
   // Riak - matthewv: code added to remove old only if it was not active.
   //  Had scenarios where file cache would be largely or totally drained
   //  because an active object does NOT reduce usage_ upon delete.  So
-  //  the while loop would basically delete everything.
-  bool one_removed;
+  //  the previous while loop would basically delete everything.
+  LRUHandle * next, * cursor;
 
-  one_removed=true;
-  while (usage_ > capacity_ && lru_.next != &lru_ && one_removed)
+  for (cursor=lru_.next; usage_ > capacity_ && cursor != &lru_; cursor=next)
   {
-    LRUHandle* old = lru_.next;
-    one_removed=false;
+      // take next pointer before potentially destroying cursor
+      next=cursor->next;
 
-    if (old->refs <= 1)
-    {
-        LRU_Remove(old);
-        table_.Remove(old->key(), old->hash);
-        Unref(old);
-        one_removed=true;
-    }   // if
-  }
+      // only delete cursor if it will actually destruct and
+      //   return value to usage_
+      if (cursor->refs <= 1)
+      {
+          LRU_Remove(cursor);
+          table_.Remove(cursor->key(), cursor->hash);
+          Unref(cursor);
+      }   // if
+  }   // for
 
   return reinterpret_cast<Cache::Handle*>(e);
 }
