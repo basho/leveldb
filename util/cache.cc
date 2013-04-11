@@ -5,16 +5,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
 
 #include "leveldb/cache.h"
 #include "port/port.h"
 #include "util/hash.h"
 #include "util/mutexlock.h"
-
-#ifdef OS_SOLARIS
-#  include <atomic.h>
-#endif
 
 namespace leveldb {
 
@@ -35,7 +30,7 @@ struct LRUHandle {
   LRUHandle* prev;
   size_t charge;      // TODO(opt): Only allow uint32_t?
   size_t key_length;
-  volatile uint32_t refs;
+  uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
   char key_data[1];   // Beginning of key
 
@@ -77,7 +72,6 @@ class HandleTable {
         Resize();
       }
     }
-    else old->next_hash=old;
     return old;
   }
 
@@ -87,8 +81,6 @@ class HandleTable {
     if (result != NULL) {
       *ptr = result->next_hash;
       --elems_;
-      // debug aid
-      result->next_hash=result;
     }
     return result;
   }
@@ -124,6 +116,7 @@ class HandleTable {
       LRUHandle* h = list_[i];
       while (h != NULL) {
         LRUHandle* next = h->next_hash;
+        Slice key = h->key();
         uint32_t hash = h->hash;
         LRUHandle** ptr = &new_list[hash & (new_length - 1)];
         h->next_hash = *ptr;
@@ -193,10 +186,9 @@ class LRUCache : public Cache {
   size_t capacity_;
 
   // mutex_ protects the following state.
-  port::RWMutex mutex_;
-
+  port::Mutex mutex_;
   size_t usage_;
-  volatile uint64_t last_id_;
+  uint64_t last_id_;
 
   // Dummy head of LRU list.
   // lru.prev is newest entry, lru.next is oldest entry.
@@ -217,7 +209,6 @@ LRUCache::~LRUCache() {
   for (LRUHandle* e = lru_.next; e != &lru_; ) {
     LRUHandle* next = e->next;
     assert(e->refs == 1);  // Error if caller has an unreleased handle
-    e->next_hash=e;  // mark as valid delete / deref
     Unref(e);
     e = next;
   }
@@ -227,29 +218,15 @@ void LRUCache::Unref(LRUHandle* e) {
   assert(e->refs > 0);
   e->refs--;
   if (e->refs <= 0) {
-
-    // sign that it is off the list
-    if (e->next_hash==e)
-    {
-        usage_ -= e->charge;
-        (*e->deleter)(e->key(), e->value);
-        free(e);
-    }   // if
-    else
-    {
-        // hack to keep object alive. was for atomic(ref++) bug.
-        //  left for Riak 1.2 safety
-        ++e->refs;
-    }   // else
+    usage_ -= e->charge;
+    (*e->deleter)(e->key(), e->value);
+    free(e);
   }
 }
 
 void LRUCache::LRU_Remove(LRUHandle* e) {
   e->next->prev = e->prev;
   e->prev->next = e->next;
-  // debug aid
-  e->next=NULL;
-  e->prev=NULL;
 }
 
 void LRUCache::LRU_Append(LRUHandle* e) {
@@ -261,31 +238,25 @@ void LRUCache::LRU_Append(LRUHandle* e) {
 }
 
 Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
-  LRUHandle* e;
-  ReadLock l(&mutex_);
-
-  e = table_.Lookup(key, hash);
-
+  MutexLock l(&mutex_);
+  LRUHandle* e = table_.Lookup(key, hash);
   if (e != NULL) {
-#ifdef OS_SOLARIS
-    atomic_add_int(&e->refs, 1);
-#else
-    __sync_add_and_fetch(&e->refs, 1);
-#endif
-    // was ... e->refs++;
+    e->refs++;
+    LRU_Remove(e);
+    LRU_Append(e);
   }
-
   return reinterpret_cast<Cache::Handle*>(e);
 }
 
 void LRUCache::Release(Cache::Handle* handle) {
-  WriteLock l(&mutex_);
+  MutexLock l(&mutex_);
   Unref(reinterpret_cast<LRUHandle*>(handle));
 }
 
 Cache::Handle* LRUCache::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
+  MutexLock l(&mutex_);
 
   LRUHandle* e = reinterpret_cast<LRUHandle*>(
       malloc(sizeof(LRUHandle)-1 + key.size()));
@@ -296,8 +267,6 @@ Cache::Handle* LRUCache::Insert(
   e->hash = hash;
   e->refs = 2;  // One from LRUCache, one for the returned handle
   memcpy(e->key_data, key.data(), key.size());
-
-  WriteLock l(&mutex_);
   LRU_Append(e);
   usage_ += charge;
 
@@ -307,41 +276,33 @@ Cache::Handle* LRUCache::Insert(
     Unref(old);
   }
 
-  bool one_removed;
 
-  one_removed=true;
-  while (usage_ > capacity_ && lru_.next != &lru_ && one_removed) {
-    LRUHandle * low_ptr, * cursor;
+  // Riak - matthewv: code added to remove old only if it was not active.
+  //  Had scenarios where file cache would be largely or totally drained
+  //  because an active object does NOT reduce usage_ upon delete.  So
+  //  the previous while loop would basically delete everything.
+  LRUHandle * next, * cursor;
 
-    one_removed=false;
+  for (cursor=lru_.next; usage_ > capacity_ && cursor != &lru_; cursor=next)
+  {
+      // take next pointer before potentially destroying cursor
+      next=cursor->next;
 
-    // sequential scan when over capacity is overall faster
-    //  than requiring write lock to rearrange LRU on every read
-    low_ptr=NULL;
-    for (cursor=lru_.next;
-         NULL==low_ptr && cursor!=&lru_;
-         cursor=cursor->next)
-    {
-        if (cursor->refs <= 1)
-            low_ptr=cursor;
-    }   // for
-    // removing item that still has active references is
-    //  quite harmful since the removal does not change
-    //  usage.  Result can be accidental flush of entire cache.
-    if (NULL!=low_ptr && &lru_!=low_ptr && low_ptr->refs <= 1)
-    {
-        one_removed=true;
-        LRU_Remove(low_ptr);
-        table_.Remove(low_ptr->key(), low_ptr->hash);
-        Unref(low_ptr);
-    }   // if
-  }   // while
+      // only delete cursor if it will actually destruct and
+      //   return value to usage_
+      if (cursor->refs <= 1)
+      {
+          LRU_Remove(cursor);
+          table_.Remove(cursor->key(), cursor->hash);
+          Unref(cursor);
+      }   // if
+  }   // for
 
   return reinterpret_cast<Cache::Handle*>(e);
 }
 
 void LRUCache::Erase(const Slice& key, uint32_t hash) {
-  WriteLock l(&mutex_);
+  MutexLock l(&mutex_);
   LRUHandle* e = table_.Remove(key, hash);
   if (e != NULL) {
     LRU_Remove(e);
@@ -356,7 +317,7 @@ class ShardedLRUCache : public Cache {
  private:
   LRUCache shard_[kNumShards];
   port::Mutex id_mutex_;
-  volatile uint64_t last_id_;
+  uint64_t last_id_;
 
   static inline uint32_t HashSlice(const Slice& s) {
     return Hash(s.data(), s.size(), 0);
@@ -396,11 +357,11 @@ class ShardedLRUCache : public Cache {
     return reinterpret_cast<LRUHandle*>(handle)->value;
   }
   virtual uint64_t NewId() {
-      return (++last_id_);
+    MutexLock l(&id_mutex_);
+    return ++(last_id_);
   }
   virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
 };
-
 
 }  // end anonymous namespace
 

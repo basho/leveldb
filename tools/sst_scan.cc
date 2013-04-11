@@ -101,10 +101,10 @@ main(
             //open table, step 2 find table (cache or open)
             if (status.ok())
             {
-                leveldb::Cache::Handle * handle;
+                leveldb::Cache::Handle * fhandle;
 
-                handle=NULL;
-                status=table_cache->TEST_FindTable(meta.number, meta.file_size, -2, &handle);
+                fhandle=NULL;
+                status=table_cache->TEST_FindTable(meta.number, meta.file_size, -2, &fhandle);
 
                 // count keys and size keys/filter
                 if (status.ok())
@@ -122,8 +122,8 @@ main(
                     count2=0;
                     tot_size=0;
 
-                    table = reinterpret_cast<leveldb::TableAndFile*>(table_cache->TEST_GetInternalCache()->Value(handle))->table;
-                    file = reinterpret_cast<leveldb::TableAndFile*>(table_cache->TEST_GetInternalCache()->Value(handle))->file;
+                    table = reinterpret_cast<leveldb::TableAndFile*>(table_cache->TEST_GetInternalCache()->Value(fhandle))->table;
+                    file = reinterpret_cast<leveldb::TableAndFile*>(table_cache->TEST_GetInternalCache()->Value(fhandle))->file;
                     it = table->TEST_GetIndexBlock()->NewIterator(options.comparator);
 
 
@@ -159,21 +159,21 @@ main(
                     for (it->SeekToFirst(), count=0; it->Valid(); it->Next())
                     {
                         leveldb::BlockContents contents;
-                        leveldb::BlockHandle handle;
+                        leveldb::BlockHandle bhandle;
                         leveldb::Slice slice;
 
                         ++block_count;
                         slice=it->value();
-                        handle.DecodeFrom(&slice);
+                        bhandle.DecodeFrom(&slice);
 
                         if (block_info)
                         {
                             printf("block %d, offset %llu, size %llu, next %llu\n",
-                                   block_count, handle.offset(), handle.size(), handle.offset()+handle.size());
+                                   block_count, bhandle.offset(), bhandle.size(), bhandle.offset()+bhandle.size());
                         }   // if
 
-                        tot_compress+=handle.size();
-                        status=leveldb::ReadBlock(file, read_options, handle, &contents);
+                        tot_compress+=bhandle.size();
+                        status=leveldb::ReadBlock(file, read_options, bhandle, &contents);
                         if (status.ok())
                         {
                             if (first)
@@ -186,6 +186,11 @@ main(
                                 smallest_block=contents.data.size();
                             }   // else if
                             tot_uncompress+=contents.data.size();
+
+                            if (contents.heap_allocated)
+                            {
+                                delete [] contents.data.data();
+                            }   // if
                         }   // if
                         else
                         {
@@ -222,7 +227,11 @@ main(
                                        table_name.c_str(),count, count2,it2->status().ToString().c_str());
                             }   // else
                         }   // for
+
+                        delete it2;
                     }   // for
+
+                    delete it;
 
                     if (!no_csv)
                     {
@@ -270,6 +279,9 @@ main(
 
                         printf("\n");
                     }   // if
+
+                    // cleanup
+                    table_cache->Evict(meta.number);
                 }   // if
                 else
                 {
@@ -278,6 +290,11 @@ main(
                     error_counter=1;
                 }   // else
             }   // if
+
+            // cleanup
+            delete table_cache;
+            delete options.filter_policy;
+
         }   // else
     }   // for
 

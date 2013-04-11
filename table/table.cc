@@ -364,8 +364,10 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
 Block *
 Table::TEST_GetIndexBlock() {return(rep_->index_block);};
 
+// Riak specific routine.  Calculates total footprint of an open
+//  table in memory.
 size_t
-Table::TEST_TableObjectSize()
+Table::TableObjectSize()
 {
     return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size);
 };

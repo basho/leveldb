@@ -59,9 +59,13 @@ class Table {
   // return a static copy of the table's counters.
   SstCounters GetSstCounters() const;
 
+  // riak routine to retrieve total memory footprint of an open table
+  //  object in memory
+  size_t TableObjectSize();
+
   // access routines for testing tools, not for public use
   Block * TEST_GetIndexBlock();
-  size_t TEST_TableObjectSize();
+  size_t TEST_TableObjectSize() {return(TableObjectSize());};
   size_t TEST_FilterDataSize();
   static Iterator* TEST_BlockReader(void* Ptr, const ReadOptions& ROptions, const Slice& SliceReturn)
     {return(BlockReader(Ptr, ROptions, SliceReturn));};
