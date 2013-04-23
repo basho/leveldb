@@ -28,7 +28,11 @@ class Cache;
 // Create a new cache with a fixed size capacity.  This implementation
 // of Cache uses a least-recently-used eviction policy.
 extern Cache* NewLRUCache(size_t capacity);
+
+// Riak customization - just like NewLRUCache except the underlying
+//  structure is NOT sharded.  Better for file cache.
 extern Cache* NewLRUCache2(size_t capacity);
+
 
 class Cache {
  public:

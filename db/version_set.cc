@@ -30,7 +30,7 @@ static struct
     uint64_t m_TargetFileSize;                   //!< mostly useless
     uint64_t m_MaxGrandParentOverlapBytes;       //!< needs tuning, but not essential
                                                  //!<   since moves eliminated
-    uint64_t m_ExpandedCompactionByteSizeLimit;  //!< needs tuning
+    int64_t  m_ExpandedCompactionByteSizeLimit;  //!< needs tuning
     uint64_t m_MaxBytesForLevel;                 //!< ignored if m_OverlappedFiles is true
     uint64_t m_MaxFileSizeForLevel;              //!< google really applies this
                                                  //!<   to file size of NEXT level
@@ -1482,6 +1482,10 @@ bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
 }
 
 bool Compaction::ShouldStopBefore(const Slice& internal_key) {
+#if 0
+    // 04/11/2013 code seems to create way too many small files
+    //   in lower levels once highers start to populate
+    // this causes max_open_files to blow out too early
   if (!gLevelTraits[level()+1].m_OverlappedFiles)
   {
     // Scan to find earliest grandparent file that contains key.
@@ -1509,6 +1513,9 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key) {
     // overlapped levels do NOT split their output file
     return false;
   }
+#else
+  return false;
+#endif
 }
 
 void Compaction::ReleaseInputs() {
