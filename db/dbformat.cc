@@ -118,12 +118,11 @@ void InternalFilterPolicy::CreateFilter(const Slice* keys, int n,
                                         std::string* dst) const {
   // We rely on the fact that the code in table.cc does not mind us
   // adjusting keys[].
-  Slice* mkey = const_cast<Slice*>(keys);
-  for (int i = 0; i < n; i++) {
-    mkey[i] = ExtractUserKey(keys[i]);
-    // TODO(sanjay): Suppress dups?
-  }
   user_policy_->CreateFilter(keys, n, dst);
+}
+
+Slice InternalFilterPolicy::TransformKey(const Slice & Key, std::string & Buffer) const {
+  return user_policy_->TransformKey(ExtractUserKey(Key), Buffer);
 }
 
 bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {

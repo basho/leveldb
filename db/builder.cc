@@ -11,6 +11,8 @@
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
+#include "table/table_builder2.h"
+#include "util/mapbuffer.h"
 
 namespace leveldb {
 
@@ -31,12 +33,19 @@ Status BuildTable(const std::string& dbname,
   std::string fname = TableFileName(dbname, meta->number, meta->level);
   if (iter->Valid()) {
     WritableFile* file;
-    s = env->NewWritableFile(fname, &file);
+    s = env->NewWritableFile(fname, &file, true, options.write_buffer_size);
     if (!s.ok()) {
       return s;
     }
 
-    TableBuilder* builder = new TableBuilder(options, file);
+    // not all file systems (such as the memenv) support Allocate()
+    TableBuilder * builder;
+    RiakBufferPtr temp_ptr;
+    if (file->SupportsBuilder2())
+        builder = new TableBuilder2(options, file, meta->level);
+    else
+        builder = new TableBuilder(options, file);
+
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
@@ -62,10 +71,16 @@ Status BuildTable(const std::string& dbname,
 
     // Finish and check for file errors
     if (s.ok()) {
+    uint64_t timer=options.env->NowMicros();
       s = file->Sync();
+    timer=options.env->NowMicros()-timer;
+    Log(options.info_log, "Sync() micros: %llu", (unsigned long long)timer);
     }
     if (s.ok()) {
+    uint64_t timer=options.env->NowMicros();
       s = file->Close();
+    timer=options.env->NowMicros()-timer;
+    Log(options.info_log, "Close() micros: %llu", (unsigned long long)timer);
     }
     delete file;
     file = NULL;

@@ -392,6 +392,5 @@ HardCRC(
 
 }   // HardCRC
 
-
 }  // namespace crc32c
 }  // namespace leveldb

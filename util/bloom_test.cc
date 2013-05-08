@@ -37,7 +37,12 @@ class BloomTest {
   }
 
   void Add(const Slice& s) {
-    keys_.push_back(s.ToString());
+
+      std::string transform_temp;
+      Slice transform_key;
+
+      transform_key=policy_->TransformKey(s, transform_temp);
+      keys_.push_back(transform_temp);
   }
 
   void Build() {

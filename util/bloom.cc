@@ -34,6 +34,15 @@ class BloomFilterPolicy : public FilterPolicy {
     return "leveldb.BuiltinBloomFilter";
   }
 
+  virtual Slice TransformKey(const Slice & Key, std::string & Buffer) const
+  {
+      uint32_t hash;
+
+      hash=BloomHash(Key);
+      Buffer.assign((char *)&hash, sizeof(hash));
+      return(Slice(Buffer));
+  };
+
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst) const {
     // Compute bloom filter size (in both bits and bytes)
     size_t bits = n * bits_per_key_;
@@ -52,7 +61,7 @@ class BloomFilterPolicy : public FilterPolicy {
     for (size_t i = 0; i < (size_t)n; i++) {
       // Use double-hashing to generate a sequence of hash values.
       // See analysis in [Kirsch,Mitzenmacher 2006].
-      uint32_t h = BloomHash(keys[i]);
+      uint32_t h = *(uint32_t *)keys[i].data();
       const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
       for (size_t j = 0; j < k_; j++) {
         const uint32_t bitpos = h % bits;

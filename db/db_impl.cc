@@ -31,6 +31,7 @@
 #include "port/port.h"
 #include "table/block.h"
 #include "table/merger.h"
+#include "table/table_builder2.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/logging.h"
@@ -959,9 +960,11 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
 
   // Make the output file
   std::string fname = TableFileName(dbname_, file_number, compact->compaction->level()+1);
-  Status s = env_->NewWritableFile(fname, &compact->outfile);
+  Status s = env_->NewWritableFile(fname, &compact->outfile,
+                                   compact->compaction->level()<2, options_.write_buffer_size);
+
   if (s.ok()) {
-    compact->builder = new TableBuilder(options_, compact->outfile);
+      compact->builder = new TableBuilder2(options_, compact->outfile, compact->compaction->level()+1);
   }
   return s;
 }
@@ -992,10 +995,16 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
   // Finish and check for file errors
   if (s.ok()) {
+      uint64_t timer=options_.env->NowMicros();
     s = compact->outfile->Sync();
+    timer=options_.env->NowMicros()-timer;
+    Log(options_.info_log, "Sync() micros: %llu", (unsigned long long)timer);
   }
   if (s.ok()) {
+      uint64_t timer=options_.env->NowMicros();
     s = compact->outfile->Close();
+    timer=options_.env->NowMicros()-timer;
+    Log(options_.info_log, "Close() micros: %llu", (unsigned long long)timer);
   }
   delete compact->outfile;
   compact->outfile = NULL;
@@ -1078,6 +1087,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
 
+  uint64_t read_timer(0), write_timer(0), timer(0);
+
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
     // Prioritize immutable compaction work
@@ -1107,7 +1118,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         compact->current_output()->smallest.DecodeFrom(key);
       }
       compact->current_output()->largest.DecodeFrom(key);
+
+      timer=env_->NowMicros();
       compact->builder->Add(key, input->value());
+      write_timer+=env_->NowMicros() - timer;
 
       // update throttle ... now, end of compaction may be too late
       //   but not too often since NowMicros can be costly
@@ -1143,7 +1157,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
     }
 
+    timer=env_->NowMicros();
     input->Next();
+    read_timer+=env_->NowMicros() - timer;
   }
 
   if (status.ok() && shutting_down_.Acquire_Load()) {
@@ -1186,6 +1202,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   VersionSet::LevelSummaryStorage tmp;
   Log(options_.info_log,
       "compacted to: %s", versions_->LevelSummary(&tmp));
+  Log(options_.info_log, "Read micros: %llu, Write micros: %llu",
+      (unsigned long long)read_timer, (unsigned long long)write_timer);
   return status;
 }
 

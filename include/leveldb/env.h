@@ -29,6 +29,7 @@ class SequentialFile;
 class Slice;
 class WritableFile;
 class AppendableFile;
+class RiakBufferPtr;
 
 class Env {
  public:
@@ -69,7 +70,9 @@ class Env {
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) = 0;
+                                 WritableFile** result,
+                                 bool AdviseKeep=false,
+                                 const size_t WriteBufferSize=0) = 0;
 
   // Derived from NewWritableFile.  One change: if the file exists,
   // move to the end of the file and continue writing.
@@ -241,6 +244,8 @@ class WritableFile {
   virtual Status Close() = 0;
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;
+  virtual Status Allocate(size_t, RiakBufferPtr&) {return(Status::NotSupported("WritableFile::Allocate() not supported"));};
+  virtual bool SupportsBuilder2() const {return(false);};
 
  private:
   // No copying allowed

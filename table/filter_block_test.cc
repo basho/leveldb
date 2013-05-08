@@ -27,6 +27,9 @@ class TestHashFilter : public FilterPolicy {
     }
   }
 
+  virtual Slice TransformKey(const Slice & Key, std::string & Buffer) const
+    {return(Key);};
+
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const {
     uint32_t h = Hash(key.data(), key.size(), 1);
     for (int i = 0; i + 4 <= filter.size(); i += 4) {

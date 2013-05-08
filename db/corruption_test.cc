@@ -4,6 +4,7 @@
 
 #include "leveldb/db.h"
 
+#include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -327,6 +328,7 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
     dbi->Put(WriteOptions(), "", "begin");
     dbi->Put(WriteOptions(), "~", "end");
     dbi->TEST_CompactMemTable();
+    sleep(1);  // becomes a race with background compaction without sleep
   }
 
   Build(10);

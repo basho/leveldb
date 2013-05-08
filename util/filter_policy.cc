@@ -3,9 +3,13 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "leveldb/filter_policy.h"
+#include "leveldb/slice.h"
 
 namespace leveldb {
 
 FilterPolicy::~FilterPolicy() { }
+
+Slice FilterPolicy::TransformKey(const Slice & Key, std::string & Buffer) const
+  {return(Key);};
 
 }  // namespace leveldb

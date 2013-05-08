@@ -9,6 +9,7 @@
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
+#include "db/dbformat.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/iterator.h"
@@ -114,6 +115,10 @@ struct leveldb_filterpolicy_t : public FilterPolicy {
     char* filter = (*create_)(state_, &key_pointers[0], &key_sizes[0], n, &len);
     dst->append(filter, len);
     free(filter);
+  }
+
+  virtual Slice TransformKey(const Slice & Key, std::string & Buffer) const {
+      return(Key);
   }
 
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const {
@@ -505,6 +510,11 @@ leveldb_filterpolicy_t* leveldb_filterpolicy_create_bloom(int bits_per_key) {
     void CreateFilter(const Slice* keys, int n, std::string* dst) const {
       return rep_->CreateFilter(keys, n, dst);
     }
+    virtual Slice TransformKey(const Slice & Key, std::string & Buffer) const {
+        return(rep_->TransformKey(Key, Buffer));
+    }
+    virtual bool SupportsBuilder2() const {return(true);};
+
     bool KeyMayMatch(const Slice& key, const Slice& filter) const {
       return rep_->KeyMayMatch(key, filter);
     }
@@ -512,6 +522,33 @@ leveldb_filterpolicy_t* leveldb_filterpolicy_create_bloom(int bits_per_key) {
   };
   Wrapper* wrapper = new Wrapper;
   wrapper->rep_ = NewBloomFilterPolicy(bits_per_key);
+  wrapper->state_ = NULL;
+  wrapper->destructor_ = &Wrapper::DoNothing;
+  return wrapper;
+}
+
+leveldb_filterpolicy_t* leveldb_filterpolicy_create_bloom2(int bits_per_key) {
+  // Make a leveldb_filterpolicy_t, but override all of its methods so
+  // they delegate to a NewBloomFilterPolicy() instead of user
+  // supplied C functions.
+  struct Wrapper : public leveldb_filterpolicy_t {
+    const FilterPolicy* rep_;
+    ~Wrapper() { delete rep_; }
+    const char* Name() const { return rep_->Name(); }
+    void CreateFilter(const Slice* keys, int n, std::string* dst) const {
+      return rep_->CreateFilter(keys, n, dst);
+    }
+    virtual Slice TransformKey(const Slice & Key, std::string & Buffer) const {
+        return(rep_->TransformKey(Key, Buffer));
+    }
+
+    bool KeyMayMatch(const Slice& key, const Slice& filter) const {
+      return rep_->KeyMayMatch(key, filter);
+    }
+    static void DoNothing(void*) { }
+  };
+  Wrapper* wrapper = new Wrapper;
+  wrapper->rep_ = leveldb::NewBloomFilterPolicy2(bits_per_key);
   wrapper->state_ = NULL;
   wrapper->destructor_ = &Wrapper::DoNothing;
   return wrapper;

@@ -36,10 +36,32 @@ void FilterBlockBuilder::StartBlock(uint64_t block_offset) {
     last_offset_=block_offset;
 }
 
-void FilterBlockBuilder::AddKey(const Slice& key) {
-  Slice k = key;
+void FilterBlockBuilder::AddKey(const Slice& key)
+{
+  std::string transform_temp;
+  Slice transform_key;
+
+  transform_key=policy_->TransformKey(key, transform_temp);
+
   start_.push_back(keys_.size());
-  keys_.append(k.data(), k.size());
+  keys_.append(transform_key.data(), transform_key.size());
+}
+
+void FilterBlockBuilder::AddKeys(
+    std::vector<size_t> & Lengths,
+    std::string & Keys)
+{
+  const size_t num_keys = Lengths.size();
+  size_t loop, offset, length;
+  Slice key;
+
+  start_.reserve(start_.size()+Lengths.size());
+  for (loop=0, offset=0; loop<num_keys; ++loop, offset+=length)
+  {
+      const char* base = Keys.data() + offset;
+      length = Lengths[loop];
+      AddKey(Slice(base, length));
+  }
 }
 
 Slice FilterBlockBuilder::Finish() {

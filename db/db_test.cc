@@ -71,7 +71,12 @@ class SpecialEnv : public EnvWrapper {
     count_random_reads_ = false;
   }
 
-  Status NewWritableFile(const std::string& f, WritableFile** r) {
+    Status NewWritableFile(const std::string& f,
+                           WritableFile** r,
+                           bool AdviseKeep=false,
+                           const size_t WriteBufferSize=0)
+
+  {
     class SSTableFile : public WritableFile {
      private:
       SpecialEnv* env_;
@@ -99,13 +104,18 @@ class SpecialEnv : public EnvWrapper {
         }
         return base_->Sync();
       }
+
+      virtual Status Allocate(size_t Size, RiakBufferPtr& Buf) {return(base_->Allocate(Size, Buf));}
+      virtual bool SupportsBuilder2() const {return(base_->SupportsBuilder2());};
+
+
     };
 
     if (non_writable_.Acquire_Load() != NULL) {
       return Status::IOError("simulated write error");
     }
 
-    Status s = target()->NewWritableFile(f, r);
+    Status s = target()->NewWritableFile(f, r, AdviseKeep, WriteBufferSize);
     if (s.ok()) {
       if (strstr(f.c_str(), ".sst") != NULL) {
         *r = new SSTableFile(this, *r);
@@ -238,6 +248,7 @@ class DBTest {
       opts = CurrentOptions();
       opts.create_if_missing = true;
     }
+
     last_options_ = opts;
 
     return DB::Open(opts, dbname_, &db_);
