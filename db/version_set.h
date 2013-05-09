@@ -108,6 +108,9 @@ class Version {
 
   int WritePenalty() const {return write_penalty_; }
 
+  // Riak specific repair routine
+  bool VerifyLevels(int & level, InternalKey & begin, InternalKey & end);
+
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
 

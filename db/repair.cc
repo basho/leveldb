@@ -50,6 +50,7 @@ class Repairer {
         icmp_(options.comparator),
         ipolicy_(options.filter_policy),
         options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
+        org_options_(options),
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
         has_level_dirs_(false),
@@ -115,6 +116,27 @@ class Repairer {
         env_->UnlockFile(db_lock_);
       }
     }
+
+    // perform Riak specific scan for overlapping .sst files
+    //  within a level
+    if (status.ok())
+    {
+        leveldb::DB * db_ptr;
+        Options options;
+
+        db_ptr=NULL;
+        options=org_options_;
+        options.block_cache=options_.block_cache;
+        options.is_repair=true;
+        options.error_if_exists=false;
+        status=leveldb::DB::Open(options, dbname_, &db_ptr);
+
+        if (status.ok())
+            status=db_ptr->VerifyLevels();
+
+        delete db_ptr;
+
+    }   // if
     return status;
   }
 
@@ -128,7 +150,7 @@ class Repairer {
   Env* const env_;
   InternalKeyComparator const icmp_;
   InternalFilterPolicy const ipolicy_;
-  Options const options_;
+  Options const options_, org_options_;
   bool owns_info_log_;
   bool owns_cache_;
   bool has_level_dirs_;

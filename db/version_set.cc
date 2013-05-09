@@ -525,6 +525,61 @@ void Version::GetOverlappingInputs(
   }
 }
 
+
+bool
+Version::VerifyLevels(
+    int & level,           // input / output for current level to inspect
+    InternalKey & begin,   // output of lowest key in first overlapped file
+    InternalKey & end)     // output of highest key in first overlapped file
+{
+    bool overlap_found;
+    const Comparator* user_cmp;
+
+    overlap_found=false;
+    user_cmp = vset_->icmp_.user_comparator();
+
+    do
+    {
+        // test only levels that do not expect overlapped .sst files
+        if (!gLevelTraits[level].m_OverlappedFiles && 1<files_[level].size())
+        {
+            const std::vector<FileMetaData*>& files = files_[level];
+            int inner, outer;
+
+            for (outer=0; outer<files.size()-1 && !overlap_found; ++outer)
+            {
+                FileMetaData* outer_meta = files_[level][outer];
+                const Slice outer_start = outer_meta->smallest.user_key();
+                const Slice outer_limit = outer_meta->largest.user_key();
+
+                for (inner=outer+1; inner<files.size() && !overlap_found; ++inner)
+                {
+                    FileMetaData* inner_meta = files_[level][inner];
+                    const Slice inner_start = inner_meta->smallest.user_key();
+                    const Slice inner_limit = inner_meta->largest.user_key();
+
+                    // do files overlap? assumes vector sorted by "start"
+                    if (user_cmp->Compare(inner_start, outer_limit) <= 0)
+                    {
+                        overlap_found=true;
+                        begin=outer_meta->smallest;
+                        end=outer_meta->largest;
+                    }   // if
+                }   // for
+            }   // for
+        }   // if
+
+        // current level is clean, move to next
+        if (!overlap_found)
+            ++level;
+
+    } while(!overlap_found && level<config::kNumLevels);
+
+    return(overlap_found);
+
+}   // VersionSet::VerifyLevels
+
+
 std::string Version::DebugString() const {
   std::string r;
   for (int level = 0; level < config::kNumLevels; level++) {
@@ -698,7 +753,8 @@ class VersionSet::Builder {
         for (uint32_t i = 1; i < v->files_[level].size(); i++) {
           const InternalKey& prev_end = v->files_[level][i-1]->largest;
           const InternalKey& this_begin = v->files_[level][i]->smallest;
-          if (vset_->icmp_.Compare(prev_end, this_begin) >= 0) {
+          if (vset_->icmp_.Compare(prev_end, this_begin) >= 0
+              && !vset_->options_->is_repair) {
             fprintf(stderr, "overlapping ranges in same level %s vs. %s\n",
                     prev_end.DebugString().c_str(),
                     this_begin.DebugString().c_str());
@@ -715,7 +771,8 @@ class VersionSet::Builder {
       // File is deleted: do nothing
     } else {
       std::vector<FileMetaData*>* files = &v->files_[level];
-      if (level > 0 && !files->empty()) {
+      if (!gLevelTraits[level].m_OverlappedFiles && !files->empty()
+          && !vset_->options_->is_repair) {
         // Must not overlap
         assert(vset_->icmp_.Compare((*files)[files->size()-1]->largest,
                                     f->smallest) < 0);
@@ -1200,19 +1257,24 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   options.dbname = dbname_;
   options.env = env_;
 
-  int which_limit;
+  int which_limit, space;
 
   // Level-0 files have to be merged together.  For other levels,
   // we will make a concatenating iterator per level.
   // TODO(opt): use concatenating iterator for level-0 if there is no overlap
-  const int space = (gLevelTraits[c->level()].m_OverlappedFiles ? c->inputs_[0].size() + 1 : 2);
+  // (during a repair, all levels use merge iterator as a precaution)
+  if (!options_->is_repair)
+      space = (gLevelTraits[c->level()].m_OverlappedFiles ? c->inputs_[0].size() + 1 : 2);
+  else
+      space =  c->inputs_[0].size() + c->inputs_[1].size();
+
   Iterator** list = new Iterator*[space];
   int num = 0;
 
   which_limit=gLevelTraits[c->level()+1].m_OverlappedFiles ? 1 : 2;
   for (int which = 0; which < which_limit; which++) {
     if (!c->inputs_[which].empty()) {
-      if (gLevelTraits[c->level() + which].m_OverlappedFiles) {
+      if (gLevelTraits[c->level() + which].m_OverlappedFiles || options_->is_repair) {
         const std::vector<FileMetaData*>& files = c->inputs_[which];
         for (size_t i = 0; i < files.size(); i++) {
           list[num++] = table_cache_->NewIterator(
@@ -1401,6 +1463,7 @@ Compaction* VersionSet::CompactRange(
   SetupOtherInputs(c);
   return c;
 }
+
 
 Compaction::Compaction(int level)
     : level_(level),
