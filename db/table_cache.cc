@@ -75,6 +75,11 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
 //      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
       gPerfCounters->Inc(ePerfTableOpened);
+
+      // temporary hardcoding to match number of levels defined as
+      //  overlapped in version_set.cc
+      if (level<3)
+          cache_->Addref(*handle);
     }
   }
   else
@@ -125,9 +130,15 @@ Status TableCache::Get(const ReadOptions& options,
   return s;
 }
 
-void TableCache::Evict(uint64_t file_number) {
+void TableCache::Evict(uint64_t file_number, bool is_overlapped) {
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
+
+  // overlapped files have extra reference to prevent their purge,
+  //  release that reference now
+  if (is_overlapped)
+      cache_->Release(cache_->Lookup(Slice(buf, sizeof(buf))));
+
   cache_->Erase(Slice(buf, sizeof(buf)));
 }
 

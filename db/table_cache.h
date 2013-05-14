@@ -47,7 +47,7 @@ class TableCache {
              bool (*handle_result)(void*, const Slice&, const Slice&));
 
   // Evict any entry for the specified file number
-  void Evict(uint64_t file_number);
+  void Evict(uint64_t file_number, bool is_overlapped);
 
   // access for testing tools, not for public access
   Status TEST_FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle** handle)

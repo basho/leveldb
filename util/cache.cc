@@ -177,6 +177,8 @@ class LRUCache : public Cache {
 
   void Erase(const Slice& key, uint32_t hash);
 
+    virtual void Addref(Cache::Handle* handle);
+
  private:
   void LRU_Remove(LRUHandle* e);
   void LRU_Append(LRUHandle* e);
@@ -251,6 +253,15 @@ Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
 void LRUCache::Release(Cache::Handle* handle) {
   MutexLock l(&mutex_);
   Unref(reinterpret_cast<LRUHandle*>(handle));
+}
+
+void LRUCache::Addref(Cache::Handle* handle) {
+  MutexLock l(&mutex_);
+  LRUHandle * e;
+
+  e=reinterpret_cast<LRUHandle*>(handle);
+  if (NULL!=e && 1 <= e->refs)
+      ++e->refs;
 }
 
 Cache::Handle* LRUCache::Insert(
@@ -344,6 +355,10 @@ class ShardedLRUCache : public Cache {
   virtual Handle* Lookup(const Slice& key) {
     const uint32_t hash = HashSlice(key);
     return shard_[Shard(hash)].Lookup(key, hash);
+  }
+  virtual void Addref(Handle* handle) {
+    LRUHandle* h = reinterpret_cast<LRUHandle*>(handle);
+    shard_[Shard(h->hash)].Addref(handle);
   }
   virtual void Release(Handle* handle) {
     LRUHandle* h = reinterpret_cast<LRUHandle*>(handle);

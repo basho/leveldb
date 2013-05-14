@@ -313,7 +313,9 @@ DBImpl::KeepOrDelete(
       if (!keep)
       {
           if (type == kTableFile) {
-              table_cache_->Evict(number);
+              // temporary hard coding of extra overlapped
+              //  levels
+              table_cache_->Evict(number, (Level<3));
           }
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
