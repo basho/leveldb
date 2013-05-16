@@ -220,14 +220,14 @@ class PosixRandomAccessFile: public RandomAccessFile {
       : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0) { }
   virtual ~PosixRandomAccessFile()
   {
-      close(fd_);
-
       if (is_compaction_)
       {
 #if defined(HAVE_FADVISE)
           posix_fadvise(fd_, 0, file_size_, POSIX_FADV_DONTNEED);
 #endif
       }   // if
+
+      close(fd_);
   }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
