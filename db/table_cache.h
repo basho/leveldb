@@ -61,7 +61,7 @@ class TableCache {
   const Options* options_;
   Cache* cache_;
 
-  Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**);
+  Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
 };
 
 
