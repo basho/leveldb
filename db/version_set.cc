@@ -573,7 +573,9 @@ Version::VerifyLevels(
         if (!overlap_found)
             ++level;
 
-    } while(!overlap_found && level<config::kNumLevels);
+        // stopping before the last level.  that needs much
+        //  more support code ... later project
+    } while(!overlap_found && (level+1)<config::kNumLevels);
 
     return(overlap_found);
 
