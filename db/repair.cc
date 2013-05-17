@@ -126,7 +126,7 @@ class Repairer {
 
         db_ptr=NULL;
         options=org_options_;
-        options.block_cache=options_.block_cache;
+        options.block_cache=NULL;  // not reusing for fear of edge cases
         options.is_repair=true;
         options.error_if_exists=false;
         status=leveldb::DB::Open(options, dbname_, &db_ptr);
