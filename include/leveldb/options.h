@@ -140,6 +140,10 @@ struct Options {
   // Default: NULL
   const FilterPolicy* filter_policy;
 
+  // Riak specific flag used to indicate when database is open
+  // as part of a Repair operation.  Default is false
+  bool is_repair;
+
   // Create an Options object with default values for all fields.
   Options();
 
