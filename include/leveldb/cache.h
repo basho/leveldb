@@ -91,7 +91,7 @@ class Cache {
   virtual size_t EntryOverheadSize() {return(0);};
 
   // Riak specific:  Add a reference to cache object to help hold it
-  //  hold it in memory
+  //  in memory
   virtual void Addref(Handle* e) = 0;
 
 
