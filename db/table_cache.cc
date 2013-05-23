@@ -146,8 +146,14 @@ void TableCache::Evict(uint64_t file_number, bool is_overlapped) {
 
       // the Lookup call adds a reference too, back out both
       handle=cache_->Lookup(Slice(buf, sizeof(buf)));
-      cache_->Release(handle);
-      cache_->Release(handle);
+
+      // with multiple background threads, file might already be
+      //  evicted
+      if (NULL!=handle)
+      {
+          cache_->Release(handle);
+          cache_->Release(handle);
+      }   // if
   }   // if
 
   cache_->Erase(Slice(buf, sizeof(buf)));
