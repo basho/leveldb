@@ -47,7 +47,7 @@ TableCache::~TableCache() {
 }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level,
-                             Cache::Handle** handle) {
+                             Cache::Handle** handle, bool is_compaction) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
@@ -60,6 +60,10 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
     s = env_->NewRandomAccessFile(fname, &file);
     if (s.ok()) {
       s = Table::Open(*options_, file, file_size, &table);
+
+      // Riak:  support opportunity to manage Linux page cache
+      if (is_compaction)
+          file->SetForCompaction(file_size);
     }
 
     if (!s.ok()) {
@@ -75,6 +79,11 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
 //      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
       gPerfCounters->Inc(ePerfTableOpened);
+
+      // temporary hardcoding to match number of levels defined as
+      //  overlapped in version_set.cc
+      if (level<3)
+          cache_->Addref(*handle);
     }
   }
   else
@@ -125,9 +134,28 @@ Status TableCache::Get(const ReadOptions& options,
   return s;
 }
 
-void TableCache::Evict(uint64_t file_number) {
+void TableCache::Evict(uint64_t file_number, bool is_overlapped) {
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
+
+  // overlapped files have extra reference to prevent their purge,
+  //  release that reference now
+  if (is_overlapped)
+  {
+      Cache::Handle *handle;
+
+      // the Lookup call adds a reference too, back out both
+      handle=cache_->Lookup(Slice(buf, sizeof(buf)));
+
+      // with multiple background threads, file might already be
+      //  evicted
+      if (NULL!=handle)
+      {
+          cache_->Release(handle);
+          cache_->Release(handle);
+      }   // if
+  }   // if
+
   cache_->Erase(Slice(buf, sizeof(buf)));
 }
 

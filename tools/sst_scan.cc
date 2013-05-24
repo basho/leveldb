@@ -78,6 +78,9 @@ main(
             leveldb::TableCache * table_cache;
             env=leveldb::Env::Default();
 
+            const int search_level = -2;
+            const bool is_overlapped = search_level < 3; // temporary: see TableCache::Evict() 
+
             // make copy since basename() and dirname() may modify
             path_temp=*cursor;
             dbname=dirname((char *)path_temp.c_str());
@@ -87,7 +90,7 @@ main(
 
             options.filter_policy=leveldb::NewBloomFilterPolicy(10);
             table_cache=new leveldb::TableCache(dbname, &options, 10);
-            table_name = leveldb::TableFileName(dbname, meta.number, -2);
+            table_name = leveldb::TableFileName(dbname, meta.number, search_level);
 
             // open table, step 1 get file size
             leveldb::Status status = env->GetFileSize(table_name, &meta.file_size);
@@ -104,7 +107,8 @@ main(
                 leveldb::Cache::Handle * fhandle;
 
                 fhandle=NULL;
-                status=table_cache->TEST_FindTable(meta.number, meta.file_size, -2, &fhandle);
+
+                status=table_cache->TEST_FindTable(meta.number, meta.file_size, search_level, &fhandle);
 
                 // count keys and size keys/filter
                 if (status.ok())
@@ -281,7 +285,7 @@ main(
                     }   // if
 
                     // cleanup
-                    table_cache->Evict(meta.number);
+                    table_cache->Evict(meta.number, is_overlapped);
                 }   // if
                 else
                 {

@@ -212,11 +212,23 @@ class PosixRandomAccessFile: public RandomAccessFile {
  private:
   std::string filename_;
   int fd_;
+  bool is_compaction_;
+  uint64_t file_size_;
 
  public:
   PosixRandomAccessFile(const std::string& fname, int fd)
-      : filename_(fname), fd_(fd) { }
-  virtual ~PosixRandomAccessFile() { close(fd_); }
+      : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0) { }
+  virtual ~PosixRandomAccessFile()
+  {
+      if (is_compaction_)
+      {
+#if defined(HAVE_FADVISE)
+          posix_fadvise(fd_, 0, file_size_, POSIX_FADV_DONTNEED);
+#endif
+      }   // if
+
+      close(fd_);
+  }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
@@ -229,6 +241,14 @@ class PosixRandomAccessFile: public RandomAccessFile {
     }
     return s;
   }
+
+  virtual void SetForCompaction(uint64_t file_size)
+  {
+      is_compaction_=true;
+      file_size_=file_size;
+
+  };
+
 };
 
 // mmap() based random-access
