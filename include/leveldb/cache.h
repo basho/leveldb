@@ -90,6 +90,11 @@ class Cache {
   // Allows more accurate tracking of "charge" against each cache item.
   virtual size_t EntryOverheadSize() {return(0);};
 
+  // Riak specific:  Add a reference to cache object to help hold it
+  //  in memory
+  virtual void Addref(Handle* e) = 0;
+
+
  private:
   void LRU_Remove(Handle* e);
   void LRU_Append(Handle* e);

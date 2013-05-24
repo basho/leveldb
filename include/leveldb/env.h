@@ -227,6 +227,9 @@ class RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const = 0;
+
+  // Riak optimization:  allows advising Linux page cache
+  virtual void SetForCompaction(uint64_t file_size) {};
 };
 
 // A file abstraction for sequential writing.  The implementation
