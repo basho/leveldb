@@ -24,7 +24,8 @@ Options::Options()
       block_size(4096),
       block_restart_interval(16),
       compression(kSnappyCompression),
-      filter_policy(NULL)
+      filter_policy(NULL),
+      is_repair(false)
 {
 }
 
@@ -46,6 +47,7 @@ Options::Dump(
     Log(log,"Options.block_restart_interval: %d", block_restart_interval);
     Log(log,"           Options.compression: %d", compression);
     Log(log,"         Options.filter_policy: %s", filter_policy == NULL ? "NULL" : filter_policy->Name());
+    Log(log,"             Options.is_repair: %s", is_repair ? "true" : "false");
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
 }   // Options::Dump
 

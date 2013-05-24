@@ -714,7 +714,7 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
 
   MutexLock l(&mutex_);
   while (!manual.done) {
-    while (manual_compaction_ != NULL) {
+    while (manual_compaction_ != NULL || bg_compaction_scheduled_) {
       bg_cv_.Wait();
     }
     manual_compaction_ = &manual;
@@ -823,7 +823,8 @@ void DBImpl::BackgroundCall() {
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
-  MaybeScheduleCompaction();
+  if (!options_.is_repair)
+      MaybeScheduleCompaction();
   bg_cv_.SignalAll();
 }
 
@@ -1827,5 +1828,60 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
   }
   return result;
 }
+
+
+Status DB::VerifyLevels() {return(Status::InvalidArgument("is_repair not set in Options before database opened"));};
+
+// Riak specific repair
+Status
+DBImpl::VerifyLevels()
+{
+    Status result;
+
+    // did they remember to open the db with flag set in options
+    if (options_.is_repair)
+    {
+        InternalKey begin, end;
+        bool overlap_found;
+        int level;
+        Version * ver;
+
+        overlap_found=false;
+        level=0;
+
+        do
+        {
+            // get a copy of current version
+            {
+                MutexLock l(&mutex_);
+                ver = versions_->current();
+                ver->Ref();
+            }
+
+            // level is input and output (acts as cursor to progress)
+            //  begin and end are outputs of function
+            overlap_found=ver->VerifyLevels(level, begin, end);
+            ver->Unref();
+
+            if (overlap_found)
+            {
+                Slice s_begin, s_end;
+
+                s_begin=begin.user_key();
+                s_end=end.user_key();
+                TEST_CompactRange(level, &s_begin, &s_end);
+            }   // if
+
+        } while(overlap_found);
+
+    }   // if
+    else
+    {
+        result=Status::InvalidArgument("is_repair not set in Options before database opened");
+    }   // else
+
+    return(result);
+
+}   // VerifyLevels
 
 }  // namespace leveldb

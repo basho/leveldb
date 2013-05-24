@@ -153,6 +153,12 @@ class DB {
   //    db->CompactRange(NULL, NULL);
   virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
 
+  // Riak specific function:  Verify that no .sst files overlap
+  // within the levels that expect non-overlapping files.  Run
+  // compactions as necessary to correct.  Assumes DB opened
+  // with Options.is_repair=true
+  virtual Status VerifyLevels();
+
  private:
   // No copying allowed
   DB(const DB&);
