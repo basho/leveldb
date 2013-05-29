@@ -243,6 +243,23 @@ class DBTest {
     return DB::Open(opts, dbname_, &db_);
   }
 
+  Status DoubleOpen(Options* options = NULL) {
+    DB * db_fail;
+    delete db_;
+    db_ = NULL;
+    Options opts;
+    if (options != NULL) {
+      opts = *options;
+    } else {
+      opts = CurrentOptions();
+      opts.create_if_missing = true;
+    }
+    last_options_ = opts;
+
+    DB::Open(opts, dbname_, &db_);
+    return DB::Open(opts, dbname_, &db_fail);
+  }
+
   Status Put(const std::string& k, const std::string& v) {
     return db_->Put(WriteOptions(), k, v);
   }
@@ -448,6 +465,11 @@ TEST(DBTest, Empty) {
     ASSERT_TRUE(db_ != NULL);
     ASSERT_EQ("NOT_FOUND", Get("foo"));
   } while (ChangeOptions());
+}
+
+TEST(DBTest, DoubleOpen)
+{
+    ASSERT_NOTOK(DoubleOpen());
 }
 
 TEST(DBTest, ReadWrite) {
