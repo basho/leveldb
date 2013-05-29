@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <deque>
+#include <set>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -26,6 +27,7 @@
 #include "port/port.h"
 #include "util/crc32c.h"
 #include "util/logging.h"
+#include "util/mutexlock.h"
 #include "util/posix_logger.h"
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
@@ -507,6 +509,25 @@ static int LockOrUnlock(int fd, bool lock) {
 class PosixFileLock : public FileLock {
  public:
   int fd_;
+  std::string name_;
+};
+
+// Set of locked files.  We keep a separate set instead of just
+// relying on fcntrl(F_SETLK) since fcntl(F_SETLK) does not provide
+// any protection against multiple uses from the same process.
+class PosixLockTable {
+ private:
+  port::Mutex mu_;
+  std::set<std::string> locked_files_;
+ public:
+  bool Insert(const std::string& fname) {
+    MutexLock l(&mu_);
+    return locked_files_.insert(fname).second;
+  }
+  void Remove(const std::string& fname) {
+    MutexLock l(&mu_);
+    locked_files_.erase(fname);
+  }
 };
 
 class PosixEnv : public Env {
@@ -668,12 +689,17 @@ class PosixEnv : public Env {
     int fd = open(fname.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
       result = IOError(fname, errno);
+    } else if (!locks_.Insert(fname)) {
+      close(fd);
+      result = Status::IOError("lock " + fname, "already held by process");
     } else if (LockOrUnlock(fd, true) == -1) {
       result = IOError("lock " + fname, errno);
       close(fd);
+      locks_.Remove(fname);
     } else {
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
+      my_lock->name_ = fname;
       *lock = my_lock;
     }
     return result;
@@ -685,6 +711,7 @@ class PosixEnv : public Env {
     if (LockOrUnlock(my_lock->fd_, false) == -1) {
       result = IOError("unlock", errno);
     }
+    locks_.Remove(my_lock->name_);
     close(my_lock->fd_);
     delete my_lock;
     return result;
@@ -861,6 +888,8 @@ class PosixEnv : public Env {
   BGQueue queue2_;    // level 0 to level 1 compactions
   BGQueue queue3_;    //background unmap / close
   BGQueue queue4_;    // imm_ to level 0 compactions
+
+  PosixLockTable locks_;
 
   void InsertQueue2(struct PosixEnv::BGItem & item);
 
