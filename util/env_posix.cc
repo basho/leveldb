@@ -510,6 +510,8 @@ class PosixLockTable {
   }
 };
 
+static PosixLockTable gFileLocks;
+
 class PosixEnv : public Env {
  public:
   PosixEnv();
@@ -669,13 +671,13 @@ class PosixEnv : public Env {
     int fd = open(fname.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
       result = IOError(fname, errno);
-    } else if (!locks_.Insert(fname)) {
+    } else if (!gFileLocks.Insert(fname)) {
       close(fd);
       result = Status::IOError("lock " + fname, "already held by process");
     } else if (LockOrUnlock(fd, true) == -1) {
       result = IOError("lock " + fname, errno);
       close(fd);
-      locks_.Remove(fname);
+      gFileLocks.Remove(fname);
     } else {
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
@@ -691,7 +693,7 @@ class PosixEnv : public Env {
     if (LockOrUnlock(my_lock->fd_, false) == -1) {
       result = IOError("unlock", errno);
     }
-    locks_.Remove(my_lock->name_);
+    gFileLocks.Remove(my_lock->name_);
     close(my_lock->fd_);
     delete my_lock;
     return result;
@@ -869,8 +871,6 @@ class PosixEnv : public Env {
   BGQueue queue3_;    //background unmap / close
   BGQueue queue4_;    // imm_ to level 0 compactions
 
-  PosixLockTable locks_;
-
   void InsertQueue2(struct PosixEnv::BGItem & item);
 
   void SetBacklog()
@@ -899,6 +899,7 @@ class PosixEnv : public Env {
                                       // write one key during background compaction
 
 };
+
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
                        started_bgthread_(false),

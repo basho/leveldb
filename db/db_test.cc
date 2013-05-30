@@ -247,7 +247,7 @@ class DBTest {
     DB * db_fail;
     delete db_;
     db_ = NULL;
-    Options opts;
+    Options opts, opts2;
     if (options != NULL) {
       opts = *options;
     } else {
@@ -257,7 +257,7 @@ class DBTest {
     last_options_ = opts;
 
     DB::Open(opts, dbname_, &db_);
-    return DB::Open(opts, dbname_, &db_fail);
+    return DB::Open(opts2, dbname_, &db_fail);
   }
 
   Status Put(const std::string& k, const std::string& v) {
