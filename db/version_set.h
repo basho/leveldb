@@ -357,7 +357,7 @@ class Compaction {
 
   // Returns true iff we should stop building the current output
   // before processing "internal_key".
-  bool ShouldStopBefore(const Slice& internal_key);
+  bool ShouldStopBefore(const Slice& internal_key, size_t key_count);
 
   // Release the input version for the compaction, once the compaction
   // is successful.

@@ -1546,7 +1546,7 @@ bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
     return ret_flag;
 }
 
-bool Compaction::ShouldStopBefore(const Slice& internal_key) {
+bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
 #if 0
     // 04/11/2013 code seems to create way too many small files
     //   in lower levels once highers start to populate
@@ -1579,7 +1579,19 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key) {
     return false;
   }
 #else
-  return false;
+  bool ret_flag;
+
+  // leave overlapped files alone, they have different quality
+  //  goals
+  if (gLevelTraits[level_+1].m_OverlappedFiles)
+      ret_flag=false;
+
+  // sorted files need to keep the bloom filter size controlled
+  //  to meet file open speed goals
+  else
+      ret_flag=(75000 < key_count);
+
+  return(ret_flag);
 #endif
 }
 

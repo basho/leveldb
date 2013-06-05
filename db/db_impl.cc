@@ -1087,8 +1087,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     imm_micros+=PrioritizeWork(is_level0_compaction);
 
     Slice key = input->key();
-    if (compact->compaction->ShouldStopBefore(key) &&
-        compact->builder != NULL) {
+    if (compact->builder != NULL
+        && compact->compaction->ShouldStopBefore(key, compact->builder->NumEntries())) {
+
       status = FinishCompactionOutputFile(compact, input);
       if (!status.ok()) {
         break;
