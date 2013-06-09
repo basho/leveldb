@@ -82,7 +82,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
 
       // temporary hardcoding to match number of levels defined as
       //  overlapped in version_set.cc
-      if (level<3)
+      if (level<config::kNumOverlapLevels)
           cache_->Addref(*handle);
     }
   }

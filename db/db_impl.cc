@@ -315,7 +315,7 @@ DBImpl::KeepOrDelete(
           if (type == kTableFile) {
               // temporary hard coding of extra overlapped
               //  levels
-              table_cache_->Evict(number, (Level<3));
+              table_cache_->Evict(number, (Level<config::kNumOverlapLevels));
           }
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
@@ -1428,7 +1428,10 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   int throttle;
 
+  // protect use of versions_ ... apply lock
+  mutex_.Lock();
   throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
+  mutex_.Unlock();
   if (0!=throttle)
   {
       /// slowing each call down sequentially
@@ -1437,6 +1440,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       // throttle is per key write, how many in batch?
       //  (batch multiplier killed AAE, removed)
       env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
+      gPerfCounters->Add(ePerfDebug0, throttle);
   }   // if
 
   Writer w(&mutex_);
