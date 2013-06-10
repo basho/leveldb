@@ -55,10 +55,10 @@ static struct
     {10485760,  262144000,  57671680,      209715200,             0,  300000000, true},
     {10485760,  262144000,  57671680,      419430400,             0, 1500000000, true},
     {10485760,  262144000,  57671680,     4194304000,             0,   31457280, true},
-    {10485760,  262144000,  57671680,     1610612736,      30000000,   41943040, false},
-    {10485760,  262144000,  57671680,    41943040000,   33554432000,   52428800, false},
-    {10485760,  262144000,  57671680,   419430400000,  335544320000,   62914560, false},
-    {10485760,  262144000,  57671680,  4194304000000, 3355443200000,   73400320, false}
+    {10485760,  125829120,  57671680,     1610612736,      30000000,   41943040, false},
+    {10485760,  147286400,  57671680,    41943040000,   33554432000,   52428800, false},
+    {10485760,  188743680,  57671680,   419430400000,  335544320000,   62914560, false},
+    {10485760,  220200960,  57671680,  4194304000000, 3355443200000,   73400320, false}
 };
 
 
@@ -1067,12 +1067,14 @@ void VersionSet::Finalize(Version* v) {
       size_t new_trigger;
 
       score=0;
-
+#if 0
       if (level+2<=config::kL0_CompactionTrigger)
           new_trigger=config::kL0_CompactionTrigger-level;
       else
           new_trigger=config::kL0_CompactionTrigger;
-
+#else
+      new_trigger=config::kL0_CompactionTrigger;
+#endif
       // score of 1 at compaction trigger, incrementing for each thereafter
       if ( new_trigger <= v->files_[level].size())
           score += v->files_[level].size() - new_trigger +1;
@@ -1129,7 +1131,7 @@ void VersionSet::Finalize(Version* v) {
       if (config::kNumOverlapLevels!=level)
           penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
       else
-          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel *5;
+          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel *6;
 
       if (1.0<penalty_score)
           penalty+=(static_cast<int>(penalty_score));// was *2; // was *5;
