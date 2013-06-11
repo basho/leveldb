@@ -50,6 +50,7 @@ static struct
 //   being written to level-2.  The value is five times the 300,000,000 of level-1.
 // level-3 is the "landing zone" / first sorted level.  Try to keep it clear.
 //   hence the low m_DesiredBytes for level
+
 // WARNING: m_OverlappedFiles flags need to match config::kNumOverlapFiles ... until unified
 {
     {10485760,  262144000,  57671680,      209715200,             0,  300000000, true},
@@ -1060,36 +1061,20 @@ void VersionSet::Finalize(Version* v) {
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
-#if 0
-      score = v->files_[level].size() /
-          static_cast<double>(config::kL0_CompactionTrigger);
-#else
-      size_t new_trigger;
 
       score=0;
-#if 0
-      if (level+2<=config::kL0_CompactionTrigger)
-          new_trigger=config::kL0_CompactionTrigger-level;
-      else
-          new_trigger=config::kL0_CompactionTrigger;
-#else
-      new_trigger=config::kL0_CompactionTrigger;
-#endif
+
       // score of 1 at compaction trigger, incrementing for each thereafter
-      if ( new_trigger <= v->files_[level].size())
-          score += v->files_[level].size() - new_trigger +1;
+      if ( config::kL0_CompactionTrigger <= v->files_[level].size())
+          score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
 
       // double score above slowdown trigger
       if ( config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
           score += (v->files_[level].size() - config::kL0_SlowdownWritesTrigger)*3;
-#endif
 
       // compute penalty for write throttle if too many Level-0 files accumulating
-      if (new_trigger < v->files_[level].size())
+      if (config::kL0_CompactionTrigger < v->files_[level].size())
       {
-#if 0
-          penalty+=v->files_[level].size() - config::kL0_CompactionTrigger;
-#else
           // assume each overlapped file represents another pass at same key
           //   and we are "close" on compaction backlog
           if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
@@ -1109,7 +1094,6 @@ void VersionSet::Finalize(Version* v) {
 
               penalty+=value;
           }   // else
-#endif
       }   // if
 
       // don't screw around ... get data written to disk!
@@ -1126,15 +1110,15 @@ void VersionSet::Finalize(Version* v) {
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
       score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
 
-      //  riak 1.4:  new overlapped levels remove the requirement for
-      //    aggressive penalties here, hence the retirement of "*2" and previous "*5".
       if (config::kNumOverlapLevels!=level)
           penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+
+      // first sort layer needs to clear before next dump of overlapped files.
       else
-          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel *6;
+          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel *3; // was *6
 
       if (1.0<penalty_score)
-          penalty+=(static_cast<int>(penalty_score));// was *2; // was *5;
+          penalty+=(static_cast<int>(penalty_score));
     }
 
     if (score > best_score) {
@@ -1148,6 +1132,7 @@ void VersionSet::Finalize(Version* v) {
 
   if (100000<penalty)
       penalty=100000;
+
   v->write_penalty_ = penalty;
 
 }
@@ -1605,7 +1590,6 @@ bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
 }
 
 bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
-#if 1
 
   // This is a look ahead to see how costly this key will make the subsequent compaction
   //  of this new file to the next higher level.  Start a new file if the cost is high.
@@ -1642,21 +1626,6 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
     // overlapped levels do NOT split their output file
     return false;
   }
-#else
-  bool ret_flag;
-
-  // leave overlapped files alone, they have different quality
-  //  goals
-  if (gLevelTraits[level_+1].m_OverlappedFiles)
-      ret_flag=false;
-
-  // sorted files need to keep the bloom filter size controlled
-  //  to meet file open speed goals
-  else
-      ret_flag=(75000 < key_count);
-
-  return(ret_flag);
-#endif
 }
 
 void Compaction::ReleaseInputs() {
