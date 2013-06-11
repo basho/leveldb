@@ -942,9 +942,6 @@ PosixEnv::PosixEnv() : page_size_(getpagesize()),
       ++clock_res_;
 #endif
 
-//  if (clock_res_<10)
-//      clock_res_=10;
-
   PthreadCall("mutex_init", pthread_mutex_init(&mu_, NULL));
   PthreadCall("cvar_init", pthread_cond_init(&bgsignal_, NULL));
 }
