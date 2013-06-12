@@ -1068,7 +1068,8 @@ void VersionSet::Finalize(Version* v) {
       if ( config::kL0_CompactionTrigger <= v->files_[level].size())
           score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
 
-      // double score above slowdown trigger
+      // raise score above slowdown trigger to ensure this out scores
+      //  compactions at config::kNumOverlapLevels level
       if ( config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
           score += (v->files_[level].size() - config::kL0_SlowdownWritesTrigger)*3;
 
@@ -1079,7 +1080,7 @@ void VersionSet::Finalize(Version* v) {
           //   and we are "close" on compaction backlog
           if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
           {
-              penalty+= (score-1);
+              penalty+= (v->files_[level].size() - config::kL0_CompactionTrigger);
           }   // if
 
           // no longer estimating work, now trying to throw on the breaks
@@ -1089,6 +1090,8 @@ void VersionSet::Finalize(Version* v) {
               int loop, count, value;
 
               count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger) +1;
+
+              // logarithmic throttle.  8 works against FusionIO, but 7 or 6 should be tested.
               for (loop=0, value=8; loop<count; ++loop)
                   value*=8;
 
@@ -1115,7 +1118,7 @@ void VersionSet::Finalize(Version* v) {
 
       // first sort layer needs to clear before next dump of overlapped files.
       else
-          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel *3; // was *6
+          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
 
       if (1.0<penalty_score)
           penalty+=(static_cast<int>(penalty_score));
