@@ -357,7 +357,7 @@ class Compaction {
 
   // Returns true iff we should stop building the current output
   // before processing "internal_key".
-  bool ShouldStopBefore(const Slice& internal_key);
+  bool ShouldStopBefore(const Slice& internal_key, size_t key_count);
 
   // Release the input version for the compaction, once the compaction
   // is successful.
@@ -382,7 +382,7 @@ class Compaction {
   std::vector<FileMetaData*> grandparents_;
   size_t grandparent_index_;  // Index in grandparent_starts_
   bool seen_key_;             // Some output key has been seen
-  int64_t overlapped_bytes_;  // Bytes of overlap between current output
+  uint64_t overlapped_bytes_;  // Bytes of overlap between current output
                               // and grandparent files
 
   // State for implementing IsBaseLevelForKey

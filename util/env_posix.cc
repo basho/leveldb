@@ -105,9 +105,13 @@ void * arg)
 
             // average write time for level 1+ compactions per key
             //   times the average number of tasks waiting
-            new_throttle=(tot_micros / tot_keys)
-                * (tot_backlog / tot_compact);
+            //   ( the *100 stuff is to exploit fractional data in integers )
+            new_throttle=((tot_micros*100) / tot_keys)
+                * ((tot_backlog*100) / tot_compact);
 
+            new_throttle /= 10000;  // remove *100 stuff
+            if (0==new_throttle)
+                new_throttle=1;     // throttle must have an effect
         }   // if
 
 	// attempt to most recent level0
@@ -122,7 +126,7 @@ void * arg)
 	}   // else if
         else
         {
-            new_throttle=0;
+            new_throttle=1;
         }   // else
 
         // change the throttle slowly
@@ -130,6 +134,9 @@ void * arg)
             gThrottleRate+=(new_throttle - gThrottleRate)/THROTTLE_SCALING;
         else
             gThrottleRate-=(gThrottleRate - new_throttle)/THROTTLE_SCALING;
+
+        if (0==gThrottleRate)
+            gThrottleRate=1;   // throttle must always have an effect
 
         gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
         gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
