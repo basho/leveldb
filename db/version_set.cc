@@ -556,14 +556,12 @@ Version::VerifyLevels(
             for (outer=0; outer<files.size()-1 && !overlap_found; ++outer)
             {
                 FileMetaData* outer_meta = files_[level][outer];
-                //const Slice outer_start = outer_meta->smallest.user_key();
                 const Slice outer_limit = outer_meta->largest.user_key();
 
                 for (inner=outer+1; inner<files.size() && !overlap_found; ++inner)
                 {
                     FileMetaData* inner_meta = files_[level][inner];
                     const Slice inner_start = inner_meta->smallest.user_key();
-                    //const Slice inner_limit = inner_meta->largest.user_key();
 
                     // do files overlap? assumes vector sorted by "start"
                     if (user_cmp->Compare(inner_start, outer_limit) <= 0)
