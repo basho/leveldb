@@ -15,7 +15,7 @@ Options::Options()
     : comparator(BytewiseComparator()),
       create_if_missing(false),
       error_if_exists(false),
-      paranoid_checks(false),
+      paranoid_checks(true),
       env(Env::Default()),
       info_log(NULL),
       write_buffer_size(4<<20),
