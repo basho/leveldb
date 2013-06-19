@@ -61,6 +61,14 @@ struct Options {
   // Default: false
   bool paranoid_checks;
 
+  // Riak specific: this variable replaces paranoid_checks at one
+  // one place in the code.  This variable alone controls whether or not
+  // compaction read operations check CRC values.  Riak needs
+  // the compaction CRC check, but not other paranoid_checks ... so
+  // this independent control.
+  // Default: true
+  bool verify_compactions;
+
   // Use the specified object to interact with the environment,
   // e.g. to read/write files, schedule background work, etc.
   // Default: Env::Default()
