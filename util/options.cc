@@ -15,7 +15,8 @@ Options::Options()
     : comparator(BytewiseComparator()),
       create_if_missing(false),
       error_if_exists(false),
-      paranoid_checks(true),
+      paranoid_checks(false),
+      verify_compactions(true),
       env(Env::Default()),
       info_log(NULL),
       write_buffer_size(4<<20),
@@ -38,6 +39,7 @@ Options::Dump(
     Log(log,"     Options.create_if_missing: %d", create_if_missing);
     Log(log,"       Options.error_if_exists: %d", error_if_exists);
     Log(log,"       Options.paranoid_checks: %d", paranoid_checks);
+    Log(log,"    Options.verify_compactions: %d", verify_compactions);
     Log(log,"                   Options.env: %p", env);
     Log(log,"              Options.info_log: %p", info_log);
     Log(log,"     Options.write_buffer_size: %zd", write_buffer_size);

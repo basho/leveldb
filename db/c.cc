@@ -416,6 +416,11 @@ void leveldb_options_set_paranoid_checks(
   opt->rep.paranoid_checks = v;
 }
 
+void leveldb_options_set_verify_compactions(
+    leveldb_options_t* opt, unsigned char v) {
+  opt->rep.verify_compactions = v;
+}
+
 void leveldb_options_set_env(leveldb_options_t* opt, leveldb_env_t* env) {
   opt->rep.env = (env ? env->rep : NULL);
 }
