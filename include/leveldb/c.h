@@ -192,6 +192,8 @@ extern void leveldb_options_set_error_if_exists(
     leveldb_options_t*, unsigned char);
 extern void leveldb_options_set_paranoid_checks(
     leveldb_options_t*, unsigned char);
+extern void leveldb_options_set_verify_compactions(
+    leveldb_options_t*, unsigned char);
 extern void leveldb_options_set_env(leveldb_options_t*, leveldb_env_t*);
 extern void leveldb_options_set_info_log(leveldb_options_t*, leveldb_logger_t*);
 extern void leveldb_options_set_write_buffer_size(leveldb_options_t*, size_t);
