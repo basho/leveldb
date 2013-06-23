@@ -1129,7 +1129,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           {
               // raise this compaction's priority if it is blocking a
               //  dire compaction of level 0 files
-              if (config::kL0_SlowdownWritesTrigger < versions_->current()->NumFiles(0))
+              if ((int)config::kL0_SlowdownWritesTrigger < versions_->current()->NumFiles(0))
               {
                   pthread_rwlock_rdlock(&gThreadLock1);
                   is_level0_compaction=true;
@@ -1565,7 +1565,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   Status s;
 
   // hint to background compaction.
-  level0_good=(versions_->NumLevelFiles(0) < config::kL0_CompactionTrigger);
+  level0_good=(versions_->NumLevelFiles(0) < (int)config::kL0_CompactionTrigger);
 
   while (true) {
     if (!bg_error_.ok()) {
@@ -1575,7 +1575,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       break;
     } else if (
         allow_delay &&
-        versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
+        versions_->NumLevelFiles(0) >= (int)config::kL0_SlowdownWritesTrigger) {
       // We are getting close to hitting a hard limit on the number of
       // L0 files.  Rather than delaying a single write by several
       // seconds when we hit the hard limit, start delaying each
