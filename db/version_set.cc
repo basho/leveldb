@@ -1167,10 +1167,16 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
   return log->AddRecord(record);
 }
 
-int VersionSet::NumLevelFiles(int level) const {
+size_t VersionSet::NumLevelFiles(int level) const {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return current_->files_[level].size();
+}
+
+bool VersionSet::IsLevelOverlapped(int level) const {
+  assert(level >= 0);
+  assert(level < config::kNumLevels);
+  return(gLevelTraits[level].m_OverlappedFiles);
 }
 
 const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {

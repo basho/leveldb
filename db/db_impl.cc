@@ -369,7 +369,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
   // read manifest
   s = versions_->Recover();
 
-  // Verify 2.0 directory structure created and ready
+  // Verify Riak 1.3 directory structure created and ready
   if (s.ok() && !TestForLevelDirectories(env_, dbname_, versions_->current()))
   {
       int level;
@@ -456,6 +456,49 @@ Status DBImpl::Recover(VersionEdit* edit) {
       }
     }
   }
+
+  // Verify Riak 1.4 level sizing, run compactions to fix as necessary
+  //  (also recompacts hard repair of all files to level 0)
+  if (s.ok())
+  {
+      bool log_flag, need_compaction;
+
+      log_flag=false;
+      need_compaction=false;
+
+      // loop on pending background compactions
+      //  reminder: mutex_ is held
+      do
+      {
+          int level;
+
+          // wait out executing compaction (Wait gives mutex to compactions)
+          if (bg_compaction_scheduled_)
+              bg_cv_.Wait();
+
+          for (level=0, need_compaction=false;
+               level<config::kNumLevels && !need_compaction;
+               ++level)
+          {
+              if (versions_->IsLevelOverlapped(level)
+                  && config::kL0_SlowdownWritesTrigger<=versions_->NumLevelFiles(level))
+              {
+                  need_compaction=true;
+                  MaybeScheduleCompaction();
+                  if (!log_flag)
+                  {
+                      log_flag=true;
+                      Log(options_.info_log, "Cleanup compactions started ... DB::Open paused");
+                  }   // if
+              }   //if
+          }   // for
+
+      } while(bg_compaction_scheduled_ && need_compaction);
+
+      if (log_flag)
+          Log(options_.info_log, "Cleanup compactions completed ... DB::Open continuing");
+
+  }  // if
 
   return s;
 }
@@ -1653,7 +1696,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
       return false;
     } else {
       char buf[100];
-      snprintf(buf, sizeof(buf), "%d",
+      snprintf(buf, sizeof(buf), "%zd",
                versions_->NumLevelFiles(static_cast<int>(level)));
       *value = buf;
       return true;
