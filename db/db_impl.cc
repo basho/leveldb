@@ -1126,8 +1126,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
-    // Prioritize immutable compaction work
-    imm_micros+=PrioritizeWork(is_level0_compaction);
+    // Prioritize compaction work ... every 100 keys
+    if (NULL==compact->builder
+	|| 0==(compact->builder->NumEntries() % 100))
+      imm_micros+=PrioritizeWork(is_level0_compaction);
 
     Slice key = input->key();
     if (compact->builder != NULL
