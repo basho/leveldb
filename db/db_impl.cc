@@ -1469,39 +1469,27 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
-  int throttle;
-
-  // protect use of versions_ ... apply lock
-  mutex_.Lock();
-  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
-  mutex_.Unlock();
-  if (0!=throttle)
-  {
-      /// slowing each call down sequentially
-      MutexLock l(&throttle_mutex_);
-
-      // throttle is per key write, how many in batch?
-      //  (batch multiplier killed AAE, removed)
-      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
-      gPerfCounters->Add(ePerfDebug0, throttle);
-  }   // if
+  Status status;
+  int throttle(0);
 
   Writer w(&mutex_);
   w.batch = my_batch;
   w.sync = options.sync;
   w.done = false;
 
+  {  // place mutex_ within a block
+     //  not changing tabs to ease compare to Google sources
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
     w.cv.Wait();
   }
   if (w.done) {
-    return w.status;
+    return w.status;  // skips throttle ... maintenance unfriendly coding, bastards
   }
 
   // May temporarily unlock and wait.
-  Status status = MakeRoomForWrite(my_batch == NULL);
+  status = MakeRoomForWrite(my_batch == NULL);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
@@ -1546,6 +1534,22 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   }
 
   gPerfCounters->Inc(ePerfApiWrite);
+
+  // protect use of versions_ ... still within scope of mutex_ lock
+  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
+  }  // release  MutexLock l(&mutex_)
+
+  // throttle on exit to reduce possible reordering
+  if (0!=throttle)
+  {
+      /// slowing each call down sequentially
+      MutexLock l(&throttle_mutex_);
+
+      // throttle is per key write, how many in batch?
+      //  (batch multiplier killed AAE, removed)
+      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
+      gPerfCounters->Add(ePerfDebug0, throttle);
+  }   // if
 
   return status;
 }

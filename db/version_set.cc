@@ -1090,7 +1090,7 @@ void VersionSet::Finalize(Version* v) {
               count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
 
               for (loop=0, value=4; loop<count; ++loop)
-                  value*=2;
+                  value*=8;
 
               penalty+=value;
           }   // else
