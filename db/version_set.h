@@ -194,7 +194,10 @@ class VersionSet {
   }
 
   // Return the number of Table files at the specified level.
-  int NumLevelFiles(int level) const;
+  size_t NumLevelFiles(int level) const;
+
+  // is the specified level overlapped (or if false->sorted)
+  bool IsLevelOverlapped(int level) const;
 
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
