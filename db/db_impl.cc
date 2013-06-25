@@ -457,51 +457,62 @@ Status DBImpl::Recover(VersionEdit* edit) {
     }
   }
 
-  // Verify Riak 1.4 level sizing, run compactions to fix as necessary
-  //  (also recompacts hard repair of all files to level 0)
-  if (s.ok())
-  {
-      bool log_flag, need_compaction;
-
-      log_flag=false;
-      need_compaction=false;
-
-      // loop on pending background compactions
-      //  reminder: mutex_ is held
-      do
-      {
-          int level;
-
-          // wait out executing compaction (Wait gives mutex to compactions)
-          if (bg_compaction_scheduled_)
-              bg_cv_.Wait();
-
-          for (level=0, need_compaction=false;
-               level<config::kNumLevels && !need_compaction;
-               ++level)
-          {
-              if (versions_->IsLevelOverlapped(level)
-                  && config::kL0_SlowdownWritesTrigger<=versions_->NumLevelFiles(level))
-              {
-                  need_compaction=true;
-                  MaybeScheduleCompaction();
-                  if (!log_flag)
-                  {
-                      log_flag=true;
-                      Log(options_.info_log, "Cleanup compactions started ... DB::Open paused");
-                  }   // if
-              }   //if
-          }   // for
-
-      } while(bg_compaction_scheduled_ && need_compaction);
-
-      if (log_flag)
-          Log(options_.info_log, "Cleanup compactions completed ... DB::Open continuing");
-
-  }  // if
-
   return s;
 }
+
+
+void DBImpl::CheckCompactionState()
+{
+    mutex_.AssertHeld();
+    bool log_flag, need_compaction;
+
+    // Verify Riak 1.4 level sizing, run compactions to fix as necessary
+    //  (also recompacts hard repair of all files to level 0)
+
+    log_flag=false;
+    need_compaction=false;
+
+    // loop on pending background compactions
+    //  reminder: mutex_ is held
+    do
+    {
+        int level;
+
+        // wait out executing compaction (Wait gives mutex to compactions)
+        if (bg_compaction_scheduled_)
+            bg_cv_.Wait();
+
+        for (level=0, need_compaction=false;
+             level<config::kNumLevels && !need_compaction;
+             ++level)
+        {
+            if (versions_->IsLevelOverlapped(level)
+                && config::kL0_SlowdownWritesTrigger<=versions_->NumLevelFiles(level))
+            {
+                need_compaction=true;
+                MaybeScheduleCompaction();
+                if (!log_flag)
+                {
+                    log_flag=true;
+                    Log(options_.info_log, "Cleanup compactions started ... DB::Open paused");
+                }   // if
+            }   //if
+        }   // for
+
+    } while(bg_compaction_scheduled_ && need_compaction);
+
+    if (log_flag)
+        Log(options_.info_log, "Cleanup compactions completed ... DB::Open continuing");
+
+    // prior code only called this function instead of CheckCompactionState
+    //  (duplicates original Google functionality)
+    else
+        MaybeScheduleCompaction();
+
+    return;
+
+}  // DBImpl::CheckCompactionState()
+
 
 Status DBImpl::RecoverLogFile(uint64_t log_number,
                               VersionEdit* edit,
@@ -1821,7 +1832,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
     }
     if (s.ok()) {
       impl->DeleteObsoleteFiles();
-      impl->MaybeScheduleCompaction();
+      impl->CheckCompactionState();
     }
   }
   impl->mutex_.Unlock();

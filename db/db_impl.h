@@ -77,6 +77,11 @@ class DBImpl : public DB {
   // be made to the descriptor are added to *edit.
   Status Recover(VersionEdit* edit);
 
+  // Riak routine:  pause DB::Open if too many compactions
+  //  stacked up immediately.  Happens in some repairs and
+  //  some Riak upgrades
+  void CheckCompactionState();
+
   void MaybeIgnoreError(Status* s) const;
 
   // Delete any unneeded files and stale in-memory entries.
