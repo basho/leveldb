@@ -54,12 +54,12 @@ static struct
 // WARNING: m_OverlappedFiles flags need to match config::kNumOverlapFiles ... until unified
 {
     {10485760,  262144000,  57671680,      209715200,             0,  300000000, true},
-    {10485760,  262144000,  57671680,      419430400,             0, 1500000000, true},
-    {10485760,  262144000,  57671680,     4194304000,             0,   31457280, true},
-    {10485760,  125829120,  57671680,     1610612736,      30000000,   41943040, false},
-    {10485760,  147286400,  57671680,    41943040000,   33554432000,   52428800, false},
-    {10485760,  188743680,  57671680,   419430400000,  335544320000,   62914560, false},
-    {10485760,  220200960,  57671680,  4194304000000, 3355443200000,   73400320, false}
+    {10485760,   82914560,  57671680,      419430400,             0,  209715200, true},
+    {10485760,  104371840,  57671680,     1006632960,     200000000,  314572800, false},
+    {10485760,  125829120,  57671680,     4094304000,    3355443200,  419430400, false},
+    {10485760,  147286400,  57671680,    41943040000,   33554432000,  524288000, false},
+    {10485760,  188743680,  57671680,   419430400000,  335544320000,  629145600, false},
+    {10485760,  220200960,  57671680,  4194304000000, 3355443200000,  734003200, false}
 };
 
 
@@ -1087,10 +1087,9 @@ void VersionSet::Finalize(Version* v) {
           {
               int loop, count, value;
 
-              count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger) +1;
+              count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
 
-              // logarithmic throttle.  8 works against FusionIO, but 7 or 6 should be tested.
-              for (loop=0, value=8; loop<count; ++loop)
+              for (loop=0, value=4; loop<count; ++loop)
                   value*=8;
 
               penalty+=value;
@@ -1116,9 +1115,9 @@ void VersionSet::Finalize(Version* v) {
 
       // first sort layer needs to clear before next dump of overlapped files.
       else
-          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
+          penalty_score = (1<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0);
 
-      if (1.0<penalty_score)
+      if (1.0<=penalty_score)
           penalty+=(static_cast<int>(penalty_score));
     }
 
@@ -1168,10 +1167,16 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
   return log->AddRecord(record);
 }
 
-int VersionSet::NumLevelFiles(int level) const {
+size_t VersionSet::NumLevelFiles(int level) const {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return current_->files_[level].size();
+}
+
+bool VersionSet::IsLevelOverlapped(int level) const {
+  assert(level >= 0);
+  assert(level < config::kNumLevels);
+  return(gLevelTraits[level].m_OverlappedFiles);
 }
 
 const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {

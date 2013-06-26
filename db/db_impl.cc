@@ -369,7 +369,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
   // read manifest
   s = versions_->Recover();
 
-  // Verify 2.0 directory structure created and ready
+  // Verify Riak 1.3 directory structure created and ready
   if (s.ok() && !TestForLevelDirectories(env_, dbname_, versions_->current()))
   {
       int level;
@@ -459,6 +459,60 @@ Status DBImpl::Recover(VersionEdit* edit) {
 
   return s;
 }
+
+
+void DBImpl::CheckCompactionState()
+{
+    mutex_.AssertHeld();
+    bool log_flag, need_compaction;
+
+    // Verify Riak 1.4 level sizing, run compactions to fix as necessary
+    //  (also recompacts hard repair of all files to level 0)
+
+    log_flag=false;
+    need_compaction=false;
+
+    // loop on pending background compactions
+    //  reminder: mutex_ is held
+    do
+    {
+        int level;
+
+        // wait out executing compaction (Wait gives mutex to compactions)
+        if (bg_compaction_scheduled_)
+            bg_cv_.Wait();
+
+        for (level=0, need_compaction=false;
+             level<config::kNumLevels && !need_compaction;
+             ++level)
+        {
+            if (versions_->IsLevelOverlapped(level)
+                && config::kL0_SlowdownWritesTrigger<=versions_->NumLevelFiles(level))
+            {
+                need_compaction=true;
+                MaybeScheduleCompaction();
+                if (!log_flag)
+                {
+                    log_flag=true;
+                    Log(options_.info_log, "Cleanup compactions started ... DB::Open paused");
+                }   // if
+            }   //if
+        }   // for
+
+    } while(bg_compaction_scheduled_ && need_compaction);
+
+    if (log_flag)
+        Log(options_.info_log, "Cleanup compactions completed ... DB::Open continuing");
+
+    // prior code only called this function instead of CheckCompactionState
+    //  (duplicates original Google functionality)
+    else
+        MaybeScheduleCompaction();
+
+    return;
+
+}  // DBImpl::CheckCompactionState()
+
 
 Status DBImpl::RecoverLogFile(uint64_t log_number,
                               VersionEdit* edit,
@@ -1083,8 +1137,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
-    // Prioritize immutable compaction work
-    imm_micros+=PrioritizeWork(is_level0_compaction);
+    // Prioritize compaction work ... every 100 keys
+    if (NULL==compact->builder
+	|| 0==(compact->builder->NumEntries() % 100))
+      imm_micros+=PrioritizeWork(is_level0_compaction);
 
     Slice key = input->key();
     if (compact->builder != NULL
@@ -1129,7 +1185,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           {
               // raise this compaction's priority if it is blocking a
               //  dire compaction of level 0 files
-              if (config::kL0_SlowdownWritesTrigger < versions_->current()->NumFiles(0))
+              if ((int)config::kL0_SlowdownWritesTrigger < versions_->current()->NumFiles(0))
               {
                   pthread_rwlock_rdlock(&gThreadLock1);
                   is_level0_compaction=true;
@@ -1426,39 +1482,27 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
-  int throttle;
-
-  // protect use of versions_ ... apply lock
-  mutex_.Lock();
-  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
-  mutex_.Unlock();
-  if (0!=throttle)
-  {
-      /// slowing each call down sequentially
-      MutexLock l(&throttle_mutex_);
-
-      // throttle is per key write, how many in batch?
-      //  (batch multiplier killed AAE, removed)
-      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
-      gPerfCounters->Add(ePerfDebug0, throttle);
-  }   // if
+  Status status;
+  int throttle(0);
 
   Writer w(&mutex_);
   w.batch = my_batch;
   w.sync = options.sync;
   w.done = false;
 
+  {  // place mutex_ within a block
+     //  not changing tabs to ease compare to Google sources
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
     w.cv.Wait();
   }
   if (w.done) {
-    return w.status;
+    return w.status;  // skips throttle ... maintenance unfriendly coding, bastards
   }
 
   // May temporarily unlock and wait.
-  Status status = MakeRoomForWrite(my_batch == NULL);
+  status = MakeRoomForWrite(my_batch == NULL);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
@@ -1503,6 +1547,22 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   }
 
   gPerfCounters->Inc(ePerfApiWrite);
+
+  // protect use of versions_ ... still within scope of mutex_ lock
+  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
+  }  // release  MutexLock l(&mutex_)
+
+  // throttle on exit to reduce possible reordering
+  if (0!=throttle)
+  {
+      /// slowing each call down sequentially
+      MutexLock l(&throttle_mutex_);
+
+      // throttle is per key write, how many in batch?
+      //  (batch multiplier killed AAE, removed)
+      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
+      gPerfCounters->Add(ePerfDebug0, throttle);
+  }   // if
 
   return status;
 }
@@ -1565,7 +1625,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   Status s;
 
   // hint to background compaction.
-  level0_good=(versions_->NumLevelFiles(0) < config::kL0_CompactionTrigger);
+  level0_good=(versions_->NumLevelFiles(0) < (int)config::kL0_CompactionTrigger);
 
   while (true) {
     if (!bg_error_.ok()) {
@@ -1575,7 +1635,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       break;
     } else if (
         allow_delay &&
-        versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
+        versions_->NumLevelFiles(0) >= (int)config::kL0_SlowdownWritesTrigger) {
       // We are getting close to hitting a hard limit on the number of
       // L0 files.  Rather than delaying a single write by several
       // seconds when we hit the hard limit, start delaying each
@@ -1653,7 +1713,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
       return false;
     } else {
       char buf[100];
-      snprintf(buf, sizeof(buf), "%d",
+      snprintf(buf, sizeof(buf), "%zd",
                versions_->NumLevelFiles(static_cast<int>(level)));
       *value = buf;
       return true;
@@ -1772,7 +1832,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
     }
     if (s.ok()) {
       impl->DeleteObsoleteFiles();
-      impl->MaybeScheduleCompaction();
+      impl->CheckCompactionState();
     }
   }
   impl->mutex_.Unlock();
