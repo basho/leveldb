@@ -19,7 +19,7 @@ Options::Options()
       verify_compactions(true),
       env(Env::Default()),
       info_log(NULL),
-      write_buffer_size(4<<20),
+      write_buffer_size(60<<20),
       max_open_files(1000),
       block_cache(NULL),
       block_size(4096),

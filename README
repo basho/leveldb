@@ -1,51 +1,76 @@
 leveldb: A key-value store
 Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
 
-The code under this directory implements a system for maintaining a
-persistent key/value store.
+The original Google README is now README.GOOGLE.
 
-See doc/index.html for more explanation.
-See doc/impl.html for a brief overview of the implementation.
+This repository contains the Google source code as modified to benefit
+the Riak environment.  The typical Riak environment has two attributes
+that necessitate leveldb adjustments, both in options and code:
 
-The public interface is in include/*.h.  Callers should not include or
-rely on the details of any other header files in this package.  Those
-internal APIs may be changed without warning.
+- production servers: Riak often runs in heavy Internet environments:
+  servers with many CPU cores, lots of memory, and 24x7 disk activity.
+  Basho's leveldb takes advantage of the environment by adding
+  hardware CRC calculation, increasing Bloom filter accuracy, and
+  defaulting to integrity checking enabled.
 
-Guide to header files:
+- multiple databases open: Riak opens 8 to 64 databases
+  simultaneously.  Google's leveldb supports this, but its background
+  compaction thread can fall behind.  leveldb will "stall" new user
+  writes whenever the compaction thread gets too far behind.  Basho's
+  leveldb modification include multiple thread blocks that each
+  contain prioritized threads for specific compaction activities.
 
-include/db.h
-    Main interface to the DB: Start here
 
-include/options.h
-    Control over the behavior of an entire database, and also
-    control over the behavior of individual reads and writes.
+Those wishing to truly savor the benefits of Basho's modifications
+need to initialize a new leveldb::Options structure similar to the
+following before each call to leveldb::DB::Open:
 
-include/comparator.h
-    Abstraction for user-specified comparison function.  If you want
-    just bytewise comparison of keys, you can use the default comparator,
-    but clients can write their own comparator implementations if they
-    want custom ordering (e.g. to handle different character
-    encodings, etc.)
+    leveldb::Options * options;
 
-include/iterator.h
-    Interface for iterating over data. You can get an iterator
-    from a DB object.
+    options=new Leveldb::Options;
 
-include/write_batch.h
-    Interface for atomically applying multiple updates to a database.
+    options.filter_policy=leveldb::NewBloomFilterPolicy2(16);
+    options.block_cache=leveldb::NewLRUCache(536870912);
+    options.max_open_files=500;
+    options.write_buffer_size=62914560;
+    options.env=leveldb::Env::Default();
 
-include/slice.h
-    A simple module for maintaining a pointer and a length into some
-    other byte array.
 
-include/status.h
-    Status is returned from many of the public interfaces and is used
-    to report success and various kinds of errors.
+Memory usage by leveldb is largely controlled by three
+leveldb::Options variables: write_buffer_size, max_open_files, and
+size used to initial block_cache.
 
-include/env.h
-    Abstraction of the OS environment.  A posix implementation of
-    this interface is in util/env_posix.cc
+- write_buffer_size: Riak randomizes the write_buffer_size across its
+  multiple databases between 30Mbytes and 60Mbytes.  Internal, leveldb
+  could have two of these active for an open database.  Google's
+  default is 4Mbyte.  Basho's leveldb has been tuned to the 30Mbyte to
+  60Mbyte range, but does not block larger values (though larger
+  values are just untested).
 
-include/table.h
-include/table_builder.h
-    Lower-level modules that most clients probably won't use directly
+- max_open_files: Riak 1.4 simplified calculating the memory impact of
+  max_open_files.  Basho's leveldb now simply multiplies
+  max_open_files by 4Mbytes to establish the file cache limit.  The
+  file cache is therefore really a limit on many files' metadata can
+  fit.  max_open_files was originally a file handle limit, but file
+  metadata is now a much larger resource concern.  The impact of
+  Basho's larger table files and Google's recent addition of Bloom
+  filters made the accounting switch necessary.  Where server
+  resources allow, the value of max_open_files should exceed the count
+  of .sst table files within the database directory.  Memory budgeting
+  for this variable is more important to random read operations than
+  the block_cache.
+
+- block_cache: The block cache holds data blocks that leveldb has
+  recently retrieved from .sst table files.  Any given block contains
+  one or more complete key/value pairs.  The cache speeds up repeat
+  access to the same key and potential access to adjacent keys.  Basho
+  has tested this as high as 2Gbytes.  (Note: the older leveldb
+  released in Riak 1.2 had a bug that hurt performance with values
+  above 8Mbytes … that was fixed in the Riak 1.3 release)
+
+So estimated memory usage of a database =
+
+    write_buffer_size*2 
+  + max_open_files*4194304 
+  + (size in NewLRUCache initialization)
+  
