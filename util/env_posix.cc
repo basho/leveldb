@@ -482,6 +482,16 @@ class PosixMmapFile : public WritableFile {
 
     return s;
   }
+
+  virtual void DontNeed(uint64_t ending_offset) 
+  {
+#if defined(HAVE_FADVISE)
+    fdatasync(fd_);
+    posix_fadvise(fd_, 0, ending_offset, POSIX_FADV_DONTNEED);
+#endif
+    return;
+  }
+
 };
 
 

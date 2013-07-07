@@ -244,6 +244,7 @@ class WritableFile {
   virtual Status Close() = 0;
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;
+  virtual void DontNeed(uint64_t) {return;};
 
  private:
   // No copying allowed
