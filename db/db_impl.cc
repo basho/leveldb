@@ -35,6 +35,7 @@
 #include "util/coding.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "util/throttle.h"
 #include "leveldb/perf_count.h"
 
 #define __STDC_FORMAT_MACROS
