@@ -28,6 +28,8 @@ namespace leveldb {
 extern pthread_rwlock_t gThreadLock0;
 extern pthread_rwlock_t gThreadLock1;
 
+extern pthread_mutex_t gThrottleMutex;
+
 #define THROTTLE_INTERVALS 63
 
 struct ThrottleData_t

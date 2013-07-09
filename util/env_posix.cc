@@ -677,35 +677,40 @@ class PosixEnv : public Env {
 
   virtual void SetWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
   {
-      PthreadCall("lock", pthread_mutex_lock(&mu_));
+      int backlog;
+
+      backlog=GetBackgroundBacklog();
 
       if (IsLevel0)
       {
+          pthread_mutex_lock(&gThrottleMutex);
           gThrottleData[0].m_Micros+=Micros;
           gThrottleData[0].m_Keys+=Keys;
-          gThrottleData[0].m_Backlog+=GetBackgroundBacklog();
+          gThrottleData[0].m_Backlog+=backlog;
           gThrottleData[0].m_Compactions+=1;
+          pthread_mutex_unlock(&gThrottleMutex);
 
           gPerfCounters->Add(ePerfThrottleMicros0, Micros);
           gPerfCounters->Add(ePerfThrottleKeys0, Keys);
-          gPerfCounters->Add(ePerfThrottleBacklog0, GetBackgroundBacklog());
+          gPerfCounters->Add(ePerfThrottleBacklog0, backlog);
           gPerfCounters->Inc(ePerfThrottleCompacts0);
       }   // if
 
       else
       {
+          pthread_mutex_lock(&gThrottleMutex);
           gThrottleData[1].m_Micros+=Micros;
           gThrottleData[1].m_Keys+=Keys;
-          gThrottleData[1].m_Backlog+=GetBackgroundBacklog();
+          gThrottleData[1].m_Backlog+=backlog;
           gThrottleData[1].m_Compactions+=1;
+          pthread_mutex_unlock(&gThrottleMutex);
 
           gPerfCounters->Add(ePerfThrottleMicros1, Micros);
           gPerfCounters->Add(ePerfThrottleKeys1, Keys);
-          gPerfCounters->Add(ePerfThrottleBacklog1, GetBackgroundBacklog());
+          gPerfCounters->Add(ePerfThrottleBacklog1, backlog);
           gPerfCounters->Inc(ePerfThrottleCompacts1);
       }   // else
 
-      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
       return;
   };
