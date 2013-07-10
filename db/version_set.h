@@ -22,6 +22,7 @@
 #include "db/version_edit.h"
 #include "port/port.h"
 #include "leveldb/env.h"
+#include "util/throttle.h"
 
 namespace leveldb {
 
@@ -225,7 +226,7 @@ class VersionSet {
   {
       uint64_t penalty=current_->write_penalty_;
 
-      return((int)(penalty * env_->GetWriteRate()));
+      return((int)(penalty * GetThrottleWriteRate()));
   }
 
 

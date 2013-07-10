@@ -32,10 +32,18 @@ pthread_rwlock_t gThreadLock1;
 
 pthread_mutex_t gThrottleMutex;
 
-
 #define THROTTLE_SECONDS 60
 #define THROTTLE_TIME THROTTLE_SECONDS*1000000
 #define THROTTLE_SCALING 17
+#define THROTTLE_INTERVALS 63
+
+struct ThrottleData_t
+{
+    uint64_t m_Micros;
+    uint64_t m_Keys;
+    uint64_t m_Backlog;
+    uint64_t m_Compactions;
+};
 
 ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
 
@@ -163,5 +171,41 @@ ThrottleThread(
 }   // ThrottleThread
 
 
+void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Backlog)
+{
+    if (IsLevel0)
+    {
+        pthread_mutex_lock(&gThrottleMutex);
+        gThrottleData[0].m_Micros+=Micros;
+        gThrottleData[0].m_Keys+=Keys;
+        gThrottleData[0].m_Backlog+=Backlog;
+        gThrottleData[0].m_Compactions+=1;
+        pthread_mutex_unlock(&gThrottleMutex);
+
+        gPerfCounters->Add(ePerfThrottleMicros0, Micros);
+        gPerfCounters->Add(ePerfThrottleKeys0, Keys);
+        gPerfCounters->Add(ePerfThrottleBacklog0, Backlog);
+        gPerfCounters->Inc(ePerfThrottleCompacts0);
+    }   // if
+
+    else
+    {
+        pthread_mutex_lock(&gThrottleMutex);
+        gThrottleData[1].m_Micros+=Micros;
+        gThrottleData[1].m_Keys+=Keys;
+        gThrottleData[1].m_Backlog+=Backlog;
+        gThrottleData[1].m_Compactions+=1;
+        pthread_mutex_unlock(&gThrottleMutex);
+
+        gPerfCounters->Add(ePerfThrottleMicros1, Micros);
+        gPerfCounters->Add(ePerfThrottleKeys1, Keys);
+        gPerfCounters->Add(ePerfThrottleBacklog1, Backlog);
+        gPerfCounters->Inc(ePerfThrottleCompacts1);
+    }   // else
+
+    return;
+};
+
+uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
 
 }  // namespace leveldb

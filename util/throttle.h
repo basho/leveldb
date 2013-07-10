@@ -23,28 +23,18 @@
 #include <pthread.h>
 
 
-namespace leveldb {
+namespace leveldb 
+{
 
 extern pthread_rwlock_t gThreadLock0;
 extern pthread_rwlock_t gThreadLock1;
 
-extern pthread_mutex_t gThrottleMutex;
-
-#define THROTTLE_INTERVALS 63
-
-struct ThrottleData_t
-{
-    uint64_t m_Micros;
-    uint64_t m_Keys;
-    uint64_t m_Backlog;
-    uint64_t m_Compactions;
-};
-
-extern ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
-extern uint64_t gThrottleRate;
-
 
 void ThrottleInit(Env * env);
+
+void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Backlog);
+
+uint64_t GetThrottleWriteRate();
 
 
 }  // namespace leveldb

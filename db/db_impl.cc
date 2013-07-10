@@ -1179,8 +1179,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       //  gives better measure of overall activity / write overhead
       if (1==(entry_count % 1000) && 1000<entry_count)
       {
-//          env_->SetWriteRate((env_->NowMicros() - start_micros)/entry_count);
-
           // test for priority change
           if (!is_level0_compaction)
           {
@@ -1240,8 +1238,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     // imm_micros intentional NOT removed from time calculation,
     //  gives better measure of overall activity / write overhead
     if (0!=compact->num_entries)
-      env_->SetWriteRate((env_->NowMicros() - start_micros), compact->num_entries,
-			 is_level0_compaction);
+        SetThrottleWriteRate((env_->NowMicros() - start_micros), compact->num_entries,
+                            is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }
   VersionSet::LevelSummaryStorage tmp;
