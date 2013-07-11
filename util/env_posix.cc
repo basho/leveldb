@@ -60,9 +60,13 @@ struct BGCloseInfo
     size_t offset_;
     size_t length_;
     size_t unused_;
+    uint64_t metadata_;
 
-    BGCloseInfo(int fd, void * base, size_t offset, size_t length, size_t unused)
-        : fd_(fd), base_(base), offset_(offset), length_(length), unused_(unused) {};
+    BGCloseInfo(int fd, void * base, size_t offset, size_t length, 
+                size_t unused, uint64_t metadata)
+        : fd_(fd), base_(base), offset_(offset), length_(length), 
+          unused_(unused), metadata_(metadata)
+    {};
 };
 
 class PosixSequentialFile: public SequentialFile {
@@ -163,7 +167,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
   }
   virtual ~PosixMmapReadableFile()
   {
-    BGCloseInfo * ptr=new BGCloseInfo(fd_, mmapped_region_, 0, length_, 0);
+    BGCloseInfo * ptr=new BGCloseInfo(fd_, mmapped_region_, 0, length_, 0, 0);
     Env::Default()->Schedule(&BGFileCloser, ptr, 4);
   };
 
@@ -195,9 +199,9 @@ class PosixMmapFile : public WritableFile {
   char* dst_;             // Where to write next  (in range [base_,limit_])
   char* last_sync_;       // Where have we synced up to
   uint64_t file_offset_;  // Offset of base_ in file
-
-  // Have we done an munmap of unsynced data?
-  bool pending_sync_;
+  uint64_t metadata_offset_; // Offset where sst metadata starts, or zero
+  bool pending_sync_;     // Have we done an munmap of unsynced data?
+  bool is_sst_file_;      // Is this an sst file be created in background?
 
   // Roundup x to a multiple of y
   static size_t Roundup(size_t x, size_t y) {
@@ -218,18 +222,31 @@ class PosixMmapFile : public WritableFile {
         pending_sync_ = true;
       }
 
-      BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_, limit_-dst_);
-      if (and_close)
+      BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_, 
+                                        limit_-dst_, metadata_offset_);
+
+      // sst_file is on background compaction thread, keep all operations
+      //  in sequence
+      if (is_sst_file_)
       {
-          // do this in foreground unfortunately, bug where file not
-          //  closed fast enough for reopen
-          BGFileCloser2(ptr);
-          fd_=-1;
+          if (and_close)
+              BGFileCloser2(ptr);
+          else
+              BGFileUnmapper2(ptr);
       }   // if
+
+      // called from user thread, move these operations to background
+      //  queue
       else
       {
-          Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
+          if (and_close)
+              Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
+          else
+              Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
       }   // else
+
+      if (and_close)
+          fd_=-1;
 
       file_offset_ += limit_ - base_;
       base_ = NULL;
@@ -277,7 +294,8 @@ class PosixMmapFile : public WritableFile {
 
  public:
   PosixMmapFile(const std::string& fname, int fd,
-                size_t page_size, size_t file_offset=0L)
+                size_t page_size, size_t file_offset=0L,
+                bool is_sst=false)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
@@ -287,12 +305,13 @@ class PosixMmapFile : public WritableFile {
         dst_(NULL),
         last_sync_(NULL),
         file_offset_(file_offset),
-        pending_sync_(false) {
+        metadata_offset_(0),
+        pending_sync_(false),
+        is_sst_file_(is_sst) {
     assert((page_size & (page_size - 1)) == 0);
 
     gPerfCounters->Inc(ePerfRWFileOpen);
   }
-
 
   ~PosixMmapFile() {
     if (fd_ >= 0) {
@@ -364,6 +383,11 @@ class PosixMmapFile : public WritableFile {
 
     return s;
   }
+
+  virtual void SetMetadataOffset(uint64_t Metadata)
+  {
+      metadata_offset_=Metadata;
+  }   // SetMetadataOffset
 };
 
 
@@ -480,7 +504,7 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
-      *result = new PosixMmapFile(fname, fd, page_size_);
+      *result = new PosixMmapFile(fname, fd, page_size_, 0, false);
     }
     return s;
   }
@@ -509,6 +533,18 @@ class PosixEnv : public Env {
     return s;
   }
 
+  virtual Status NewSstFile(const std::string& fname,
+                                 WritableFile** result) {
+    Status s;
+    const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+    if (fd < 0) {
+      *result = NULL;
+      s = IOError(fname, errno);
+    } else {
+      *result = new PosixMmapFile(fname, fd, page_size_, 0, true);
+    }
+    return s;
+  }
 
 
   virtual bool FileExists(const std::string& fname) {
@@ -1029,17 +1065,29 @@ void BGFileCloser(void * arg)
 void BGFileCloser2(void * arg)
 {
     BGCloseInfo * file_ptr;
+    int ret_val;
 
     file_ptr=(BGCloseInfo *)arg;
 
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    // release newly written data from Linux page cache if possible
+    if (0==file_ptr->metadata 
+        || (file_ptr->offset_t + file_ptr->length_ < file_ptr->metadata))
+    {
+        // must fdatasync for DONTNEED to work
+        fdatasync(file_ptr->fd_);
+        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+    }   // if
+    else
+    {
+        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    }   // else
 #endif
 
     if (0 != file_ptr->unused_)
-        ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+        ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
 
     close(file_ptr->fd_);
     delete file_ptr;
@@ -1082,7 +1130,17 @@ void BGFileUnmapper2(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    if (0==file_ptr->metadata 
+        || (file_ptr->offset_t + file_ptr->length_ < file_ptr->metadata))
+    {
+        // must fdatasync for DONTNEED to work
+        fdatasync(file_ptr->fd_);
+        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+    }   // if
+    else
+    {
+        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    }   // else
 #endif
 
     delete file_ptr;

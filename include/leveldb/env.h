@@ -71,6 +71,7 @@ class Env {
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) = 0;
 
+  // Riak specific:
   // Derived from NewWritableFile.  One change: if the file exists,
   // move to the end of the file and continue writing.
   // new file.  On success, stores a pointer to the open file in
@@ -80,6 +81,16 @@ class Env {
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewAppendableFile(const std::string& fname,
                                    WritableFile** result) = 0;
+
+  // Riak specific:
+  // Derived from NewWritableFile.  Sets flag that changes
+  // code paths related to unmap/close and the use of
+  // background threads.
+  //
+  // The returned file will only be accessed by one thread at a time.
+  virtual Status NewSstFile(const std::string& fname,
+                                   WritableFile** result)
+  {return(NewWritableFile(fname, result));};
 
   // Returns true iff the named file exists.
   virtual bool FileExists(const std::string& fname) = 0;
@@ -233,6 +244,11 @@ class WritableFile {
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;
 
+  // Riak specific:
+  // Provide hint where key/value data ends and metadata starts
+  //  in an .sst table file.
+  virtual void SetMetadataOffset(uint64_t) {};
+
  private:
   // No copying allowed
   WritableFile(const WritableFile&);
@@ -317,6 +333,9 @@ class EnvWrapper : public Env {
   }
   Status NewAppendableFile(const std::string& f, WritableFile** r) {
     return target_->NewAppendableFile(f, r);
+  }
+  Status NewSstFile(const std::string& f, WritableFile** r) {
+    return target_->NewSstFile(f, r);
   }
   bool FileExists(const std::string& f) { return target_->FileExists(f); }
   Status GetChildren(const std::string& dir, std::vector<std::string>* r) {
