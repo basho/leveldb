@@ -166,18 +166,6 @@ class Env {
   // Riak specific:  Get object that is tracking various software counters
   virtual PerformanceCounters * GetPerformanceCounters() {return(gPerfCounters);};
 
-  // Riak specific call.  Rate is microseconds spent writing
-  // one key.  Usually the average time of many (like 1,000).
-  // Set during background compaction, but not Level-0 write.
-  virtual void SetWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0) {};
-
-  // Riak specific call.  Return the current "smoothed"
-  // microseconds spent writing a key.
-  virtual uint64_t GetWriteRate() const {return(0);};
-
-  // Riak specific call.  Returns exponentailly smoothed rate
-  virtual uint64_t SmoothWriteRate(uint64_t Rate) {return(Rate);};
-
  private:
   // No copying allowed
   Env(const Env&);
@@ -368,9 +356,6 @@ class EnvWrapper : public Env {
  private:
   Env* target_;
 };
-
-extern pthread_rwlock_t gThreadLock0;
-extern pthread_rwlock_t gThreadLock1;
 
 }  // namespace leveldb
 
