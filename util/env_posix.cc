@@ -1073,8 +1073,8 @@ void BGFileCloser2(void * arg)
 
 #if defined(HAVE_FADVISE)
     // release newly written data from Linux page cache if possible
-    if (0==file_ptr->metadata 
-        || (file_ptr->offset_t + file_ptr->length_ < file_ptr->metadata))
+    if (0==file_ptr->metadata_ 
+        || (file_ptr->offset_ + file_ptr->length_ < file_ptr->metadata_))
     {
         // must fdatasync for DONTNEED to work
         fdatasync(file_ptr->fd_);
@@ -1130,8 +1130,8 @@ void BGFileUnmapper2(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-    if (0==file_ptr->metadata 
-        || (file_ptr->offset_t + file_ptr->length_ < file_ptr->metadata))
+    if (0==file_ptr->metadata_ 
+        || (file_ptr->offset_ + file_ptr->length_ < file_ptr->metadata_))
     {
         // must fdatasync for DONTNEED to work
         fdatasync(file_ptr->fd_);
