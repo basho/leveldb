@@ -112,7 +112,12 @@ class PosixRandomAccessFile: public RandomAccessFile {
 
  public:
   PosixRandomAccessFile(const std::string& fname, int fd)
-      : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0) { }
+      : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0) 
+  { 
+#if defined(HAVE_FADVISE)
+    //    posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
+#endif
+  }
   virtual ~PosixRandomAccessFile()
   {
       if (is_compaction_)
@@ -141,6 +146,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
   {
       is_compaction_=true;
       file_size_=file_size;
+#if defined(HAVE_FADVISE)
+//      posix_fadvise(fd_, 0, file_size_, POSIX_FADV_SEQUENTIAL);
+#endif
 
   };
 
