@@ -62,9 +62,9 @@ struct BGCloseInfo
     size_t unused_;
     uint64_t metadata_;
 
-    BGCloseInfo(int fd, void * base, size_t offset, size_t length, 
+    BGCloseInfo(int fd, void * base, size_t offset, size_t length,
                 size_t unused, uint64_t metadata)
-        : fd_(fd), base_(base), offset_(offset), length_(length), 
+        : fd_(fd), base_(base), offset_(offset), length_(length),
           unused_(unused), metadata_(metadata)
     {};
 };
@@ -112,8 +112,8 @@ class PosixRandomAccessFile: public RandomAccessFile {
 
  public:
   PosixRandomAccessFile(const std::string& fname, int fd)
-      : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0) 
-  { 
+      : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0)
+  {
 #if defined(HAVE_FADVISE)
     //    posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
 #endif
@@ -209,7 +209,7 @@ class PosixMmapFile : public WritableFile {
   uint64_t file_offset_;  // Offset of base_ in file
   uint64_t metadata_offset_; // Offset where sst metadata starts, or zero
   bool pending_sync_;     // Have we done an munmap of unsynced data?
-  bool is_sst_file_;      // Is this an sst file be created in background?
+  bool is_write_only_;    // can this file process in background
 
   // Roundup x to a multiple of y
   static size_t Roundup(size_t x, size_t y) {
@@ -230,12 +230,12 @@ class PosixMmapFile : public WritableFile {
         pending_sync_ = true;
       }
 
-      BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_, 
+      BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_,
                                         limit_-dst_, metadata_offset_);
 
-      // sst_file is on background compaction thread, keep all operations
-      //  in sequence
-      if (is_sst_file_)
+      // write only files can perform operations async, but not
+      //  files that might re-open and read again soon
+      if (!is_write_only_)
       {
           if (and_close)
               BGFileCloser2(ptr);
@@ -303,7 +303,7 @@ class PosixMmapFile : public WritableFile {
  public:
   PosixMmapFile(const std::string& fname, int fd,
                 size_t page_size, size_t file_offset=0L,
-                bool is_sst=false)
+                bool is_write_only=false)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
@@ -315,7 +315,7 @@ class PosixMmapFile : public WritableFile {
         file_offset_(file_offset),
         metadata_offset_(0),
         pending_sync_(false),
-        is_sst_file_(is_sst) {
+        is_write_only_(is_write_only) {
     assert((page_size & (page_size - 1)) == 0);
 
     gPerfCounters->Inc(ePerfRWFileOpen);
@@ -541,7 +541,7 @@ class PosixEnv : public Env {
     return s;
   }
 
-  virtual Status NewSstFile(const std::string& fname,
+  virtual Status NewWriteOnlyFile(const std::string& fname,
                                  WritableFile** result) {
     Status s;
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
@@ -1081,7 +1081,7 @@ void BGFileCloser2(void * arg)
 
 #if defined(HAVE_FADVISE)
     // release newly written data from Linux page cache if possible
-    if (0==file_ptr->metadata_ 
+    if (0==file_ptr->metadata_
         || (file_ptr->offset_ + file_ptr->length_ < file_ptr->metadata_))
     {
         // must fdatasync for DONTNEED to work
@@ -1138,7 +1138,7 @@ void BGFileUnmapper2(void * arg)
     munmap(file_ptr->base_, file_ptr->length_);
 
 #if defined(HAVE_FADVISE)
-    if (0==file_ptr->metadata_ 
+    if (0==file_ptr->metadata_
         || (file_ptr->offset_ + file_ptr->length_ < file_ptr->metadata_))
     {
         // must fdatasync for DONTNEED to work

@@ -88,7 +88,7 @@ class Env {
   // background threads.
   //
   // The returned file will only be accessed by one thread at a time.
-  virtual Status NewSstFile(const std::string& fname,
+  virtual Status NewWriteOnlyFile(const std::string& fname,
                                    WritableFile** result)
   {return(NewWritableFile(fname, result));};
 
@@ -334,8 +334,8 @@ class EnvWrapper : public Env {
   Status NewAppendableFile(const std::string& f, WritableFile** r) {
     return target_->NewAppendableFile(f, r);
   }
-  Status NewSstFile(const std::string& f, WritableFile** r) {
-    return target_->NewSstFile(f, r);
+  Status NewWriteOnlyFile(const std::string& f, WritableFile** r) {
+    return target_->NewWriteOnlyFile(f, r);
   }
   bool FileExists(const std::string& f) { return target_->FileExists(f); }
   Status GetChildren(const std::string& dir, std::vector<std::string>* r) {
