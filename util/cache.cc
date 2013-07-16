@@ -116,7 +116,7 @@ class HandleTable {
       LRUHandle* h = list_[i];
       while (h != NULL) {
         LRUHandle* next = h->next_hash;
-        Slice key = h->key();
+        /*Slice key =*/ h->key();  // eliminate unused var warning, but allow for side-effects
         uint32_t hash = h->hash;
         LRUHandle** ptr = &new_list[hash & (new_length - 1)];
         h->next_hash = *ptr;
