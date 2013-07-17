@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -147,7 +148,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
       is_compaction_=true;
       file_size_=file_size;
 #if defined(HAVE_FADVISE)
-//      posix_fadvise(fd_, 0, file_size_, POSIX_FADV_SEQUENTIAL);
+      posix_fadvise(fd_, 0, file_size_, POSIX_FADV_SEQUENTIAL);
 #endif
 
   };
@@ -1049,21 +1050,45 @@ void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
 void BGFileCloser(void * arg)
 {
     BGCloseInfo * file_ptr;
+    bool err_flag;
+    int ret_val;
 
+    err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
-    munmap(file_ptr->base_, file_ptr->length_);
+    ret_val=munmap(file_ptr->base_, file_ptr->length_);
+    if (0!=ret_val)
+    {
+      syslog(LOG_ERR,"BGFileCloser munmap failed [%d, %m]", errno);
+      err_flag=true;
+    }  // if
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+    ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+    if (0!=ret_val)
+    {
+      syslog(LOG_ERR,"BGFileCloser posix_fadvise DONTNEED failed [%d, %m]", errno);
+      err_flag=true;
+    }  // if
+
 #endif
 
     if (0 != file_ptr->unused_)
-        ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+    {
+        ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+	if (0!=ret_val)
+	{
+	    syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
+	    err_flag=true;
+	}  // if
+    }
 
     close(file_ptr->fd_);
     delete file_ptr;
     gPerfCounters->Inc(ePerfROFileClose);
+
+    if (err_flag)
+        gPerfCounters->Inc(ePerfBGWriteError);
 
     return;
 
@@ -1073,11 +1098,19 @@ void BGFileCloser(void * arg)
 void BGFileCloser2(void * arg)
 {
     BGCloseInfo * file_ptr;
+    bool err_flag;
     int ret_val;
 
+    err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
-    munmap(file_ptr->base_, file_ptr->length_);
+    ret_val=munmap(file_ptr->base_, file_ptr->length_);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileCloser2 munmap failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
+
 
 #if defined(HAVE_FADVISE)
     // release newly written data from Linux page cache if possible
@@ -1085,22 +1118,47 @@ void BGFileCloser2(void * arg)
         || (file_ptr->offset_ + file_ptr->length_ < file_ptr->metadata_))
     {
         // must fdatasync for DONTNEED to work
-        fdatasync(file_ptr->fd_);
-        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+        ret_val=fdatasync(file_ptr->fd_);
+	if (0!=ret_val)
+	{
+	    syslog(LOG_ERR,"BGFileCloser2 fdatasync failed [%d, %m]", errno);
+	    err_flag=true;
+	}  // if
+
+        ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+	if (0!=ret_val)
+	{
+	    syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+	    err_flag=true;
+	}  // if
     }   // if
     else
     {
-        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+        ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+	if (0!=ret_val)
+	{
+	    syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+	    err_flag=true;
+	}  // if
     }   // else
 #endif
 
     if (0 != file_ptr->unused_)
+    {
         ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
-
+	if (0!=ret_val)
+	{
+	    syslog(LOG_ERR,"BGFileCloser2 ftruncate failed [%d, %m]", errno);
+	    err_flag=true;
+	}  // if
+    }
     close(file_ptr->fd_);
     delete file_ptr;
 
     gPerfCounters->Inc(ePerfRWFileClose);
+
+    if (err_flag)
+        gPerfCounters->Inc(ePerfBGWriteError);
 
     return;
 
@@ -1132,27 +1190,54 @@ void BGFileUnmapper(void * arg)
 void BGFileUnmapper2(void * arg)
 {
     BGCloseInfo * file_ptr;
+    bool err_flag;
+    int ret_val;
 
+    err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
-    munmap(file_ptr->base_, file_ptr->length_);
+    ret_val=munmap(file_ptr->base_, file_ptr->length_);
+    if (0!=ret_val)
+    {
+      syslog(LOG_ERR,"BGFileUnmapper2 munmap failed [%d, %m]", errno);
+      err_flag=true;
+    }  // if
 
 #if defined(HAVE_FADVISE)
     if (0==file_ptr->metadata_
         || (file_ptr->offset_ + file_ptr->length_ < file_ptr->metadata_))
     {
         // must fdatasync for DONTNEED to work
-        fdatasync(file_ptr->fd_);
-        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+        ret_val=fdatasync(file_ptr->fd_);
+        if (0!=ret_val)
+        {
+	    syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
+
+        ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+        if (0!=ret_val)
+        {
+	    syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
     }   // if
     else
     {
-        posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+        ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+        if (0!=ret_val)
+        {
+	    syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
     }   // else
 #endif
 
     delete file_ptr;
     gPerfCounters->Inc(ePerfRWFileUnmap);
+
+    if (err_flag)
+        gPerfCounters->Inc(ePerfBGWriteError);
 
     return;
 
