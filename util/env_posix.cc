@@ -116,6 +116,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
       : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0)
   {
 #if defined(HAVE_FADVISE)
+    // Currently hurts performance instead of helps.  Likely
+    //  requires better interaction with tables already in cache
+    //  that start compaction.  See comment in table_cache.cc.
     //    posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
 #endif
   }
