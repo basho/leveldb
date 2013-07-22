@@ -88,6 +88,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
   }
   else
   {
+      // (later, call SetForCompaction here too for files already in cache)
       gPerfCounters->Inc(ePerfTableCached);
   }   // else
   return s;
@@ -103,7 +104,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   }
 
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, level, &handle);
+  Status s = FindTable(file_number, file_size, level, &handle, options.IsCompaction());
   if (!s.ok()) {
     return NewErrorIterator(s);
   }

@@ -189,6 +189,7 @@ enum PerformanceCountersEnum
     ePerfThrottleBacklog1=64,//!< backlog at time of posting (level1+)
     ePerfThrottleCompacts1=65,//!< number of level 1+ compactions
 
+    ePerfBGWriteError=66,   //!< error in write/close, see syslog
 
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
