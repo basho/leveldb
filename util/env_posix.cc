@@ -1079,11 +1079,11 @@ void BGFileCloser(void * arg)
     if (0 != file_ptr->unused_)
     {
         ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
-	if (0!=ret_val)
-	{
-	    syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
-	    err_flag=true;
-	}  // if
+        if (0!=ret_val)	
+        {
+            syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
     }
 
     close(file_ptr->fd_);
@@ -1122,38 +1122,38 @@ void BGFileCloser2(void * arg)
     {
         // must fdatasync for DONTNEED to work
         ret_val=fdatasync(file_ptr->fd_);
-	if (0!=ret_val)
-	{
-	    syslog(LOG_ERR,"BGFileCloser2 fdatasync failed [%d, %m]", errno);
-	    err_flag=true;
-	}  // if
+        if (0!=ret_val)
+        {
+            syslog(LOG_ERR,"BGFileCloser2 fdatasync failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
 
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
-	if (0!=ret_val)
-	{
-	    syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed [%d, %m]", errno);
-	    err_flag=true;
-	}  // if
+        if (0!=ret_val)
+        {
+            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
     }   // if
     else
     {
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
-	if (0!=ret_val)
-	{
-	    syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
-	    err_flag=true;
-	}  // if
+        if (0!=ret_val)
+        {
+            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
     }   // else
 #endif
 
     if (0 != file_ptr->unused_)
     {
         ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
-	if (0!=ret_val)
-	{
-	    syslog(LOG_ERR,"BGFileCloser2 ftruncate failed [%d, %m]", errno);
-	    err_flag=true;
-	}  // if
+        if (0!=ret_val)
+        {
+            syslog(LOG_ERR,"BGFileCloser2 ftruncate failed [%d, %m]", errno);
+            err_flag=true;
+        }  // if
     }
     close(file_ptr->fd_);
     delete file_ptr;

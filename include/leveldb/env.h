@@ -83,9 +83,9 @@ class Env {
                                    WritableFile** result) = 0;
 
   // Riak specific:
-  // Derived from NewWritableFile.  Special version of 
-  // NewWritableFile that enables write and close operations
-  // to execute on background threads (where supported).
+  // Allows for virtualized version of NewWritableFile that enables write 
+  // and close operations to execute on background threads 
+  //  (where platform supported).
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWriteOnlyFile(const std::string& fname,

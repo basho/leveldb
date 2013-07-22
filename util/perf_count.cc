@@ -515,7 +515,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "ThrottleKeys1",
         "ThrottleBacklog1",
         "ThrottleCompacts1",
-	"BGWriteError"
+        "BGWriteError"
     };
 
 
