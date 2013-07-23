@@ -1240,10 +1240,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   stats_[compact->compaction->level() + 1].Add(stats);
 
   if (status.ok()) {
-    // imm_micros intentional NOT removed from time calculation,
-    //  gives better measure of overall activity / write overhead
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros), compact->num_entries,
+        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), compact->num_entries,
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }
@@ -1563,8 +1561,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       MutexLock l(&throttle_mutex_);
 
       // throttle is per key write, how many in batch?
-      //  (batch multiplier killed AAE, removed)
-      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
+      env_->SleepForMicroseconds(throttle * WriteBatchInternal::Count(my_batch));
       gPerfCounters->Add(ePerfDebug0, throttle);
   }   // if
 
