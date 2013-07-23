@@ -119,7 +119,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
     // Currently hurts performance instead of helps.  Likely
     //  requires better interaction with tables already in cache
     //  that start compaction.  See comment in table_cache.cc.
-    //    posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
+    posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
 #endif
   }
   virtual ~PosixRandomAccessFile()
@@ -759,6 +759,7 @@ class PosixEnv : public Env {
   BGQueue queue3_;    //background unmap / close
   BGQueue queue4_;    // imm_ to level 0 compactions
 
+  void InsertQueue0(struct PosixEnv::BGItem & item);
   void InsertQueue2(struct PosixEnv::BGItem & item);
 
   void SetBacklog()
@@ -929,9 +930,15 @@ PosixEnv::Schedule(
     else
     {
         // low priority compaction (not imm, not level0)
+#if 1
+        BGItem item={arg, function, priority};
+
+        InsertQueue0(item);
+#else
         queue_.push_back(BGItem());
         queue_.back().function = function;
         queue_.back().arg = arg;
+#endif
     }   // else
 
     SetBacklog();
@@ -943,6 +950,30 @@ PosixEnv::Schedule(
  * Poor man's std::priority_queue.  Said container appeared to not
  * support direct access to underlying type ... which is needed.
  */
+void
+PosixEnv::InsertQueue0(
+    PosixEnv::BGItem & item)
+{
+    BGQueue::iterator it;
+    bool looking;
+
+    // this is slow and painful with deque as underlying container
+    for (it=queue_.begin(), looking=true; queue_.end()!=it && looking; ++it)
+    {
+        if (it->priority<item.priority)
+        {
+            looking=false;
+            queue_.insert(it, item);
+        }   // if
+    }   // for
+
+    if (looking)
+        queue_.push_back(item);
+
+    return;
+
+}   // Posix::InsertQueue0
+
 void
 PosixEnv::InsertQueue2(
     PosixEnv::BGItem & item)
@@ -1079,7 +1110,7 @@ void BGFileCloser(void * arg)
     if (0 != file_ptr->unused_)
     {
         ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
-        if (0!=ret_val)	
+        if (0!=ret_val)
         {
             syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
             err_flag=true;
@@ -1214,14 +1245,14 @@ void BGFileUnmapper2(void * arg)
         ret_val=fdatasync(file_ptr->fd_);
         if (0!=ret_val)
         {
-	    syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed [%d, %m]", errno);
             err_flag=true;
         }  // if
 
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
         if (0!=ret_val)
         {
-	    syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed [%d, %m]", errno);
             err_flag=true;
         }  // if
     }   // if
@@ -1230,7 +1261,7 @@ void BGFileUnmapper2(void * arg)
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
         if (0!=ret_val)
         {
-	    syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
             err_flag=true;
         }  // if
     }   // else

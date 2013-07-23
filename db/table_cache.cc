@@ -88,7 +88,13 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
   }
   else
   {
-      // (later, call SetForCompaction here too for files already in cache)
+      // for Linux, let fadvise start precaching
+      if (is_compaction)
+      {
+          RandomAccessFile *file = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->file;
+          file->SetForCompaction(file_size);
+      }   // if
+
       gPerfCounters->Inc(ePerfTableCached);
   }   // else
   return s;

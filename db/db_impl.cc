@@ -825,6 +825,11 @@ void DBImpl::MaybeScheduleCompaction() {
           push=true;
           priority=versions_->NumLevelFiles(0);
       }   // if
+      else
+      {
+          priority=versions_->current()->WritePenalty();
+      }   // else
+
       delete c_ptr;
   }   // if
 
