@@ -158,7 +158,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
       manual_compaction_(NULL),
-      level0_good(true)
+      level0_good(true),
+      throttle_end(0)
 {
   mem_->Ref();
   has_imm_.Release_Store(NULL);
@@ -1551,17 +1552,52 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
   }  // release  MutexLock l(&mutex_)
 
+
   // throttle on exit to reduce possible reordering
   if (0!=throttle)
   {
+      uint64_t now;
+
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
+      // server may have been busy since previous write, 
+      //  use only the remaining time as throttle
+      now=env_->NowMicros();
+
+      if (now < throttle_end)
+      {
+          uint64_t remaining_wait;
+
+          remaining_wait=throttle_end - now;
+          env_->SleepForMicroseconds(remaining_wait);
+          throttle_end=now+remaining_wait+throttle;
+
+          gPerfCounters->Add(ePerfDebug0, remaining_wait);
+      }   // if
+      else
+      {
+          throttle_end=now + throttle;
+      }   // else
+
       // throttle is per key write, how many in batch?
-      //  (batch multiplier killed AAE, removed)
-      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
-      gPerfCounters->Add(ePerfDebug0, throttle);
+      if (1 < WriteBatchInternal::Count(my_batch))
+      {
+          uint64_t batch_wait;
+
+          batch_wait=throttle * (WriteBatchInternal::Count(my_batch)-1);
+          env_->SleepForMicroseconds(batch_wait);
+          throttle_end +=batch_wait;
+
+          gPerfCounters->Add(ePerfDebug0, batch_wait);
+      }   // if
   }   // if
+
+  // throttle not needed, kill off old wait time
+  else if (0!=throttle_end)
+  {
+      throttle_end=0;
+  }   // else if
 
   return status;
 }
