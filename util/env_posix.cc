@@ -3,7 +3,6 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <deque>
-#include <set>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -11,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -27,7 +27,6 @@
 #include "port/port.h"
 #include "util/crc32c.h"
 #include "util/logging.h"
-#include "util/mutexlock.h"
 #include "util/posix_logger.h"
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
@@ -489,28 +488,7 @@ static int LockOrUnlock(int fd, bool lock) {
 class PosixFileLock : public FileLock {
  public:
   int fd_;
-  std::string name_;
 };
-
-// Set of locked files.  We keep a separate set instead of just
-// relying on fcntrl(F_SETLK) since fcntl(F_SETLK) does not provide
-// any protection against multiple uses from the same process.
-class PosixLockTable {
- private:
-  port::Mutex mu_;
-  std::set<std::string> locked_files_;
- public:
-  bool Insert(const std::string& fname) {
-    MutexLock l(&mu_);
-    return locked_files_.insert(fname).second;
-  }
-  void Remove(const std::string& fname) {
-    MutexLock l(&mu_);
-    locked_files_.erase(fname);
-  }
-};
-
-static PosixLockTable gFileLocks;
 
 class PosixEnv : public Env {
  public:
@@ -671,17 +649,12 @@ class PosixEnv : public Env {
     int fd = open(fname.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
       result = IOError(fname, errno);
-    } else if (!gFileLocks.Insert(fname)) {
-      close(fd);
-      result = Status::IOError("lock " + fname, "already held by process");
     } else if (LockOrUnlock(fd, true) == -1) {
       result = IOError("lock " + fname, errno);
       close(fd);
-      gFileLocks.Remove(fname);
     } else {
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
-      my_lock->name_ = fname;
       *lock = my_lock;
     }
     return result;
@@ -693,7 +666,6 @@ class PosixEnv : public Env {
     if (LockOrUnlock(my_lock->fd_, false) == -1) {
       result = IOError("unlock", errno);
     }
-    gFileLocks.Remove(my_lock->name_);
     close(my_lock->fd_);
     delete my_lock;
     return result;
@@ -899,7 +871,6 @@ class PosixEnv : public Env {
                                       // write one key during background compaction
 
 };
-
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
                        started_bgthread_(false),
@@ -1175,21 +1146,45 @@ void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
 void BGFileCloser(void * arg)
 {
     BGCloseInfo * file_ptr;
+    bool err_flag;
+    int ret_val;
 
+    err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
-    munmap(file_ptr->base_, file_ptr->length_);
+    ret_val=munmap(file_ptr->base_, file_ptr->length_);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileCloser munmap failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+    ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileCloser posix_fadvise DONTNEED failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
+
 #endif
 
     if (0 != file_ptr->unused_)
-        ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+    {
+      ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+      if (0!=ret_val)
+	{
+	  syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
+	  err_flag=true;
+	}  // if
+    }
 
     close(file_ptr->fd_);
     delete file_ptr;
     gPerfCounters->Inc(ePerfROFileClose);
+
+    if (err_flag)
+        gPerfCounters->Inc(ePerfReadBlockError);
 
     return;
 
@@ -1199,22 +1194,46 @@ void BGFileCloser(void * arg)
 void BGFileCloser2(void * arg)
 {
     BGCloseInfo * file_ptr;
+    bool err_flag;
+    int ret_val;
 
+    err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
-    munmap(file_ptr->base_, file_ptr->length_);
+    ret_val=munmap(file_ptr->base_, file_ptr->length_);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileCloser2 munmap failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
+
 #endif
 
     if (0 != file_ptr->unused_)
-        ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+    {
+      ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
+      if (0!=ret_val)
+	{
+	  syslog(LOG_ERR,"BGFileCloser2 ftruncate failed [%d, %m]", errno);
+	  err_flag=true;
+	}  // if
+    }
 
     close(file_ptr->fd_);
     delete file_ptr;
 
     gPerfCounters->Inc(ePerfRWFileClose);
+
+    if (err_flag)
+        gPerfCounters->Inc(ePerfReadBlockError);
 
     return;
 
@@ -1225,10 +1244,18 @@ void BGFileCloser2(void * arg)
 void BGFileUnmapper(void * arg)
 {
     BGCloseInfo * file_ptr;
+    bool err_flag;
+    int ret_val;
 
+    err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
-    munmap(file_ptr->base_, file_ptr->length_);
+    ret_val=munmap(file_ptr->base_, file_ptr->length_);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileUnmapper munmap failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
 
 #if defined(HAVE_FADVISE)
     posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
@@ -1246,17 +1273,33 @@ void BGFileUnmapper(void * arg)
 void BGFileUnmapper2(void * arg)
 {
     BGCloseInfo * file_ptr;
+    bool err_flag;
+    int ret_val;
 
+    err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
-    munmap(file_ptr->base_, file_ptr->length_);
+    ret_val=munmap(file_ptr->base_, file_ptr->length_);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileUnmapper2 munmap failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
 
 #if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
+    if (0!=ret_val)
+    {
+        syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+        err_flag=true;
+    }  // if
 #endif
 
     delete file_ptr;
     gPerfCounters->Inc(ePerfRWFileUnmap);
+
+    if (err_flag)
+        gPerfCounters->Inc(ePerfReadBlockError);
 
     return;
 
