@@ -1181,8 +1181,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       size_t entry_count;
       entry_count=compact->num_entries + compact->builder->NumEntries();
 
-      // imm_micros intentional NOT removed from time calculation,
-      //  gives better measure of overall activity / write overhead
+      // every so often see if priority needs to change
       if (1==(entry_count % 1000) && 1000<entry_count)
       {
           // test for priority change
