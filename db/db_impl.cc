@@ -1557,11 +1557,13 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   // throttle on exit to reduce possible reordering
   if (0!=throttle)
   {
+      int count;
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
       // throttle is per key write, how many in batch?
-      env_->SleepForMicroseconds(throttle * WriteBatchInternal::Count(my_batch));
+      count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      env_->SleepForMicroseconds(throttle * count);
       gPerfCounters->Add(ePerfDebug0, throttle);
   }   // if
 
