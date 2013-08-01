@@ -292,7 +292,7 @@ class PosixMmapFile : public WritableFile {
     if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
       return false;
     }
-    void* ptr = mmap(NULL, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
+    void* ptr = mmap(NULL, map_size_, PROT_WRITE, MAP_SHARED,
                      fd_, file_offset_);
     if (ptr == MAP_FAILED) {
       return false;
