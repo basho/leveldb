@@ -297,6 +297,9 @@ class PosixMmapFile : public WritableFile {
     if (ptr == MAP_FAILED) {
       return false;
     }
+    
+    mprotect(ptr, map_size_, PROT_NONE);
+
     base_ = reinterpret_cast<char*>(ptr);
     limit_ = base_ + map_size_;
     dst_ = base_ + offset_adjust;
@@ -345,8 +348,11 @@ class PosixMmapFile : public WritableFile {
         }
       }
 
+      mprotect(base_, map_size_, PROT_WRITE);
       size_t n = (left <= avail) ? left : avail;
       memcpy(dst_, src, n);
+      mprotect(base_, map_size_, PROT_NONE);
+
       dst_ += n;
       src += n;
       left -= n;
