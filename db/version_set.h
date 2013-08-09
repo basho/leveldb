@@ -103,7 +103,7 @@ class Version {
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
-  int NumFiles(int level) const { return files_[level].size(); }
+  size_t NumFiles(int level) const { return files_[level].size(); }
 
   const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
