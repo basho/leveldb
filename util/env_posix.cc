@@ -98,7 +98,7 @@ void * arg)
             tot_compact+=gThrottleData[loop].m_Compactions;
         }   // for
 
-	// non-level0 data available?
+        // non-level0 data available?
         if (0!=tot_keys)
         {
             if (0==tot_compact)
@@ -111,16 +111,16 @@ void * arg)
 
         }   // if
 
-	// attempt to most recent level0
-	//  (only use most recent level0 until level1+ data becomes available,
-	//   useful on restart of heavily loaded server)
-	else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
-	{
+        // attempt to most recent level0
+        //  (only use most recent level0 until level1+ data becomes available,
+        //   useful on restart of heavily loaded server)
+        else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
+        {
             pthread_mutex_lock(&gThrottleMutex);
             new_throttle=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys)
-	      * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
+              * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
             pthread_mutex_unlock(&gThrottleMutex);
-	}   // else if
+        }   // else if
         else
         {
             new_throttle=0;
@@ -175,9 +175,9 @@ struct BGCloseInfo
     uint64_t metadata_;
 
     BGCloseInfo(int fd, void * base, size_t offset, size_t length, 
-		size_t unused, uint64_t metadata)
+                size_t unused, uint64_t metadata)
         : fd_(fd), base_(base), offset_(offset), length_(length), 
-	  unused_(unused), metadata_(metadata) {};
+          unused_(unused), metadata_(metadata) {};
 };
 
 class PosixSequentialFile: public SequentialFile {
@@ -314,7 +314,7 @@ class PosixMmapFile : public WritableFile {
       }
 
       BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_, 
-					limit_-dst_, metadata_offset_);
+                                        limit_-dst_, metadata_offset_);
 
       // write only files can perform operations async, but not
       //  files that might re-open and read again soon                                                                           
@@ -386,7 +386,7 @@ class PosixMmapFile : public WritableFile {
  public:
   PosixMmapFile(const std::string& fname, int fd,
                 size_t page_size, size_t file_offset=0L,
-		bool is_write_only=false)
+                bool is_write_only=false)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
@@ -396,7 +396,7 @@ class PosixMmapFile : public WritableFile {
         dst_(NULL),
         last_sync_(NULL),
         file_offset_(file_offset),
-	metadata_offset_(0),
+        metadata_offset_(0),
         pending_sync_(false),
         is_write_only_(is_write_only) {
     assert((page_size & (page_size - 1)) == 0);
@@ -626,7 +626,7 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewWriteOnlyFile(const std::string& fname,
-				  WritableFile** result) {
+                                  WritableFile** result) {
     Status s;
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);                                                        
     if (fd < 0) {
@@ -1239,8 +1239,8 @@ void BGFileCloser(void * arg)
       ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
     }
 
@@ -1282,15 +1282,15 @@ void BGFileCloser2(void * arg)
       ret_val=fdatasync(file_ptr->fd_);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileCloser2 fdatasync failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileCloser2 fdatasync failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
 
       ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
     }   // if
   else
@@ -1298,8 +1298,8 @@ void BGFileCloser2(void * arg)
       ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
     }   // else
 #endif
@@ -1309,8 +1309,8 @@ void BGFileCloser2(void * arg)
       ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileCloser2 ftruncate failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileCloser2 ftruncate failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
     }
   close(file_ptr->fd_);
@@ -1372,15 +1372,15 @@ void BGFileUnmapper2(void * arg)
       ret_val=fdatasync(file_ptr->fd_);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
 
       ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
     }   // if
   else
@@ -1388,8 +1388,8 @@ void BGFileUnmapper2(void * arg)
       ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
       if (0!=ret_val)
         {
-	  syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
-	  err_flag=true;
+          syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+          err_flag=true;
         }  // if
     }   // else
 #endif
