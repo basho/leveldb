@@ -930,15 +930,9 @@ PosixEnv::Schedule(
     else
     {
         // low priority compaction (not imm, not level0)
-#if 1
         BGItem item={arg, function, priority};
 
         InsertQueue0(item);
-#else
-        queue_.push_back(BGItem());
-        queue_.back().function = function;
-        queue_.back().arg = arg;
-#endif
     }   // else
 
     SetBacklog();
