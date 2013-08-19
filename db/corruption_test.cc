@@ -226,7 +226,7 @@ TEST(CorruptionTest, NewFileErrorDuringWrite) {
     batch.Put("a", Value(100, &value_storage));
     s = db_->Write(WriteOptions(), &batch);
   }
-  ASSERT_TRUE(!s.ok());
+//  ASSERT_TRUE(!s.ok());  Background write thread will never report this
   ASSERT_GE(env_.num_writable_file_errors_, 1);
   env_.writable_file_error_ = false;
   Reopen();
@@ -244,13 +244,13 @@ TEST(CorruptionTest, TableFile) {
 }
 
 TEST(CorruptionTest, TableFileIndexData) {
-  Build(10000);  // Enough to build multiple Tables
+  Build(100000);  // Enough to build multiple Tables
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-
-  Corrupt(kTableFile, -2000, 500, 2);
+  // was level-2, now level-0
+  Corrupt(kTableFile, -2000, 500, 0);
   Reopen();
-  Check(5000, 9999);
+  Check(50000, 99999);
 }
 
 TEST(CorruptionTest, MissingDescriptor) {
@@ -302,10 +302,10 @@ TEST(CorruptionTest, CompactionInputError) {
   Build(10);
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  const int last = config::kMaxMemCompactLevel;
-  ASSERT_EQ(1, Property("leveldb.num-files-at-level" + NumberToString(last)));
+  //const int last = config::kMaxMemCompactLevel; // Riak does not "move" files
+  //ASSERT_EQ(1, Property("leveldb.num-files-at-level" + NumberToString(last)));
 
-  Corrupt(kTableFile, 100, 1, 2);
+  Corrupt(kTableFile, 100, 1, 0);
   Check(5, 9);
 
   // Force compactions by writing lots of values
@@ -331,7 +331,7 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
 
   Build(10);
   dbi->TEST_CompactMemTable();
-  ASSERT_EQ(1, Property("leveldb.num-files-at-level0"));
+  ASSERT_TRUE(1 < Property("leveldb.num-files-at-level0"));
 
   Corrupt(kTableFile, 100, 1, 0);
   Check(5, 9);
@@ -352,7 +352,7 @@ TEST(CorruptionTest, UnrelatedKeys) {
   Build(10);
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  Corrupt(kTableFile, 100, 1, 2);
+  Corrupt(kTableFile, 100, 1, 0);
 
   std::string tmp1, tmp2;
   ASSERT_OK(db_->Put(WriteOptions(), Key(1000, &tmp1), Value(1000, &tmp2)));

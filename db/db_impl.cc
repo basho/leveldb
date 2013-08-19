@@ -825,6 +825,11 @@ void DBImpl::MaybeScheduleCompaction() {
           push=true;
           priority=versions_->NumLevelFiles(0);
       }   // if
+      else
+      {
+          priority=versions_->current()->WritePenalty();
+      }   // else
+
       delete c_ptr;
   }   // if
 
@@ -1235,10 +1240,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   stats_[compact->compaction->level() + 1].Add(stats);
 
   if (status.ok()) {
-    // imm_micros intentional NOT removed from time calculation,
-    //  gives better measure of overall activity / write overhead
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros), compact->num_entries,
+        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), compact->num_entries,
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }
@@ -1554,12 +1557,13 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   // throttle on exit to reduce possible reordering
   if (0!=throttle)
   {
+      int count;
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
       // throttle is per key write, how many in batch?
-      //  (batch multiplier killed AAE, removed)
-      env_->SleepForMicroseconds(throttle /* * WriteBatchInternal::Count(my_batch)*/);
+      count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      env_->SleepForMicroseconds(throttle * count);
       gPerfCounters->Add(ePerfDebug0, throttle);
   }   // if
 
