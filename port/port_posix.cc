@@ -27,6 +27,16 @@ void Mutex::Lock() { PthreadCall("lock", pthread_mutex_lock(&mu_)); }
 
 void Mutex::Unlock() { PthreadCall("unlock", pthread_mutex_unlock(&mu_)); }
 
+#if defined(pthread_spinlock_t)
+Spin::Spin() { PthreadCall("init spinlock", pthread_spinlock_init(&sp_, NULL)); }
+
+Spin::~Spin() { PthreadCall("destroy spinlock", pthread_spinlock_destroy(&sp_)); }
+
+void Spin::Lock() { PthreadCall("lock", pthread_spinlock_lock(&sp_)); }
+
+void Spin::Unlock() { PthreadCall("unlock", pthread_spinlock_unlock(&sp_)); }
+#endif
+
 CondVar::CondVar(Mutex* mu)
     : mu_(mu) {
     PthreadCall("init cv", pthread_cond_init(&cv_, NULL));
