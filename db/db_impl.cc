@@ -1606,7 +1606,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = NULL;
       gPerfCounters->Inc(ePerfWriteNewMem);
-      s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
+      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile);
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
         versions_->ReuseFileNumber(new_log_number);
@@ -1744,7 +1744,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
-    s = options.env->NewWritableFile(LogFileName(dbname, new_log_number),
+    s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
                                      &lfile);
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);

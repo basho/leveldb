@@ -228,6 +228,9 @@ Status TableBuilder::Finish() {
   BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle,
       sst_stats_block_handle;
 
+  // pass hint to Linux fadvise management
+  r->file->SetMetadataOffset(r->offset);
+
   // Write filter block
   if (ok() && r->filter_block != NULL) {
     WriteRawBlock(r->filter_block->Finish(), kNoCompression,
