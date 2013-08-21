@@ -188,7 +188,7 @@ class LRUCache : public Cache {
   size_t capacity_;
 
   // mutex_ protects the following state.
-  port::Mutex mutex_;
+  port::Spin spin_;
   size_t usage_;
   uint64_t last_id_;
 
@@ -243,7 +243,7 @@ void LRUCache::LRU_Append(LRUHandle* e) {
 }
 
 Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
-  MutexLock l(&mutex_);
+  SpinLock l(&spin_);
   LRUHandle* e = table_.Lookup(key, hash);
   if (e != NULL) {
     e->refs++;
@@ -254,12 +254,12 @@ Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
 }
 
 void LRUCache::Release(Cache::Handle* handle) {
-  MutexLock l(&mutex_);
+  SpinLock l(&spin_);
   Unref(reinterpret_cast<LRUHandle*>(handle));
 }
 
 void LRUCache::Addref(Cache::Handle* handle) {
-  MutexLock l(&mutex_);
+  SpinLock l(&spin_);
   LRUHandle * e;
 
   e=reinterpret_cast<LRUHandle*>(handle);
@@ -270,7 +270,7 @@ void LRUCache::Addref(Cache::Handle* handle) {
 Cache::Handle* LRUCache::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
-  MutexLock l(&mutex_);
+  SpinLock l(&spin_);
 
   LRUHandle* e = reinterpret_cast<LRUHandle*>(
       malloc(sizeof(LRUHandle)-1 + key.size()));
@@ -316,7 +316,7 @@ Cache::Handle* LRUCache::Insert(
 }
 
 void LRUCache::Erase(const Slice& key, uint32_t hash) {
-  MutexLock l(&mutex_);
+  SpinLock l(&spin_);
   LRUHandle* e = table_.Remove(key, hash);
   if (e != NULL) {
     LRU_Remove(e);
@@ -330,7 +330,7 @@ static const int kNumShards = 1 << kNumShardBits;
 class ShardedLRUCache : public Cache {
  private:
   LRUCache shard_[kNumShards];
-  port::Mutex id_mutex_;
+  port::Spin id_spin_;
   uint64_t last_id_;
 
   static inline uint32_t HashSlice(const Slice& s) {
@@ -375,7 +375,7 @@ class ShardedLRUCache : public Cache {
     return reinterpret_cast<LRUHandle*>(handle)->value;
   }
   virtual uint64_t NewId() {
-    MutexLock l(&id_mutex_);
+    SpinLock l(&id_spin_);
     return ++(last_id_);
   }
   virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
