@@ -103,7 +103,7 @@ class Mutex {
 };
 
 
-#if defined(_POSIX_SPIN_LOCKS)
+#if defined(_POSIX_SPIN_LOCKS) && 0<_POSIX_SPIN_LOCKS
 class Spin {
  public:
   Spin();
