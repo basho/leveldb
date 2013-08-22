@@ -1,0 +1,6 @@
+language: cpp
+
+script: make check
+
+compiler: gcc
+

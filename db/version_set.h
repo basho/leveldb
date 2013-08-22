@@ -107,7 +107,7 @@ class Version {
 
   const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
-  int WritePenalty() const {return write_penalty_; }
+  volatile int WritePenalty() const {return write_penalty_; }
 
   // Riak specific repair routine
   bool VerifyLevels(int & level, InternalKey & begin, InternalKey & end);
@@ -139,7 +139,7 @@ class Version {
   // are initialized by Finalize().
   double compaction_score_;
   int compaction_level_;
-  int write_penalty_;
+  volatile int write_penalty_;
 
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),

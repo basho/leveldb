@@ -54,6 +54,9 @@ int RunAllTests() {
     }
   }
   fprintf(stderr, "==== PASSED %d tests\n", num);
+
+  delete tests;
+
   return 0;
 }
 
