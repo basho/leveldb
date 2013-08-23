@@ -1553,7 +1553,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   // throttle on exit to reduce possible reordering
   if (0!=throttle)
   {
-      uint64_t now;
+      uint64_t now, remaining_wait, new_end, batch_wait;
       int batch_count;
 
       /// slowing each call down sequentially
@@ -1565,31 +1565,34 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
       if (now < throttle_end)
       {
-          uint64_t remaining_wait;
 
           remaining_wait=throttle_end - now;
           env_->SleepForMicroseconds(remaining_wait);
-          throttle_end=now+remaining_wait+throttle;
+          new_end=now+remaining_wait+throttle;
 
           gPerfCounters->Add(ePerfDebug0, remaining_wait);
       }   // if
       else
       {
-          throttle_end=now + throttle;
+          remaining_wait=0;
+          new_end=now + throttle;
       }   // else
 
       // throttle is per key write, how many in batch?
       batch_count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch)-1 : 0);
-      if (1 < batch_count)
+      batch_wait=throttle * batch_count;
+
+      // only wait on batch if extends beyond potential wait period
+      if (now + remaining_wait < throttle_end + batch_wait)
       {
-          uint64_t batch_wait;
+          remaining_wait=throttle_end + batch_wait - (now + remaining_wait);
+          env_->SleepForMicroseconds(remaining_wait);
+          new_end +=remaining_wait;
 
-          batch_wait=throttle * batch_count;
-          env_->SleepForMicroseconds(batch_wait);
-          throttle_end +=batch_wait;
-
-          gPerfCounters->Add(ePerfDebug0, batch_wait);
+          gPerfCounters->Add(ePerfDebug0, remaining_wait);
       }   // if
+
+      throttle_end=new_end;
   }   // if
 
   // throttle not needed, kill off old wait time
