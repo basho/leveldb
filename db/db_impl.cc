@@ -1485,7 +1485,7 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   Status status;
-  int throttle(0), count(0);
+  int throttle(0);
 
   Writer w(&mutex_);
   w.batch = my_batch;
@@ -1559,6 +1559,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   if (0!=throttle)
   {
       uint64_t now;
+      int batch_count;
 
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
@@ -1583,11 +1584,17 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       }   // else
 
       // throttle is per key write, how many in batch?
-      count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
-      if (1 < count)  // safety test ... not sure if 0 could happen
-          --count;
-      env_->SleepForMicroseconds(throttle * count);
-      gPerfCounters->Add(ePerfDebug0, throttle * count);
+      batch_count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      if (1 < batch_count)
+      {
+          uint64_t batch_wait;
+
+          batch_wait=throttle * (batch_count-1);
+          env_->SleepForMicroseconds(batch_wait);
+          throttle_end +=batch_wait;
+
+          gPerfCounters->Add(ePerfDebug0, batch_wait);
+      }   // if
   }   // if
 
   // throttle not needed, kill off old wait time
