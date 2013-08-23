@@ -1557,6 +1557,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   if (0!=throttle)
   {
       uint64_t now;
+      int batch_count;
 
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
@@ -1581,11 +1582,12 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       }   // else
 
       // throttle is per key write, how many in batch?
-      if (1 < WriteBatchInternal::Count(my_batch))
+      batch_count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch)-1 : 0);
+      if (1 < batch_count)
       {
           uint64_t batch_wait;
 
-          batch_wait=throttle * (WriteBatchInternal::Count(my_batch)-1);
+          batch_wait=throttle * batch_count;
           env_->SleepForMicroseconds(batch_wait);
           throttle_end +=batch_wait;
 
