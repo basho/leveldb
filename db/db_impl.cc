@@ -1176,8 +1176,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       size_t entry_count;
       entry_count=compact->num_entries + compact->builder->NumEntries();
 
-      // imm_micros intentional NOT removed from time calculation,
-      //  gives better measure of overall activity / write overhead
+      // every so often see if priority needs to change
       if (1==(entry_count % 1000) && 1000<entry_count)
       {
           // test for priority change
@@ -1236,10 +1235,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   stats_[compact->compaction->level() + 1].Add(stats);
 
   if (status.ok()) {
-    // imm_micros intentional NOT removed from time calculation,
-    //  gives better measure of overall activity / write overhead
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros), compact->num_entries,
+        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), compact->num_entries,
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }

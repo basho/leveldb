@@ -693,9 +693,18 @@ class PosixEnv : public Env {
   }
 
   virtual uint64_t NowMicros() {
+#if _POSIX_TIMERS >= 200801L
+    struct timespec ts;
+
+    // this is rumored to be faster that gettimeofday(),
+    //  and sometimes shift less ... someday use CLOCK_MONOTONIC_RAW
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000 + ts.tv_nsec/1000;
+#else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+#endif
   }
 
   virtual void SleepForMicroseconds(int micros) {
