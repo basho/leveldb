@@ -1564,7 +1564,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       // throttle is per key write, how many in batch?
       count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
       env_->SleepForMicroseconds(throttle * count);
-      gPerfCounters->Add(ePerfDebug0, throttle);
+      gPerfCounters->Add(ePerfDebug0, throttle * count);
   }   // if
 
   return status;
