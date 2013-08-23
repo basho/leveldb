@@ -188,7 +188,7 @@ class DBImpl : public DB {
   // hint to background thread when level0 is backing up
   volatile bool level0_good;
 
-  volatile int64_t throttle_end;
+  volatile uint64_t throttle_end;
 
   // No copying allowed
   DBImpl(const DBImpl&);
