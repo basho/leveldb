@@ -127,6 +127,8 @@ static BloomInventoryItem2 lBloom2Item;
 
 // sparse table of primes where index to array is count
 //  of bytes to contain the prime number of bits
+// The prime table only helps where key count is roughly 6,250
+//  or less.  It adds accuracy to smaller populations.
 static unsigned ByteSizePrimes[]=
 {
  0, 7, 13, 23, 31, 37, 47, 53, 61, 71,

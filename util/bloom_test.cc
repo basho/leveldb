@@ -106,8 +106,10 @@ static int NextLength(int length) {
     length += 10;
   } else if (length < 1000) {
     length += 100;
-  } else {
+  } else if (length < 15000) {
     length += 1000;
+  } else {
+    length += 15000;
   }
   return length;
 }
@@ -119,7 +121,7 @@ TEST(BloomTest, VaryingLengths) {
   int mediocre_filters = 0;
   int good_filters = 0;
 
-  for (int length = 1; length <= 10000; length = NextLength(length)) {
+  for (int length = 1; length <= 200000; length = NextLength(length)) {
     Reset();
     for (int i = 0; i < length; i++) {
       Add(Key(i, buffer));
