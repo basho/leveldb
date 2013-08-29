@@ -460,10 +460,7 @@ static PosixLockTable gFileLocks;
 class PosixEnv : public Env {
  public:
   PosixEnv();
-  virtual ~PosixEnv() {
-    fprintf(stderr, "Destroying Env::Default()\n");
-    exit(1);
-  }
+  virtual ~PosixEnv();
 
   virtual Status NewSequentialFile(const std::string& fname,
                                    SequentialFile** result) {
@@ -658,7 +655,7 @@ class PosixEnv : public Env {
 
   virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false, int priority=0);
 
-  virtual void StartThread(void (*function)(void* arg), void* arg);
+  virtual pthread_t StartThread(void (*function)(void* arg), void* arg);
 
   virtual Status GetTestDirectory(std::string* result) {
     const char* env = getenv("TEST_TMPDIR");
@@ -723,7 +720,6 @@ class PosixEnv : public Env {
 
   virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
 
-
  private:
   void PthreadCall(const char* label, int result) {
     if (result != 0) {
@@ -750,6 +746,9 @@ class PosixEnv : public Env {
   volatile int bg_backlog_;// count of items on 3 compaction queues
   volatile int bg_active_; // count of threads actually working compaction
   int64_t clock_res_;
+
+  bool bgthread_running_;  // flag to all threads when time to stop
+  volatile int bgthread_count_; // number of active threads
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); int priority;};
@@ -783,6 +782,7 @@ class PosixEnv : public Env {
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
                        started_bgthread_(false),
                        bg_backlog_(0), bg_active_(0),
+                       bgthread_running_(true), bgthread_count_(0),
                        clock_res_(1), write_rate_usec_(0)
 {
   struct timespec ts;
@@ -797,6 +797,34 @@ PosixEnv::PosixEnv() : page_size_(getpagesize()),
   PthreadCall("mutex_init", pthread_mutex_init(&mu_, NULL));
   PthreadCall("cvar_init", pthread_cond_init(&bgsignal_, NULL));
 }
+
+
+PosixEnv::~PosixEnv()
+{
+    // kill off background threads
+    bgthread_running_=false;
+
+    // be sure thread actually started before attempting
+    //  shutdown and join.
+    if (0!=bgthread_count_)
+    {
+        while(0!=bgthread_count_)
+        {
+            PthreadCall("lock", pthread_mutex_lock(&mu_));
+            PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
+            PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+            SleepForMicroseconds(10);
+        }   // while
+
+        // clean up now that we know they are stopping
+        pthread_join(bgthread_, NULL);
+        pthread_join(bgthread2_, NULL);
+        pthread_join(bgthread3_, NULL);
+        pthread_join(bgthread4_, NULL);
+    }   // if
+
+}   // PosixEnf::~PosixEnv
+
 
 // state: 0 - legacy/default, 4 - close/unmap, 2 - test for queue switch, 1 - imm/high priority
 void
@@ -996,23 +1024,32 @@ PosixEnv::InsertQueue2(
 void PosixEnv::BGThread()
 {
     BGQueue * queue_ptr;
+    bool must_finish;
 
     // avoid race condition of whether or not all 4 thread creations
     //  have completed AND set bgthreadX_ values
     PthreadCall("lock", pthread_mutex_lock(&mu_));
 
+    ++bgthread_count_;
+    must_finish=false;
+
     // pick source of thread's work
     if (bgthread4_==pthread_self())
         queue_ptr=&queue4_;
     else if (bgthread3_==pthread_self())
+    {
+        // this is background close/write ... must process
+        //  entire queue before exit
+        must_finish=true;
         queue_ptr=&queue3_;
+    }   // else if
     else if (bgthread2_==pthread_self())
         queue_ptr=&queue2_;
     else
         queue_ptr=&queue_;
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
-    while (true)
+    while (bgthread_running_ || (must_finish && 0!=queue_ptr->size()))
     {
         // Wait until there is an item that is ready to run
         PthreadCall("lock", pthread_mutex_lock(&mu_));
@@ -1026,29 +1063,38 @@ void PosixEnv::BGThread()
         else
             bg_active_=0;
 
-        while (queue_ptr->empty()) {
+        while (queue_ptr->empty() && bgthread_running_) {
             PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
         }
 
-        void (*function)(void*) = queue_ptr->front().function;
-        void* arg = queue_ptr->front().arg;
-        queue_ptr->pop_front();
+        if (bgthread_running_)
+        {
+            void (*function)(void*) = queue_ptr->front().function;
+            void* arg = queue_ptr->front().arg;
+            queue_ptr->pop_front();
 
-        ++bg_active_;
-        SetBacklog();
+            ++bg_active_;
+            SetBacklog();
 
-        PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+            PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
-        if (bgthread4_==pthread_self())
-            gPerfCounters->Inc(ePerfBGCompactImm);
-        else if (bgthread3_==pthread_self())
-            gPerfCounters->Inc(ePerfBGCloseUnmap);
-        else if (bgthread2_==pthread_self())
-            gPerfCounters->Inc(ePerfBGCompactLevel0);
+            if (bgthread4_==pthread_self())
+                gPerfCounters->Inc(ePerfBGCompactImm);
+            else if (bgthread3_==pthread_self())
+                gPerfCounters->Inc(ePerfBGCloseUnmap);
+            else if (bgthread2_==pthread_self())
+                gPerfCounters->Inc(ePerfBGCompactLevel0);
+            else
+                gPerfCounters->Inc(ePerfBGNormal);
+
+            (*function)(arg);
+        }   // if
         else
-            gPerfCounters->Inc(ePerfBGNormal);
+        {
+            --bgthread_count_;
 
-        (*function)(arg);
+            PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+        }   // else
     }   // while
 }
 
@@ -1065,13 +1111,15 @@ static void* StartThreadWrapper(void* arg) {
   return NULL;
 }
 
-void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
+pthread_t PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
   pthread_t t;
   StartThreadState* state = new StartThreadState;
   state->user_function = function;
   state->arg = arg;
   PthreadCall("start thread",
               pthread_create(&t, NULL,  &StartThreadWrapper, state));
+
+  return(t);
 }
 
 // this was a reference file:  unmap, purge page cache, close
@@ -1291,7 +1339,7 @@ static void InitDefaultEnv()
         default_env[loop]=new PosixEnv;
     }   // for
 
-    ThrottleInit(default_env[0]);
+    ThrottleInit();
 
     // force the loading of code for both filters in case they
     //  are hidden in a shared library
@@ -1313,6 +1361,26 @@ Env* Env::Default() {
   ++count;
   return default_env[count % THREAD_BLOCKS];
 }
+
+
+void Env::Shutdown()
+{
+    int loop;
+
+    // what if nothing ever started
+    pthread_once(&once, InitDefaultEnv);
+
+    // close down the environments
+    for (loop=0; loop<THREAD_BLOCKS; ++loop)
+    {
+        delete default_env[loop];
+        default_env[loop]=NULL;
+    }   // for
+
+    ThrottleShutdown();
+    ComparatorShutdown();
+
+}   // Env::Shutdown
 
 
 static bool

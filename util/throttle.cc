@@ -30,7 +30,8 @@ namespace leveldb {
 pthread_rwlock_t gThreadLock0;
 pthread_rwlock_t gThreadLock1;
 
-pthread_mutex_t gThrottleMutex;
+pthread_mutex_t gThrottleMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t gThrottleCond = PTHREAD_COND_INITIALIZER;
 
 #define THROTTLE_SECONDS 60
 #define THROTTLE_TIME THROTTLE_SECONDS*1000000
@@ -49,23 +50,23 @@ ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
 
 uint64_t gThrottleRate;
 
+static bool gThrottleRunning=false;
+static pthread_t gThrottleThreadId;
+
 static void * ThrottleThread(void * arg);
 
 
 void
-ThrottleInit(
-    Env * env)
+ThrottleInit()
 {
-    pthread_t tid;
 
     pthread_rwlock_init(&gThreadLock0, NULL);
     pthread_rwlock_init(&gThreadLock1, NULL);
-    pthread_mutex_init(&gThrottleMutex, NULL);
 
     memset(&gThrottleData, 0, sizeof(gThrottleData));
     gThrottleRate=0;
 
-    pthread_create(&tid, NULL,  &ThrottleThread, env);
+    pthread_create(&gThrottleThreadId, NULL,  &ThrottleThread, NULL);
 
     return;
 
@@ -74,22 +75,25 @@ ThrottleInit(
 
 static void *
 ThrottleThread(
-    void * arg)
+    void * /*arg*/)
 {
-    Env * env;
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
     int replace_idx, loop;
     uint64_t new_throttle;
+    struct timespec wait_time;
 
-    env=(Env *)arg;
     replace_idx=2;
+    gThrottleRunning=true;
 
-    while(1)
+    while(gThrottleRunning)
     {
-        // sleep 5 minutes
-        env->SleepForMicroseconds(THROTTLE_TIME);
-
         pthread_mutex_lock(&gThrottleMutex);
+
+        // sleep 1 minute
+        clock_gettime(CLOCK_REALTIME, &wait_time);
+        wait_time.tv_sec+=THROTTLE_SECONDS;
+        pthread_cond_timedwait(&gThrottleCond, &gThrottleMutex,
+                               &wait_time);
         gThrottleData[replace_idx]=gThrottleData[1];
         memset(&gThrottleData[1], 0, sizeof(gThrottleData[1]));
         pthread_mutex_unlock(&gThrottleMutex);
@@ -207,5 +211,17 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Bac
 };
 
 uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
+
+void ThrottleShutdown()
+{
+    if (gThrottleRunning)
+    {
+        gThrottleRunning=false;
+        pthread_mutex_lock(&gThrottleMutex);
+        pthread_cond_signal(&gThrottleCond);
+        pthread_mutex_unlock(&gThrottleMutex);
+        pthread_join(gThrottleThreadId, NULL);
+    }   // if
+}   // ThrottleShutdown
 
 }  // namespace leveldb

@@ -61,13 +61,24 @@ class Repairer {
   }
 
   ~Repairer() {
-    delete table_cache_;
     if (owns_info_log_) {
       delete options_.info_log;
     }
     if (owns_cache_) {
       delete options_.block_cache;
     }
+
+    // must remove second ref counter that keeps overlapped files locked
+    //  table cache
+    for (int level = 0; level < config::kNumLevels; level++) {
+        {
+            for (size_t i = 0; i < table_numbers_[level].size(); i++) {
+                table_cache_->Evict(table_numbers_[level][i], (level<leveldb::config::kNumOverlapLevels));
+            }   // for
+        }   // if
+    } // for
+
+    delete table_cache_;
   }
 
   Status Run() {
