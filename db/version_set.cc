@@ -99,6 +99,11 @@ Version::~Version() {
       FileMetaData* f = files_[level][i];
       assert(f->refs > 0);
       f->refs--;
+
+      // clear Riak's double reference of overlapped files
+      if (vset_->IsLevelOverlapped(level))
+          vset_->GetTableCache()->Evict(f->number, true);
+
       if (f->refs <= 0) {
         delete f;
       }

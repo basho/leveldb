@@ -876,6 +876,8 @@ PosixEnv::Schedule(
         BGQueue::iterator it;
         bool found;
 
+        found=false;
+
         // close / unmap memory mapped files
         if (4==state)
         {
@@ -1330,6 +1332,7 @@ static bool HasSSE4_2();
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 static Env* default_env[THREAD_BLOCKS];
 static unsigned count=0;
+static volatile bool started=false;
 static void InitDefaultEnv()
 {
     int loop;
@@ -1353,7 +1356,7 @@ static void InitDefaultEnv()
         crc32c::SwitchToHardwareCRC();
 
     PerformanceCounters::Init(false);
-
+    started=true;
 }
 
 Env* Env::Default() {
@@ -1365,19 +1368,20 @@ Env* Env::Default() {
 
 void Env::Shutdown()
 {
-    int loop;
-
-    // what if nothing ever started
-    pthread_once(&once, InitDefaultEnv);
-
-    // close down the environments
-    for (loop=0; loop<THREAD_BLOCKS; ++loop)
+    if (started)
     {
-        delete default_env[loop];
-        default_env[loop]=NULL;
-    }   // for
+        int loop;
 
-    ThrottleShutdown();
+        // close down the environments
+        for (loop=0; loop<THREAD_BLOCKS; ++loop)
+        {
+            delete default_env[loop];
+            default_env[loop]=NULL;
+        }   // for
+
+        ThrottleShutdown();
+    }   // if
+
     ComparatorShutdown();
 
 }   // Env::Shutdown

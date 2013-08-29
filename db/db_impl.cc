@@ -692,6 +692,13 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       // env_->SetWriteRate(2*stats.micros/meta.num_entries);
   }   // if
 
+  // Riak adds extra reference to file, must remove it
+  //  in this race condition upon close
+  if (s.ok() && shutting_down_.Acquire_Load()) {
+      versions_->GetTableCache()->Evict(meta.number, true);
+  }
+
+
   return s;
 }
 
@@ -1212,6 +1219,16 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok() && shutting_down_.Acquire_Load()) {
     status = Status::IOError("Deleting DB during compaction");
+
+    // cleanup Riak modification that adds extra reference
+    //  to overlap levels files.
+    if (compact->compaction->level() < config::kNumOverlapLevels)
+    {
+        for (size_t i = 0; i < compact->outputs.size(); i++) {
+            const CompactionState::Output& out = compact->outputs[i];
+            versions_->GetTableCache()->Evict(out.number, true);
+        }   // for
+    }   // if
   }
   if (status.ok() && compact->builder != NULL) {
     status = FinishCompactionOutputFile(compact, input);

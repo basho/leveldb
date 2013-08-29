@@ -111,6 +111,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
 
   Cache::Handle* handle = NULL;
   Status s = FindTable(file_number, file_size, level, &handle, options.IsCompaction());
+
   if (!s.ok()) {
     return NewErrorIterator(s);
   }
@@ -133,6 +134,7 @@ Status TableCache::Get(const ReadOptions& options,
                        bool (*saver)(void*, const Slice&, const Slice&)) {
   Cache::Handle* handle = NULL;
   Status s = FindTable(file_number, file_size, level, &handle);
+
   if (s.ok()) {
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
     s = t->InternalGet(options, k, arg, saver);
@@ -158,8 +160,8 @@ void TableCache::Evict(uint64_t file_number, bool is_overlapped) {
       //  evicted
       if (NULL!=handle)
       {
-          cache_->Release(handle);
-          cache_->Release(handle);
+          cache_->Release(handle);  // release for Lookup() call just made
+          cache_->Release(handle);  // release for extra reference
       }   // if
   }   // if
 
