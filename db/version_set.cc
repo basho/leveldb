@@ -821,17 +821,6 @@ VersionSet::~VersionSet() {
   // must remove second ref counter that keeps overlapped files locked
   //  table cache
 
-#if 0
-  for (int level = 0; level < config::kNumLevels; level++) {
-    if (gLevelTraits[level].m_OverlappedFiles)
-    {
-        for (size_t i = 0; i < current_->NumFiles(level); i++) {
-            FileMetaData* f = current_->files_[level][i];
-            table_cache_->Evict(f->number, true);
-        }   // for
-    }   // if
-  } // for
-#endif
   current_->Unref();
   assert(dummy_versions_.next_ == &dummy_versions_);  // List must be empty
   delete descriptor_log_;

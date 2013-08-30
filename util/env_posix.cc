@@ -747,8 +747,8 @@ class PosixEnv : public Env {
   volatile int bg_active_; // count of threads actually working compaction
   int64_t clock_res_;
 
-  bool bgthread_running_;  // flag to all threads when time to stop
-  volatile int bgthread_count_; // number of active threads
+  volatile bool bgthread_running_; // flag to all threads when time to stop
+  volatile int bgthread_count_;    // number of active threads
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); int priority;};
