@@ -100,11 +100,11 @@ Version::~Version() {
       assert(f->refs > 0);
       f->refs--;
 
-      // clear Riak's double reference of overlapped files
-      if (vset_->IsLevelOverlapped(level))
+      if (f->refs <= 0) {
+        // clear Riak's double reference of overlapped files
+        if (vset_->IsLevelOverlapped(level))
           vset_->GetTableCache()->Evict(f->number, true);
 
-      if (f->refs <= 0) {
         delete f;
       }
     }
@@ -821,6 +821,7 @@ VersionSet::~VersionSet() {
   // must remove second ref counter that keeps overlapped files locked
   //  table cache
 
+#if 0
   for (int level = 0; level < config::kNumLevels; level++) {
     if (gLevelTraits[level].m_OverlappedFiles)
     {
@@ -830,7 +831,7 @@ VersionSet::~VersionSet() {
         }   // for
     }   // if
   } // for
-
+#endif
   current_->Unref();
   assert(dummy_versions_.next_ == &dummy_versions_);  // List must be empty
   delete descriptor_log_;
