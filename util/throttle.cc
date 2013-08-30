@@ -20,6 +20,8 @@
 //
 // -------------------------------------------------------------------
 
+#include <sys/time.h>
+
 #include "leveldb/perf_count.h"
 #include "leveldb/env.h"
 
@@ -90,7 +92,14 @@ ThrottleThread(
         pthread_mutex_lock(&gThrottleMutex);
 
         // sleep 1 minute
+#if _POSIX_TIMERS >= 200801L
         clock_gettime(CLOCK_REALTIME, &wait_time);
+#else
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        wait_time.tv_sec=tv.tv_sec;
+        wait_time.tv_nsec=tv.tv_usec*1000;
+#endif
         wait_time.tv_sec+=THROTTLE_SECONDS;
         pthread_cond_timedwait(&gThrottleCond, &gThrottleMutex,
                                &wait_time);
