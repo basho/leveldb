@@ -1026,32 +1026,29 @@ PosixEnv::InsertQueue2(
 void PosixEnv::BGThread()
 {
     BGQueue * queue_ptr;
-    bool must_finish;
 
     // avoid race condition of whether or not all 4 thread creations
     //  have completed AND set bgthreadX_ values
     PthreadCall("lock", pthread_mutex_lock(&mu_));
 
     ++bgthread_count_;
-    must_finish=false;
 
     // pick source of thread's work
     if (bgthread4_==pthread_self())
         queue_ptr=&queue4_;
     else if (bgthread3_==pthread_self())
-    {
-        // this is background close/write ... must process
-        //  entire queue before exit
-        must_finish=true;
         queue_ptr=&queue3_;
-    }   // else if
     else if (bgthread2_==pthread_self())
         queue_ptr=&queue2_;
     else
         queue_ptr=&queue_;
     PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
-    while (bgthread_running_ || (must_finish && 0!=queue_ptr->size()))
+    // queue test handles fact that database close does not
+    //  know to wait upon thread 3's background disk writes and closes
+    //  and handles where database close is on one thread and
+    //  leveldb shutdown is racing on another for the other queues
+    while (bgthread_running_ || 0!=queue_ptr->size())
     {
         // Wait until there is an item that is ready to run
         PthreadCall("lock", pthread_mutex_lock(&mu_));
