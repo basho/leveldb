@@ -80,10 +80,12 @@ static void ThreadBody(void* arg) {
 
 TEST(EnvPosixTest, StartThread) {
   State state;
+  pthread_t pid;
   state.val = 0;
   state.num_running = 3;
   for (int i = 0; i < 3; i++) {
-    env_->StartThread(&ThreadBody, &state);
+    pid=env_->StartThread(&ThreadBody, &state);
+    pthread_detach(pid);
   }
   while (true) {
     state.mu.Lock();
