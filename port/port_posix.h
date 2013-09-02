@@ -103,7 +103,7 @@ class Mutex {
 };
 
 
-#if defined(pthread_spinlock_t)
+#if defined(_POSIX_SPIN_LOCKS)
 class Spin {
  public:
   Spin();
