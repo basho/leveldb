@@ -34,6 +34,21 @@ class MutexLock {
 };
 
 
+class SpinLock {
+ public:
+  explicit SpinLock(port::Spin *sp) : sp_(sp) {
+    this->sp_->Lock();
+  }
+  ~SpinLock() { this->sp_->Unlock(); }
+
+ private:
+  port::Spin *const sp_;
+  // No copying allowed
+  SpinLock(const SpinLock&);
+  void operator=(const SpinLock&);
+};
+
+
 class ReadLock {
  public:
   explicit ReadLock(port::RWMutex *mu) : mu_(mu) {

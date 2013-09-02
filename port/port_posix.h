@@ -102,6 +102,30 @@ class Mutex {
   void operator=(const Mutex&);
 };
 
+
+#if defined(_POSIX_SPIN_LOCKS) && 0<_POSIX_SPIN_LOCKS
+class Spin {
+ public:
+  Spin();
+  ~Spin();
+
+  void Lock();
+  void Unlock();
+  void AssertHeld() { }
+
+ private:
+  friend class CondVar;
+  pthread_spinlock_t sp_;
+
+  // No copying
+  Spin(const Spin&);
+  void operator=(const Spin&);
+};
+#else
+typedef Mutex Spin;
+#endif
+
+
 class CondVar {
  public:
   explicit CondVar(Mutex* mu);
