@@ -100,7 +100,7 @@ struct Options {
   // one open file per 2MB of working set).
   //
   // Default: 1000
-  int max_open_files;
+//  int max_open_files;
 
   // Control over blocks (user data is stored in a set of blocks, and
   // a block is the unit of reading from disk).
@@ -108,7 +108,7 @@ struct Options {
   // If non-NULL, use the specified cache for blocks.
   // If NULL, leveldb will automatically create and use an 8MB internal cache.
   // Default: NULL
-  Cache* block_cache;
+//  Cache* block_cache;
 
   // Approximate size of user data packed per block.  Note that the
   // block size specified here corresponds to uncompressed data.  The
@@ -151,6 +151,15 @@ struct Options {
   // Riak specific flag used to indicate when database is open
   // as part of a Repair operation.  Default is false
   bool is_repair;
+
+  // Riak specific flag to mark Riak internal database versus
+  //  user database.  (User database gets larger cache resources.)
+  bool is_internal_db;
+
+  // Riak replacement for max_open_files and block_cache.  This is
+  //  TOTAL memory to be used by leveldb across ALL DATABASES.
+  //  Most recent value seen upon database open, wins.  Zero for default.
+  uint64_t total_leveldb_mem;
 
   // Create an Options object with default values for all fields.
   Options();

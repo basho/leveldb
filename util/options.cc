@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "leveldb/options.h"
 
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "util/crc32c.h"
+
 
 namespace leveldb {
 
@@ -26,7 +30,9 @@ Options::Options()
       block_restart_interval(16),
       compression(kSnappyCompression),
       filter_policy(NULL),
-      is_repair(false)
+      is_repair(false),
+      is_internal_db(false),
+      total_leveldb_mem(0)
 {
 }
 
@@ -43,13 +49,15 @@ Options::Dump(
     Log(log,"                   Options.env: %p", env);
     Log(log,"              Options.info_log: %p", info_log);
     Log(log,"     Options.write_buffer_size: %zd", write_buffer_size);
-    Log(log,"        Options.max_open_files: %d", max_open_files);
-    Log(log,"           Options.block_cache: %p", block_cache);
+//    Log(log,"        Options.max_open_files: %d", max_open_files);
+//    Log(log,"           Options.block_cache: %p", block_cache);
     Log(log,"            Options.block_size: %zd", block_size);
     Log(log,"Options.block_restart_interval: %d", block_restart_interval);
     Log(log,"           Options.compression: %d", compression);
     Log(log,"         Options.filter_policy: %s", filter_policy == NULL ? "NULL" : filter_policy->Name());
     Log(log,"             Options.is_repair: %s", is_repair ? "true" : "false");
+    Log(log,"        Options.is_internal_db: %s", is_internal_db ? "true" : "false");
+    Log(log,"     Options.total_leveldb_mem: %" PRIu64, total_leveldb_mem);
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
 }   // Options::Dump
 
