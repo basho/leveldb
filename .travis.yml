@@ -1,6 +1,6 @@
 language: cpp
 
-script: make check
+script: ulimit -n 2048 && make check
 
 compiler: gcc
 
