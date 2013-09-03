@@ -158,7 +158,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
       manual_compaction_(NULL),
-      level0_good(true)
+      level0_good(true),
+      throttle_end(0)
 {
   mem_->Ref();
   has_imm_.Release_Store(NULL);
@@ -1180,8 +1181,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       size_t entry_count;
       entry_count=compact->num_entries + compact->builder->NumEntries();
 
-      // imm_micros intentional NOT removed from time calculation,
-      //  gives better measure of overall activity / write overhead
+      // every so often see if priority needs to change
       if (1==(entry_count % 1000) && 1000<entry_count)
       {
           // test for priority change
@@ -1554,18 +1554,59 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
   }  // release  MutexLock l(&mutex_)
 
+
   // throttle on exit to reduce possible reordering
   if (0!=throttle)
   {
-      int count;
+      uint64_t now, remaining_wait, new_end, batch_wait;
+      int batch_count;
+
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
+      // server may have been busy since previous write, 
+      //  use only the remaining time as throttle
+      now=env_->NowMicros();
+
+      if (now < throttle_end)
+      {
+
+          remaining_wait=throttle_end - now;
+          env_->SleepForMicroseconds(remaining_wait);
+          new_end=now+remaining_wait+throttle;
+
+          gPerfCounters->Add(ePerfDebug0, remaining_wait);
+      }   // if
+      else
+      {
+          remaining_wait=0;
+          new_end=now + throttle;
+      }   // else
+
       // throttle is per key write, how many in batch?
-      count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
-      env_->SleepForMicroseconds(throttle * count);
-      gPerfCounters->Add(ePerfDebug0, throttle * count);
+      batch_count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      if (0 < batch_count)  // unclear if Count() could return zero
+          --batch_count;
+      batch_wait=throttle * batch_count;
+
+      // only wait on batch if extends beyond potential wait period
+      if (now + remaining_wait < throttle_end + batch_wait)
+      {
+          remaining_wait=throttle_end + batch_wait - (now + remaining_wait);
+          env_->SleepForMicroseconds(remaining_wait);
+          new_end +=remaining_wait;
+
+          gPerfCounters->Add(ePerfDebug0, remaining_wait);
+      }   // if
+
+      throttle_end=new_end;
   }   // if
+
+  // throttle not needed, kill off old wait time
+  else if (0!=throttle_end)
+  {
+      throttle_end=0;
+  }   // else if
 
   return status;
 }
