@@ -745,10 +745,10 @@ class PosixEnv : public Env {
   bool started_bgthread_;
   volatile int bg_backlog_;// count of items on 3 compaction queues
   volatile int bg_active_; // count of threads actually working compaction
-  int64_t clock_res_;
-
   volatile bool bgthread_running_; // flag to all threads when time to stop
   volatile int bgthread_count_;    // number of active threads
+
+  int64_t clock_res_;
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); int priority;};
@@ -1090,11 +1090,11 @@ void PosixEnv::BGThread()
         }   // if
         else
         {
-            --bgthread_count_;
-
             PthreadCall("unlock", pthread_mutex_unlock(&mu_));
         }   // else
     }   // while
+
+    --bgthread_count_;
 }
 
 namespace {
