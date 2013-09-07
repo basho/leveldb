@@ -48,6 +48,10 @@ Status Table::Open(const Options& options,
   }
 
   char footer_space[Footer::kEncodedLength];
+  // stop valgrind uninitialize warning
+  // let footer.DecodeFrom returned status do the talking for read of bad info
+  memset(footer_space, 0, Footer::kEncodedLength);
+
   Slice footer_input;
   Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
                         &footer_input, footer_space);

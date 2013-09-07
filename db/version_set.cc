@@ -99,7 +99,12 @@ Version::~Version() {
       FileMetaData* f = files_[level][i];
       assert(f->refs > 0);
       f->refs--;
+
       if (f->refs <= 0) {
+        // clear Riak's double reference of overlapped files
+        if (vset_->IsLevelOverlapped(level))
+          vset_->GetTableCache()->Evict(f->number, true);
+
         delete f;
       }
     }
@@ -815,16 +820,6 @@ VersionSet::VersionSet(const std::string& dbname,
 VersionSet::~VersionSet() {
   // must remove second ref counter that keeps overlapped files locked
   //  table cache
-
-  for (int level = 0; level < config::kNumLevels; level++) {
-    if (gLevelTraits[level].m_OverlappedFiles)
-    {
-        for (size_t i = 0; i < current_->NumFiles(level); i++) {
-            FileMetaData* f = current_->files_[level][i];
-            table_cache_->Evict(f->number, true);
-        }   // for
-    }   // if
-  } // for
 
   current_->Unref();
   assert(dummy_versions_.next_ == &dummy_versions_);  // List must be empty

@@ -55,6 +55,8 @@ int RunAllTests() {
   }
   fprintf(stderr, "==== PASSED %d tests\n", num);
 
+  // cleanup memory for valgrind
+  leveldb::Env::Shutdown();
   delete tests;
 
   return 0;

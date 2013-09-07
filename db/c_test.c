@@ -377,5 +377,7 @@ int main(int argc, char** argv) {
   leveldb_env_destroy(env);
 
   fprintf(stderr, "PASS\n");
+
+  leveldb_env_shutdown();
   return 0;
 }

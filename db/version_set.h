@@ -274,6 +274,8 @@ class VersionSet {
   };
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
 
+  TableCache* GetTableCache() {return(table_cache_);};
+
  private:
   class Builder;
 
