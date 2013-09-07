@@ -43,7 +43,7 @@ public:
     };
 
 
-    FlexFlavor_e GetCacheFlavor(bool IsInternal, bool IsFileCache) const;
+    static FlexFlavor_e GetCacheFlavor(bool IsInternal, bool IsFileCache) const;
     
     uint64_t GetCacheCapacity(FlexFlavor_e Flavor);
 

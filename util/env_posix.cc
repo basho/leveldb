@@ -1390,6 +1390,7 @@ void Env::Shutdown()
     }   // if
 
     ComparatorShutdown();
+    DBListShutdown();
 
 }   // Env::Shutdown
 

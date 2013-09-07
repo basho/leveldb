@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include "leveldb/slice.h"
+#include "util/flexcache.h"
 
 namespace leveldb {
 
@@ -41,7 +42,7 @@ extern Cache2* NewLRUCache22(size_t capacity);
 
 class Cache2 {
  public:
-  Cache2() { }
+  Cache2(FlexCache::FlexFlavor_e Flavor) : flavor_(Flavor) { }
 
   // Destroys all existing entries by calling the "deleter"
   // function that was passed to the constructor.

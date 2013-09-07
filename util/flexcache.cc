@@ -116,7 +116,9 @@ void
 FlexCache::SetTotalMemory(
     uint64_t Total)    //!< new memory allocated to all caches
 {
-    if (Total!=m_TotalMemory)
+    // only review current allocation if new value is different 
+    //  and not zero default
+    if (0!=Total && Total!=m_TotalMemory)
     {
     }   // if
 
