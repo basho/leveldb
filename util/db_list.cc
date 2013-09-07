@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------
 //
-// flexcache.cc
+// db_list.cc
 //
 // Copyright (c) 2011-2013 Basho Technologies, Inc. All Rights Reserved.
 //
@@ -20,11 +20,39 @@
 //
 // -------------------------------------------------------------------
 
-#include "leveldb/perf_count.h"
-#include "leveldb/env.h"
-
-#include "util/flexcache.h"
+#include "util/db_list.h"
 
 namespace leveldb {
+
+// using singleton model from comparator.cc
+static port::OnceType once = LEVELDB_ONCE_INIT;
+static DBListImpl * dblist=NULL;
+
+static void InitModule()
+{
+    dblist=new DbListImpl;
+
+}   // InitModule
+
+
+DBListImpl * DBList()
+{
+    port::InitOnce(&once, InitModule);
+    return(dblist);
+
+}   // DBList
+
+
+void
+DBListShutdown()
+{
+    // retrieve point to handle any initialization/shutdown races
+    DBList();
+    delete dblist;
+
+    return;
+
+}   // DBListShutdown
+
 
 }  // namespace leveldb

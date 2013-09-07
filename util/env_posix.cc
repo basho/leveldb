@@ -27,6 +27,7 @@
 #include "leveldb/slice.h"
 #include "port/port.h"
 #include "util/crc32c.h"
+#include "util/db_list.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"

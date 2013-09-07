@@ -33,12 +33,33 @@ namespace leveldb
 
 class FlexCache
 {
+public:
+    enum FlexFlavor_e
+    {
+        eInternalFile=1,    //!< internal db, file cache
+        eInternalBlock=2,   //!< internal db, block cache
+        eUserFile=3,        //!< user database, file cache
+        eUserBlock=4        //!< user database, block cache
+    };
 
 
-   Cache2 * m_FileCache;
-   Cache2 * m_BlockCache;
+    FlexFlavor_e GetCacheFlavor(bool IsInternal, bool IsFileCache) const;
+    
+    uint64_t GetCacheCapacity(FlexFlavor_e Flavor);
+
+    void SetTotalMemory(uint64_t Total);
+
+    uint64_t GetTotalMemory() const {return(m_TotalMemory);};
+
+
+protected:
+
+    uint64_t m_TotalMemory; //!< complete memory assigned to all FlexCache clients
+
 
 };  // class FlexCache
 
+
+extern FlexCache gFlexCache;
 
 }  // namespace leveldb

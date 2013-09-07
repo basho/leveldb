@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------
 //
-// flexcache.h
+// db_list.h
 //
 // Copyright (c) 2011-2013 Basho Technologies, Inc. All Rights Reserved.
 //
@@ -31,7 +31,7 @@ namespace leveldb
  * DBList:  class to provide management access to all 
  *  open databases (Riak vnodes)
  */
-class DBList
+class DBListImpl
 {
 protected:
    typedef std::set<DBImpl *> db_set_t;
@@ -48,8 +48,8 @@ protected:
    db_set_t m_InternalDBs; //!< Riak internal dbs
 
 public:
-   DBList();
-   virtual ~DBList();
+   DBListImpl();
+   virtual ~DBListImpl();
 
    AddDB(DBImpl *, bool is_internal);
    ReleaseDB(DBImpl *, bool is_internal);
@@ -59,6 +59,14 @@ public:
 protected:
 
 
-};  // class DBList
+};  // class DBListImpl
+
+
+// Universal access to dblist ... initialization order independent
+DBListImpl * DBList();
+
+// cleanup memory, mostly for valgrind
+void DBListShutdown();
+
 
 }  // namespace leveldb
