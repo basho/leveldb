@@ -10,9 +10,9 @@
 #include <string>
 #include <stdint.h>
 #include "db/dbformat.h"
-#include "leveldb/cache.h"
 #include "leveldb/table.h"
 #include "port/port.h"
+#include "util/cache2.h"
 
 namespace leveldb {
 
@@ -53,13 +53,13 @@ class TableCache {
   Status TEST_FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle** handle)
   {return( FindTable(file_number, file_size, level, handle));};
 
-  Cache* TEST_GetInternalCache() {return(cache_);};
+  Cache* TEST_GetInternalCache() {return(&cache_);};
 
  private:
   Env* const env_;
   const std::string dbname_;
   const Options* options_;
-  Cache* cache_;
+  Cache2 cache_;
 
   Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
 };

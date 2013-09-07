@@ -13,6 +13,7 @@
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
+#include "util/cache2.h"
 
 namespace leveldb {
 
@@ -119,11 +120,12 @@ class DBImpl : public DB {
   const InternalFilterPolicy internal_filter_policy_;
   const Options options_;  // options_.comparator == &internal_comparator_
   bool owns_info_log_;
-  bool owns_cache_;
+//  bool owns_cache_;
   const std::string dbname_;
 
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;
+
 
   // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
   FileLock* db_lock_;
@@ -132,6 +134,7 @@ class DBImpl : public DB {
   port::Mutex mutex_;
   port::Mutex throttle_mutex_;   // used by write throttle to force sequential waits on callers
   port::AtomicPointer shutting_down_;
+  Cache2 block_cache_;           // block cache now always owned by db, not options_
   port::CondVar bg_cv_;          // Signalled when background work finishes
   MemTable* mem_;
   MemTable* imm_;                // Memtable being compacted

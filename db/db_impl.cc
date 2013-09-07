@@ -119,8 +119,8 @@ Options SanitizeOptions(const std::string& dbname,
   Options result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
-  ClipToRange(&result.max_open_files,            20,     50000);
-  ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
+//  ClipToRange(&result.max_open_files,            20,     50000);
+//  ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
   if (result.info_log == NULL) {
     // Open a log file in the same directory as the db
@@ -132,9 +132,9 @@ Options SanitizeOptions(const std::string& dbname,
       result.info_log = NULL;
     }
   }
-  if (result.block_cache == NULL) {
-    result.block_cache = NewLRUCache(8 << 20);
-  }
+//  if (result.block_cache == NULL) {
+//    result.block_cache = NewLRUCache(8 << 20);
+//  }
   return result;
 }
 
@@ -145,10 +145,11 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       options_(SanitizeOptions(
           dbname, &internal_comparator_, &internal_filter_policy_, options)),
       owns_info_log_(options_.info_log != options.info_log),
-      owns_cache_(options_.block_cache != options.block_cache),
+//      owns_cache_(options_.block_cache != options.block_cache),
       dbname_(dbname),
       db_lock_(NULL),
       shutting_down_(NULL),
+      block_cache_(FlexCache::GetCacheFlavor(options_.is_internal_db, false)),
       bg_cv_(&mutex_),
       mem_(new MemTable(internal_comparator_)),
       imm_(NULL),
@@ -161,6 +162,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       level0_good(true),
       throttle_end(0)
 {
+  DBList()->AddDB(this, options_->is_internal_db);
+
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
@@ -171,10 +174,14 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 
+  gFlexCache->SetTotalMemory(options_->total_leveldb_mem);
+
   options_.Dump(options_.info_log);
 }
 
 DBImpl::~DBImpl() {
+  DBList()->ReleaseDB(this, options_->is_internal_db);
+
   // Wait for background work to finish
   mutex_.Lock();
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
