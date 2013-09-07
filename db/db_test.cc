@@ -1672,10 +1672,12 @@ TEST(DBTest, MultiThreaded) {
 
     // Start threads
     MTThread thread[kNumThreads];
+    pthread_t tid;
     for (int id = 0; id < kNumThreads; id++) {
       thread[id].state = &mt;
       thread[id].id = id;
-      env_->StartThread(MTThreadBody, &thread[id]);
+      tid=env_->StartThread(MTThreadBody, &thread[id]);
+      pthread_detach(tid);
     }
 
     // Let them run for a while

@@ -534,6 +534,7 @@ class Benchmark {
     SharedState* shared;
     ThreadState* thread;
     void (Benchmark::*method)(ThreadState*);
+    pthread_t thread_id;
   };
 
   static void ThreadBody(void* v) {
@@ -579,7 +580,8 @@ class Benchmark {
       arg[i].shared = &shared;
       arg[i].thread = new ThreadState(i);
       arg[i].thread->shared = &shared;
-      Env::Default()->StartThread(ThreadBody, &arg[i]);
+      arg[i].thread_id=Env::Default()->StartThread(ThreadBody, &arg[i]);
+      pthread_detach(arg[i].thread_id);
     }
 
     shared.mu.Lock();
@@ -972,7 +974,13 @@ int main(int argc, char** argv) {
       FLAGS_db = default_db_path.c_str();
   }
 
-  leveldb::Benchmark benchmark;
-  benchmark.Run();
+  // benchmark class needs to destruct before Shutdown call
+  {
+      leveldb::Benchmark benchmark;
+      benchmark.Run();
+  }
+
+  leveldb::Env::Shutdown();
+
   return 0;
 }

@@ -583,4 +583,8 @@ void leveldb_env_destroy(leveldb_env_t* env) {
   delete env;
 }
 
+void leveldb_env_shutdown() {
+  Env::Shutdown();
+}
+
 }  // end extern "C"
