@@ -10,6 +10,7 @@
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
+#include "util/cache2.h"
 #include "util/crc32c.h"
 
 
@@ -32,10 +33,18 @@ Options::Options()
       filter_policy(NULL),
       is_repair(false),
       is_internal_db(false),
-      total_leveldb_mem(0)
+      total_leveldb_mem(0),
+      double_cache(NULL)
 {
 }
 
+
+// accessor to private object data
+Cache *
+Options::double_cache()
+{
+    return(double_cache->GetBlockCache());
+}   // Options::double_cache
 
 void
 Options::Dump(

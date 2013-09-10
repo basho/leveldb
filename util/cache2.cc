@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "util/atomic.h"
 #include "util/cache2.h"
 #include "port/port.h"
 #include "util/hash.h"
@@ -19,21 +20,18 @@
 
 namespace leveldb {
 
-Cache2::~Cache2() {
-}
-
 namespace {
 
 // LRU cache implementation
 
 // An entry is a variable length heap-allocated structure.  Entries
 // are kept in a circular doubly linked list ordered by access time.
-struct LRUHandle {
+struct LRUHandle2 {
   void* value;
   void (*deleter)(const Slice&, void* value);
-  LRUHandle* next_hash;
-  LRUHandle* next;
-  LRUHandle* prev;
+  LRUHandle2* next_hash;
+  LRUHandle2* next;
+  LRUHandle2* prev;
   size_t charge;      // TODO(opt): Only allow uint32_t?
   size_t key_length;
   uint32_t refs;
@@ -61,13 +59,13 @@ class HandleTable {
   HandleTable() : length_(0), elems_(0), list_(NULL) { Resize(); }
   ~HandleTable() { delete[] list_; }
 
-  LRUHandle* Lookup(const Slice& key, uint32_t hash) {
+  LRUHandle2* Lookup(const Slice& key, uint32_t hash) {
     return *FindPointer(key, hash);
   }
 
-  LRUHandle* Insert(LRUHandle* h) {
-    LRUHandle** ptr = FindPointer(h->key(), h->hash);
-    LRUHandle* old = *ptr;
+  LRUHandle2* Insert(LRUHandle2* h) {
+    LRUHandle2** ptr = FindPointer(h->key(), h->hash);
+    LRUHandle2* old = *ptr;
     h->next_hash = (old == NULL ? NULL : old->next_hash);
     *ptr = h;
     if (old == NULL) {
@@ -81,9 +79,9 @@ class HandleTable {
     return old;
   }
 
-  LRUHandle* Remove(const Slice& key, uint32_t hash) {
-    LRUHandle** ptr = FindPointer(key, hash);
-    LRUHandle* result = *ptr;
+  LRUHandle2* Remove(const Slice& key, uint32_t hash) {
+    LRUHandle2** ptr = FindPointer(key, hash);
+    LRUHandle2* result = *ptr;
     if (result != NULL) {
       *ptr = result->next_hash;
       --elems_;
@@ -96,13 +94,13 @@ class HandleTable {
   // a linked list of cache entries that hash into the bucket.
   uint32_t length_;
   uint32_t elems_;
-  LRUHandle** list_;
+  LRUHandle2** list_;
 
   // Return a pointer to slot that points to a cache entry that
   // matches key/hash.  If there is no such cache entry, return a
   // pointer to the trailing slot in the corresponding linked list.
-  LRUHandle** FindPointer(const Slice& key, uint32_t hash) {
-    LRUHandle** ptr = &list_[hash & (length_ - 1)];
+  LRUHandle2** FindPointer(const Slice& key, uint32_t hash) {
+    LRUHandle2** ptr = &list_[hash & (length_ - 1)];
     while (*ptr != NULL &&
            ((*ptr)->hash != hash || key != (*ptr)->key())) {
       ptr = &(*ptr)->next_hash;
@@ -115,16 +113,16 @@ class HandleTable {
     while (new_length < elems_) {
       new_length *= 2;
     }
-    LRUHandle** new_list = new LRUHandle*[new_length];
+    LRUHandle2** new_list = new LRUHandle2*[new_length];
     memset(new_list, 0, sizeof(new_list[0]) * new_length);
     uint32_t count = 0;
     for (uint32_t i = 0; i < length_; i++) {
-      LRUHandle* h = list_[i];
+      LRUHandle2* h = list_[i];
       while (h != NULL) {
-        LRUHandle* next = h->next_hash;
+        LRUHandle2* next = h->next_hash;
         /*Slice key =*/ h->key();  // eliminate unused var warning, but allow for side-effects
         uint32_t hash = h->hash;
-        LRUHandle** ptr = &new_list[hash & (new_length - 1)];
+        LRUHandle2** ptr = &new_list[hash & (new_length - 1)];
         h->next_hash = *ptr;
         *ptr = h;
         h = next;
@@ -138,8 +136,9 @@ class HandleTable {
   }
 };
 
+
 // A single shard of sharded cache.
-class LRUCache2 : public Cache2 {
+class LRUCache2 : public Cache {
  public:
   LRUCache2();
   ~LRUCache2();
@@ -151,96 +150,98 @@ class LRUCache2 : public Cache2 {
   void SetCapacity(size_t capacity) { capacity_ = capacity; }
 
   size_t GetCapacity() const {return(capacity_);};
-  size_t GetUsage() const {return(usage_);};
 
   // Cache2 methods to allow direct use for single shard
-  virtual Cache2::Handle* Insert(const Slice& key,
+  virtual Cache::Handle* Insert(const Slice& key,
                         void* value, size_t charge,
                         void (*deleter)(const Slice& key, void* value))
         {return(Insert(key, HashSlice(key), value, charge, deleter));};
 
-  virtual Cache2::Handle* Lookup(const Slice& key)
+  virtual Cache::Handle* Lookup(const Slice& key)
         {return(Lookup(key, HashSlice(key)));};
 
-  virtual void Release(Cache2::Handle* handle);
+  virtual void Release(Cache::Handle* handle);
+  virtual bool ReleaseOne();
   virtual void Erase(const Slice& key)
        {Erase(key, HashSlice(key));};
   virtual void* Value(Handle* handle) {
-    return reinterpret_cast<LRUHandle*>(handle)->value;
+    return reinterpret_cast<LRUHandle2*>(handle)->value;
   }
 
   virtual uint64_t NewId() {
-    return (++last_id_);
+      return inc_and_fetch(&last_id_);
   }
 
-  virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
+  virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle2));};
 
-  // Like Cache2 methods, but with an extra "hash" parameter.
-  Cache2::Handle* Insert(const Slice& key, uint32_t hash,
+  // Like Cache methods, but with an extra "hash" parameter.
+  Cache::Handle* Insert(const Slice& key, uint32_t hash,
                         void* value, size_t charge,
                         void (*deleter)(const Slice& key, void* value));
-  Cache2::Handle* Lookup(const Slice& key, uint32_t hash);
+  Cache::Handle* Lookup(const Slice& key, uint32_t hash);
 
   void Erase(const Slice& key, uint32_t hash);
 
-    virtual void Addref(Cache2::Handle* handle);
+  virtual void Addref(Cache::Handle* handle);
+
+  void SetParent(ShardedLRUCache2 * Parent, bool IsFileCache) 
+    {parent_=Parent; is_file_cache_=IsFileCache;};
 
  private:
-  void LRU_Remove(LRUHandle* e);
-  void LRU_Append(LRUHandle* e);
-  void Unref(LRUHandle* e);
+  void LRU_Remove(LRUHandle2* e);
+  void LRU_Append(LRUHandle2* e);
+  void Unref(LRUHandle2* e);
 
   // Initialized before use.
-  size_t capacity_;
+  class ShardedLRUCache2 * parent_;
+  bool is_file_cache_;
 
   // mutex_ protects the following state.
   port::Spin spin_;
-  size_t usage_;
   uint64_t last_id_;
 
   // Dummy head of LRU list.
   // lru.prev is newest entry, lru.next is oldest entry.
-  LRUHandle lru_;
+  LRUHandle2 lru_;
 
   HandleTable table_;
 };
 
 LRUCache2::LRUCache2()
-    : usage_(0),
-      last_id_(0) {
+  : parent_(NULL), is_file_cache_(true), last_id_(0) 
+{
   // Make empty circular linked list
   lru_.next = &lru_;
   lru_.prev = &lru_;
 }
 
 LRUCache2::~LRUCache2() {
-  for (LRUHandle* e = lru_.next; e != &lru_; ) {
-    LRUHandle* next = e->next;
+  for (LRUHandle2* e = lru_.next; e != &lru_; ) {
+    LRUHandle2* next = e->next;
 
-    // must allow for 2 refs given overlapped files
-    //  being double ref'd intentionally ... ruins this assert :-(
-    assert(e->refs == 1 || e->refs == 2);  // Error if caller has an unreleased handle
+    assert(e->refs == 1);  // Error if caller has an unreleased handle
     Unref(e);
     e = next;
   }
 }
 
-void LRUCache2::Unref(LRUHandle* e) {
+void LRUCache2::Unref(LRUHandle2* e) {
   assert(e->refs > 0);
   e->refs--;
   if (e->refs <= 0) {
-    usage_ -= e->charge;
+      sub_and_fetch(parent_->GetUsagePtr(), e->charge);
+//    usage_ -= e->charge;
     (*e->deleter)(e->key(), e->value);
     free(e);
   }
 }
 
-void LRUCache2::LRU_Remove(LRUHandle* e) {
+void LRUCache2::LRU_Remove(LRUHandle2* e) {
   e->next->prev = e->prev;
   e->prev->next = e->next;
 }
 
-void LRUCache2::LRU_Append(LRUHandle* e) {
+void LRUCache2::LRU_Append(LRUHandle2* e) {
   // Make "e" newest entry by inserting just before lru_
   e->next = &lru_;
   e->prev = lru_.prev;
@@ -248,38 +249,38 @@ void LRUCache2::LRU_Append(LRUHandle* e) {
   e->next->prev = e;
 }
 
-Cache2::Handle* LRUCache2::Lookup(const Slice& key, uint32_t hash) {
+Cache::Handle* LRUCache2::Lookup(const Slice& key, uint32_t hash) {
   SpinLock l(&spin_);
-  LRUHandle* e = table_.Lookup(key, hash);
+  LRUHandle2* e = table_.Lookup(key, hash);
   if (e != NULL) {
     e->refs++;
     LRU_Remove(e);
     LRU_Append(e);
   }
-  return reinterpret_cast<Cache2::Handle*>(e);
+  return reinterpret_cast<Cache::Handle*>(e);
 }
 
-void LRUCache2::Release(Cache2::Handle* handle) {
+void LRUCache2::Release(Cache::Handle* handle) {
   SpinLock l(&spin_);
-  Unref(reinterpret_cast<LRUHandle*>(handle));
+  Unref(reinterpret_cast<LRUHandle2*>(handle));
 }
 
-void LRUCache2::Addref(Cache2::Handle* handle) {
+void LRUCache2::Addref(Cache::Handle* handle) {
   SpinLock l(&spin_);
-  LRUHandle * e;
+  LRUHandle2 * e;
 
-  e=reinterpret_cast<LRUHandle*>(handle);
+  e=reinterpret_cast<LRUHandle2*>(handle);
   if (NULL!=e && 1 <= e->refs)
       ++e->refs;
 }
 
-Cache2::Handle* LRUCache2::Insert(
+Cache::Handle* LRUCache2::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
   SpinLock l(&spin_);
 
-  LRUHandle* e = reinterpret_cast<LRUHandle*>(
-      malloc(sizeof(LRUHandle)-1 + key.size()));
+  LRUHandle2* e = reinterpret_cast<LRUHandle2*>(
+      malloc(sizeof(LRUHandle2)-1 + key.size()));
   e->value = value;
   e->deleter = deleter;
   e->charge = charge;
@@ -288,22 +289,22 @@ Cache2::Handle* LRUCache2::Insert(
   e->refs = 2;  // One from LRUCache2, one for the returned handle
   memcpy(e->key_data, key.data(), key.size());
   LRU_Append(e);
-  usage_ += charge;
+  add_and_fetch(parent_->GetUsagePtr(), charge);
+//  usage_ += charge;
 
-  LRUHandle* old = table_.Insert(e);
+  LRUHandle2* old = table_.Insert(e);
   if (old != NULL) {
     LRU_Remove(old);
     Unref(old);
   }
 
-
   // Riak - matthewv: code added to remove old only if it was not active.
   //  Had scenarios where file cache would be largely or totally drained
   //  because an active object does NOT reduce usage_ upon delete.  So
   //  the previous while loop would basically delete everything.
-  LRUHandle * next, * cursor;
+  LRUHandle2 * next, * cursor;
 
-  for (cursor=lru_.next; usage_ > capacity_ && cursor != &lru_; cursor=next)
+  for (cursor=lru_.next; parent_->GetUsage() > parent->GetCapacity() && cursor != &lru_; cursor=next)
   {
       // take next pointer before potentially destroying cursor
       next=cursor->next;
@@ -318,26 +319,67 @@ Cache2::Handle* LRUCache2::Insert(
       }   // if
   }   // for
 
-  return reinterpret_cast<Cache2::Handle*>(e);
+  return reinterpret_cast<Cache::Handle*>(e);
 }
+
+
+bool 
+LRUCache2::ReleaseOne()
+{
+    bool ret_flag;
+    LRUHandle2 * next, * cursor;
+    SpinLock lock(&spin_);
+
+    ret_flag=false;
+
+    for (cursor=lru_.next; !ret_flag && parent_->GetUsage() > parent->GetCapacity() && cursor != &lru_; cursor=next)
+    {
+        // take next pointer before potentially destroying cursor
+        next=cursor->next;
+
+        // only delete cursor if it will actually destruct and
+        //   return value to usage_
+        if (cursor->refs <= 1)
+        {
+            LRU_Remove(cursor);
+            table_.Remove(cursor->key(), cursor->hash);
+            Unref(cursor);
+            ret_flag=true;
+        }   // if
+    }   // for
+
+    return(ret_flag);
+
+}   // LRUCache2::ReleaseOne
+
 
 void LRUCache2::Erase(const Slice& key, uint32_t hash) {
   SpinLock l(&spin_);
-  LRUHandle* e = table_.Remove(key, hash);
+  LRUHandle2* e = table_.Remove(key, hash);
   if (e != NULL) {
     LRU_Remove(e);
     Unref(e);
   }
 }
 
+}  // end anonymous namespace
+
+
 static const int kNumShardBits = 4;
 static const int kNumShards = 1 << kNumShardBits;
 
-class ShardedLRUCache2 : public Cache2 {
- private:
+class ShardedLRUCache2 : public Cache {
+public:
+  volatile uint64_t usage_;        // cache2's usage is across all shards,
+                                   //  simplifies FlexCache management
+
+private:
   LRUCache2 shard_[kNumShards];
   port::Spin id_spin_;
-  uint64_t last_id_;
+  DoubleCache & parent_;
+  bool is_file_cache_;
+  size_t next_shard_;
+  volatile uint64_t last_id_;
 
   static inline uint32_t HashSlice(const Slice& s) {
     return Hash(s.data(), s.size(), 0);
@@ -348,14 +390,19 @@ class ShardedLRUCache2 : public Cache2 {
   }
 
  public:
-  explicit ShardedLRUCache2(size_t capacity)
-      : last_id_(0) {
-    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
-    for (int s = 0; s < kNumShards; s++) {
-      shard_[s].SetCapacity(per_shard);
+  explicit ShardedLRUCache2(class DoubleCache & Parent, bool IsFileCache)
+      : usage_(0), parent_(Parent), is_file_cache_(IsFileCache), next_shard_, last_id_(0) {
+    for (int s = 0; s < kNumShards; s++) 
+    {
+        shard_[s].SetParent(Parent, IsFileCache);
     }
+
   }
   virtual ~ShardedLRUCache2() { }
+  volatile uint64_t GetUsage() const {return(usage_);};
+  volatile uint64_t * GetUsagePtr() const {return(&usage_);};
+
+
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) {
     const uint32_t hash = HashSlice(key);
@@ -381,13 +428,97 @@ class ShardedLRUCache2 : public Cache2 {
     return reinterpret_cast<LRUHandle*>(handle)->value;
   }
   virtual uint64_t NewId() {
-    SpinLock l(&id_spin_);
-    return ++(last_id_);
+      return inc_and_fetch(&last_id_);
   }
   virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
-};
 
-}  // end anonymous namespace
+  // reduce usage of all shards to fit within current capacity limit
+  void Resize()
+  {
+      size_t end_shard;
+      bool one_deleted;
 
+      SpinLock l(&id_spin_);
+      end_shard=next_shard_;
+      do
+      {
+          one_deleted=false;
+
+          if (parent_->GetCapacity(is_file_cache_) < usage_)
+          {
+              // round robin delete ... later, could delete from most full or such
+              //   but keep simple since using spin lock
+              do
+              {
+                  one_deleted=shard_[next_shard_].ReleaseOne();
+                  next_shard_=(next_shard_ +1) % kNumShards;
+              } while(end_shard!=next_shard_ && !one_deleted);
+          }   // if
+      } while((parent_->GetCapacity(is_file_cache_) < usage_) && one_deleted);
+
+      return;
+
+  } // ShardedLRUCache2::Resize
+
+};  //ShardedLRUCache2
+
+
+/**
+ * Initialize cache pair based upon current conditions
+ */
+DoubleCache::DoubleCache(
+    bool IsInternalDB)
+    : m_IsInternalDB(IsInternalDB)
+{
+    m_FileCache=new SharededLRUCache2(this, true);
+    m_BlockCache=new SharededLRUCache2(this, false);
+
+    m_TotalAllocation=gFlexCache.GetDBCacheCapacity(IsInternalDB);
+
+}   // DoubleCache::DoubleCache
+
+
+/**
+ * Resize each of the caches based upon new global conditions
+ */
+void
+DoubleCache::ResizeCaches()
+{
+    // worst case is size reduction, take from block cache first
+    m_BlockCache->Resize();
+    m_FileCache->Resize();
+
+    return;
+
+}   // DoubleCache::ResizeCaches()
+
+
+/**
+ * Calculate limit to file or block cache based upon global conditions
+ */
+size_t
+DoubleCache::GetCapacity(
+    bool IsFileCache)
+{
+    size_t file_size, block_size, ret_val, spare;
+
+    ret_val=0;
+
+    // got to be a more efficient implementation
+    block_size=m_BlockCache->TotalUsage();
+    file_size=m_FileCache->TotalUsage();
+
+    if (block_size+file_size < m_TotalAllocation)
+        spare=m_TotalAllocation - (block_size+file_size);
+    else 
+        spare=0;
+
+    if (IsFileCache)
+    {
+        // rob from block cache if needed
+        if (0==spare)
+
+    
+}   // DoubleCache::GetCapacity
 
 }  // namespace leveldb

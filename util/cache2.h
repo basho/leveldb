@@ -29,90 +29,41 @@
 
 namespace leveldb {
 
-class Cache2;
+class ShardedLRUCache2;
 
-// Create a new cache with a fixed size capacity.  This implementation
-// of Cache2 uses a least-recently-used eviction policy.
-extern Cache2* NewLRUCache2(size_t capacity);
+/**
+ * DoubleCache holds the file cache and the block cache to easy
+ *  interactive sizing
+ */
 
-// Riak customization - just like NewLRUCache2 except the underlying
-//  structure is NOT sharded.  Better for file cache.
-extern Cache2* NewLRUCache22(size_t capacity);
+class DoubleCache
+{
+public:
+    explicit DoubleCache(bool IsInternalDb);
+    virtual ~DoubleCache();
 
+    Cache * GetFileCache() {return((Cache *)m_FileCache);};
+    Cache * GetBlockCache() {return((Cache *)m_BlockCache);};
 
-class Cache2 {
- public:
-  Cache2(FlexCache::FlexFlavor_e Flavor) : flavor_(Flavor) { }
+    void ResizeCaches();
+    size_t GetCapacity(bool IsFileCache);
 
-  // Destroys all existing entries by calling the "deleter"
-  // function that was passed to the constructor.
-  virtual ~Cache2();
+protected:
+    ShardedLRUCache2 * m_FileCache;   //!< file cache used by db/tablecache.cc
+    ShardedLRUCache2 * m_BlockCache;  //!< used by table/table.cc
 
-  // Opaque handle to an entry stored in the cache.
-  struct Handle { };
+    size_t m_TotalAllocation;
+    bool m_IsInternalDB;  //!< internal db gets smaller allocation from FlexCache
 
-  // Insert a mapping from key->value into the cache and assign it
-  // the specified charge against the total cache capacity.
-  //
-  // Returns a handle that corresponds to the mapping.  The caller
-  // must call this->Release(handle) when the returned mapping is no
-  // longer needed.
-  //
-  // When the inserted entry is no longer needed, the key and
-  // value will be passed to "deleter".
-  virtual Handle* Insert(const Slice& key, void* value, size_t charge,
-                         void (*deleter)(const Slice& key, void* value)) = 0;
+private:
+    DoubleCache();                       //!< no default constructor
+    DoubleCache(const DoubleCache &);    //!< no copy constructor
+    void operator=(const DoubleCache &); //!< no assignment
 
-  // If the cache has no mapping for "key", returns NULL.
-  //
-  // Else return a handle that corresponds to the mapping.  The caller
-  // must call this->Release(handle) when the returned mapping is no
-  // longer needed.
-  virtual Handle* Lookup(const Slice& key) = 0;
-
-  // Release a mapping returned by a previous Lookup().
-  // REQUIRES: handle must not have been released yet.
-  // REQUIRES: handle must have been returned by a method on *this.
-  virtual void Release(Handle* handle) = 0;
-
-  // Return the value encapsulated in a handle returned by a
-  // successful Lookup().
-  // REQUIRES: handle must not have been released yet.
-  // REQUIRES: handle must have been returned by a method on *this.
-  virtual void* Value(Handle* handle) = 0;
-
-  // If the cache contains entry for key, erase it.  Note that the
-  // underlying entry will be kept around until all existing handles
-  // to it have been released.
-  virtual void Erase(const Slice& key) = 0;
-
-  // Return a new numeric id.  May be used by multiple clients who are
-  // sharing the same cache to partition the key space.  Typically the
-  // client will allocate a new id at startup and prepend the id to
-  // its cache keys.
-  virtual uint64_t NewId() = 0;
-
-  // Return size, if any, of per entry overhead for item placed in cache.
-  // Allows more accurate tracking of "charge" against each cache item.
-  virtual size_t EntryOverheadSize() {return(0);};
-
-  // Riak specific:  Add a reference to cache object to help hold it
-  //  in memory
-  virtual void Addref(Handle* e) = 0;
+};  // class DoubleCache
 
 
- private:
-  void LRU_Remove(Handle* e);
-  void LRU_Append(Handle* e);
-  void Unref(Handle* e);
 
-  struct Rep;
-  Rep* rep_;
-
-  // No copying allowed
-  Cache2(const Cache2&);
-  void operator=(const Cache2&);
-};
 
 }  // namespace leveldb
 

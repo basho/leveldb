@@ -164,7 +164,16 @@ struct Options {
   // Create an Options object with default values for all fields.
   Options();
 
+  // accessor to new, dynamic block_cache
+  Cache * block_cache();
+
   void Dump(Logger * log) const;
+
+private:
+  // Riak specific:  block_cache is now part of DoubleCache.  Do NOT want
+  //  user routines modifying ... hence "private"
+  // Default: <no concern to user>
+  class DoubleCache * double_cache;
 
 };
 

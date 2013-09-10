@@ -134,7 +134,7 @@ class DBImpl : public DB {
   port::Mutex mutex_;
   port::Mutex throttle_mutex_;   // used by write throttle to force sequential waits on callers
   port::AtomicPointer shutting_down_;
-  Cache2 block_cache_;           // block cache now always owned by db, not options_
+
   port::CondVar bg_cv_;          // Signalled when background work finishes
   MemTable* mem_;
   MemTable* imm_;                // Memtable being compacted

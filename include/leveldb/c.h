@@ -197,10 +197,11 @@ extern void leveldb_options_set_verify_compactions(
 extern void leveldb_options_set_env(leveldb_options_t*, leveldb_env_t*);
 extern void leveldb_options_set_info_log(leveldb_options_t*, leveldb_logger_t*);
 extern void leveldb_options_set_write_buffer_size(leveldb_options_t*, size_t);
-extern void leveldb_options_set_max_open_files(leveldb_options_t*, int);
-extern void leveldb_options_set_cache(leveldb_options_t*, leveldb_cache_t*);
+//extern void leveldb_options_set_max_open_files(leveldb_options_t*, int);
+//extern void leveldb_options_set_cache(leveldb_options_t*, leveldb_cache_t*);
 extern void leveldb_options_set_block_size(leveldb_options_t*, size_t);
 extern void leveldb_options_set_block_restart_interval(leveldb_options_t*, int);
+extern void leveldb_options_set_total_leveldb_mem(leveldb_options_t*, size_t);
 
 enum {
   leveldb_no_compression = 0,

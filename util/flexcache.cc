@@ -103,6 +103,9 @@ FlexCache::GetCacheCapacity(
 
     ret_val=Flavor*0;  // dummy line for now
 
+
+/// need current size of file and block cache from db.  How to get db?
+
     return(ret_val);
 
 }   // FlexCache::GetCacheCapacity
@@ -120,6 +123,9 @@ FlexCache::SetTotalMemory(
     //  and not zero default
     if (0!=Total && Total!=m_TotalMemory)
     {
+        m_TotalMemory=Total;
+
+        // ask each cache within each db to resize
     }   // if
 
     return;

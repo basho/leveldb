@@ -132,6 +132,7 @@ Options SanitizeOptions(const std::string& dbname,
       result.info_log = NULL;
     }
   }
+
 //  if (result.block_cache == NULL) {
 //    result.block_cache = NewLRUCache(8 << 20);
 //  }
@@ -169,7 +170,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
   const int table_cache_size = options_.max_open_files - 10;
-  table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
+  table_cache_ = new TableCache(dbname_, &options_);
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
@@ -177,6 +178,11 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   gFlexCache->SetTotalMemory(options_->total_leveldb_mem);
 
   options_.Dump(options_.info_log);
+  Log(options_.info_log,"               File cache size: %" PRIu64, 
+      gFlexCache::GetCacheCapacity(FlexCache::GetCacheFlavor(options.is_internal_db, true));
+  Log(options_.info_log,"              Block cache size: %" PRIu64, 
+      gFlexCache::GetCacheCapacity(FlexCache::GetCacheFlavor(options.is_internal_db, false));
+
 }
 
 DBImpl::~DBImpl() {

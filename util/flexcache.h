@@ -34,18 +34,7 @@ namespace leveldb
 class FlexCache
 {
 public:
-    enum FlexFlavor_e
-    {
-        eInternalFile=1,    //!< internal db, file cache
-        eInternalBlock=2,   //!< internal db, block cache
-        eUserFile=3,        //!< user database, file cache
-        eUserBlock=4        //!< user database, block cache
-    };
-
-
-    static FlexFlavor_e GetCacheFlavor(bool IsInternal, bool IsFileCache) const;
-    
-    uint64_t GetCacheCapacity(FlexFlavor_e Flavor);
+    uint64_t GetDBCacheCapacity(bool IsInternalDB);
 
     void SetTotalMemory(uint64_t Total);
 
