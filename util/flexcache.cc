@@ -61,54 +61,23 @@ FlexCache::FlexCache()
 
 
 /**
- * Simplify two cache attributes into single 'flavor'
- */
-FlexFlavor_e
-FlexCache::GetCacheFlavor(
-    bool IsInternal,     //!< True if internal DB like AAE, false if normal riak vnode
-    bool IsFileCache)    //!< True if cache for file cache, false if for block cache
-    const
-{
-    FlexFlavor_e ret_val;
-
-    if (IsInternal)
-    {
-        if (IsFileCache)
-            ret_val=eInternalFile;
-        else
-            ret_val=eInternalBlock;
-    }   // if
-    else
-    {
-        if (IsFileCache)
-            ret_val=eUserFile;
-        else
-            ret_val=eUserBlock;
-    }   // else
-
-    return(ret_val);
-
-}   // FlexCache::GetCacheFlavor
-
-
-/**
  * Return current capacity limit for cache flavor indicated,
  *  default is zero if unknown flavor.
  */
 uint64_t
-FlexCache::GetCacheCapacity(
-    FlexFlavor_e Flavor)   //!< value describing cache attributes of caller
+FlexCache::GetDBCacheCapacity(
+    bool IsInternal)   //!< value describing cache attributes of caller
 {
     uint64_t ret_val;
 
-    ret_val=Flavor*0;  // dummy line for now
+    ret_val=IsInternal*0;  // dummy line for now
 
 
 /// need current size of file and block cache from db.  How to get db?
 
     return(ret_val);
 
-}   // FlexCache::GetCacheCapacity
+}   // FlexCache::GetDBCacheCapacity
 
 
 /**

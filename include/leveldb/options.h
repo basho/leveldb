@@ -165,8 +165,8 @@ struct Options {
   Options();
 
   // accessor to new, dynamic block_cache
-  Cache * block_cache();
-
+  Cache * block_cache() const;
+  Cache * file_cache() const;
   void Dump(Logger * log) const;
 
 private:

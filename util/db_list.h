@@ -43,7 +43,7 @@ public:
 protected:
    
 
-   Snap m_Lock;            //!< thread protection for set
+   port::Spin m_Lock;      //!< thread protection for set
    db_set_t m_UserDBs;     //!< set of pointers for user db
    db_set_t m_InternalDBs; //!< Riak internal dbs
 
@@ -51,11 +51,10 @@ public:
    DBListImpl();
    virtual ~DBListImpl();
 
-   AddDB(DBImpl *, bool is_internal);
-   ReleaseDB(DBImpl *, bool is_internal);
+   void AddDB(DBImpl *, bool is_internal);
+   void ReleaseDB(DBImpl *, bool is_internal);
 
-   ScanDBs(bool is_internal, functor);
-
+   void ScanDBs(bool is_internal/*, functor*/);
 protected:
 
 

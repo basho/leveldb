@@ -25,8 +25,8 @@ Options::Options()
       env(Env::Default()),
       info_log(NULL),
       write_buffer_size(60<<20),
-      max_open_files(1000),
-      block_cache(NULL),
+//      max_open_files(1000),
+//      block_cache(NULL),
       block_size(4096),
       block_restart_interval(16),
       compression(kSnappyCompression),
@@ -39,12 +39,34 @@ Options::Options()
 }
 
 
+Options::~Options()
+{
+   delete double_cache;
+}   // Options::~Options
+
+
 // accessor to private object data
 Cache *
-Options::double_cache()
+Options::block_cache()
 {
     return(double_cache->GetBlockCache());
 }   // Options::double_cache
+
+
+// accessor to private object data
+Cache *
+Options::file_cache()
+{
+    return(double_cache->GetFileCache());
+}   // Options::double_cache
+
+
+void
+Options::CreateDoubleCache(
+{
+    double_cache=new DoubleCache(is_internal_db);
+}   // Options::CreateDoubleCache
+
 
 void
 Options::Dump(

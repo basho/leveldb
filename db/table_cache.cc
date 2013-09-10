@@ -29,7 +29,7 @@ TableCache::TableCache(const std::string& dbname,
                        const Options* options)
     : env_(options->env),
       dbname_(dbname),
-      options_(options),
+      options_(options)
 
       // convert file handle limit into a size limit
       //  based upon sampling of metadata data sizes across
@@ -37,8 +37,8 @@ TableCache::TableCache(const std::string& dbname,
       // Use NewLRUCache2 because it is NOT sharded.  Sharding
       //  does horrible things to file cache due to hash function
       //  not being very good and "capacity" does not split well
-      cache_(FlexCache::GetCacheFlavor(options.is_interal_db, true));
 {
+      cache_=options_->file_cache();
 }
 
 TableCache::~TableCache() {

@@ -52,21 +52,22 @@ class Repairer {
         options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
         org_options_(options),
         owns_info_log_(options_.info_log != options.info_log),
-        owns_cache_(options_.block_cache != options.block_cache),
+//        owns_cache_(options_.block_cache != options.block_cache),
         has_level_dirs_(false),
         db_lock_(NULL),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, &options_, 10);
+    table_cache_ = new TableCache(dbname_, &options_);
+xxx
   }
 
   ~Repairer() {
     if (owns_info_log_) {
       delete options_.info_log;
     }
-    if (owns_cache_) {
-      delete options_.block_cache;
-    }
+//    if (owns_cache_) {
+//      delete options_.block_cache;
+//    }
 
     // must remove second ref counter that keeps overlapped files locked
     //  table cache

@@ -32,7 +32,9 @@
 #include "table/block.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
+#include "util/db_list.h"
 #include "util/coding.h"
+#include "util/flexcache.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/throttle.h"
@@ -150,7 +152,6 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       dbname_(dbname),
       db_lock_(NULL),
       shutting_down_(NULL),
-      block_cache_(FlexCache::GetCacheFlavor(options_.is_internal_db, false)),
       bg_cv_(&mutex_),
       mem_(new MemTable(internal_comparator_)),
       imm_(NULL),
@@ -163,30 +164,24 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       level0_good(true),
       throttle_end(0)
 {
-  DBList()->AddDB(this, options_->is_internal_db);
+  DBList()->AddDB(this, options_.is_internal_db);
 
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
-  // Reserve ten files or so for other uses and give the rest to TableCache.
-  const int table_cache_size = options_.max_open_files - 10;
   table_cache_ = new TableCache(dbname_, &options_);
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 
-  gFlexCache->SetTotalMemory(options_->total_leveldb_mem);
+  gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
 
   options_.Dump(options_.info_log);
-  Log(options_.info_log,"               File cache size: %" PRIu64, 
-      gFlexCache::GetCacheCapacity(FlexCache::GetCacheFlavor(options.is_internal_db, true));
-  Log(options_.info_log,"              Block cache size: %" PRIu64, 
-      gFlexCache::GetCacheCapacity(FlexCache::GetCacheFlavor(options.is_internal_db, false));
 
 }
 
 DBImpl::~DBImpl() {
-  DBList()->ReleaseDB(this, options_->is_internal_db);
+  DBList()->ReleaseDB(this, options_.is_internal_db);
 
   // Wait for background work to finish
   mutex_.Lock();
@@ -207,9 +202,9 @@ DBImpl::~DBImpl() {
   if (owns_info_log_) {
     delete options_.info_log;
   }
-  if (owns_cache_) {
-    delete options_.block_cache;
-  }
+//  if (owns_cache_) {
+//    delete options_.block_cache;
+//  }
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
   }

@@ -22,6 +22,8 @@
 
 #include "util/cache2.h"
 
+#ifndef STORAGE_LEVELDB_INCLUDE_FLEXCACHE_H_
+#define STORAGE_LEVELDB_INCLUDE_FLEXCACHE_H_
 
 namespace leveldb 
 {
@@ -52,3 +54,5 @@ protected:
 extern FlexCache gFlexCache;
 
 }  // namespace leveldb
+
+#endif   // STORAGE_LEVELDB_INCLUDE_FLEXCACHE_H_
