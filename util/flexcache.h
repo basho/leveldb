@@ -36,6 +36,8 @@ namespace leveldb
 class FlexCache
 {
 public:
+    FlexCache();
+
     uint64_t GetDBCacheCapacity(bool IsInternalDB);
 
     void SetTotalMemory(uint64_t Total);

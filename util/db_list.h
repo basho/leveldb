@@ -49,7 +49,7 @@ protected:
 
 public:
    DBListImpl();
-   virtual ~DBListImpl();
+   virtual ~DBListImpl() {};
 
    void AddDB(DBImpl *, bool is_internal);
    void ReleaseDB(DBImpl *, bool is_internal);

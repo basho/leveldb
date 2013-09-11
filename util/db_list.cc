@@ -30,7 +30,7 @@ static DBListImpl * dblist=NULL;
 
 static void InitModule()
 {
-    dblist=new DbListImpl;
+    dblist=new DBListImpl;
 
 }   // InitModule
 

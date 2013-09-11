@@ -163,6 +163,8 @@ struct Options {
 
   // Create an Options object with default values for all fields.
   Options();
+  ~Options();
+  void CreateDoubleCache();
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() const;

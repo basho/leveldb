@@ -58,7 +58,7 @@ class Repairer {
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
     table_cache_ = new TableCache(dbname_, &options_);
-xxx
+
   }
 
   ~Repairer() {
@@ -140,7 +140,7 @@ xxx
 
         db_ptr=NULL;
         options=org_options_;
-        options.block_cache=NULL;  // not reusing for fear of edge cases
+//        options.block_cache=NULL;  // not reusing for fear of edge cases
         options.is_repair=true;
         options.error_if_exists=false;
         status=leveldb::DB::Open(options, dbname_, &db_ptr);

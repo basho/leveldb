@@ -47,7 +47,7 @@ Options::~Options()
 
 // accessor to private object data
 Cache *
-Options::block_cache()
+Options::block_cache() const
 {
     return(double_cache->GetBlockCache());
 }   // Options::double_cache
@@ -55,14 +55,14 @@ Options::block_cache()
 
 // accessor to private object data
 Cache *
-Options::file_cache()
+Options::file_cache() const
 {
     return(double_cache->GetFileCache());
 }   // Options::double_cache
 
 
 void
-Options::CreateDoubleCache(
+Options::CreateDoubleCache()
 {
     double_cache=new DoubleCache(is_internal_db);
 }   // Options::CreateDoubleCache

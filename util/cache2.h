@@ -24,6 +24,7 @@
 #define STORAGE_LEVELDB_INCLUDE_CACHE2_H_
 
 #include <stdint.h>
+#include "leveldb/cache.h"
 #include "leveldb/slice.h"
 #include "util/flexcache.h"
 

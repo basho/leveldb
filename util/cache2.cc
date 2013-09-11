@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "util/atomic.h"
+#include "leveldb/atomics.h"
 #include "util/cache2.h"
 #include "port/port.h"
 #include "util/hash.h"
@@ -147,9 +147,6 @@ class LRUCache2 : public Cache {
     return Hash(s.data(), s.size(), 0);
   }
   // Separate from constructor so caller can easily make an array of LRUCache2
-  void SetCapacity(size_t capacity) { capacity_ = capacity; }
-
-  size_t GetCapacity() const {return(capacity_);};
 
   // Cache2 methods to allow direct use for single shard
   virtual Cache::Handle* Insert(const Slice& key,
@@ -225,17 +222,6 @@ LRUCache2::~LRUCache2() {
   }
 }
 
-void LRUCache2::Unref(LRUHandle2* e) {
-  assert(e->refs > 0);
-  e->refs--;
-  if (e->refs <= 0) {
-      sub_and_fetch(parent_->GetUsagePtr(), e->charge);
-//    usage_ -= e->charge;
-    (*e->deleter)(e->key(), e->value);
-    free(e);
-  }
-}
-
 void LRUCache2::LRU_Remove(LRUHandle2* e) {
   e->next->prev = e->prev;
   e->prev->next = e->next;
@@ -273,84 +259,6 @@ void LRUCache2::Addref(Cache::Handle* handle) {
   if (NULL!=e && 1 <= e->refs)
       ++e->refs;
 }
-
-Cache::Handle* LRUCache2::Insert(
-    const Slice& key, uint32_t hash, void* value, size_t charge,
-    void (*deleter)(const Slice& key, void* value)) {
-  SpinLock l(&spin_);
-
-  LRUHandle2* e = reinterpret_cast<LRUHandle2*>(
-      malloc(sizeof(LRUHandle2)-1 + key.size()));
-  e->value = value;
-  e->deleter = deleter;
-  e->charge = charge;
-  e->key_length = key.size();
-  e->hash = hash;
-  e->refs = 2;  // One from LRUCache2, one for the returned handle
-  memcpy(e->key_data, key.data(), key.size());
-  LRU_Append(e);
-  add_and_fetch(parent_->GetUsagePtr(), charge);
-//  usage_ += charge;
-
-  LRUHandle2* old = table_.Insert(e);
-  if (old != NULL) {
-    LRU_Remove(old);
-    Unref(old);
-  }
-
-  // Riak - matthewv: code added to remove old only if it was not active.
-  //  Had scenarios where file cache would be largely or totally drained
-  //  because an active object does NOT reduce usage_ upon delete.  So
-  //  the previous while loop would basically delete everything.
-  LRUHandle2 * next, * cursor;
-
-  for (cursor=lru_.next; parent_->GetUsage() > parent->GetCapacity() && cursor != &lru_; cursor=next)
-  {
-      // take next pointer before potentially destroying cursor
-      next=cursor->next;
-
-      // only delete cursor if it will actually destruct and
-      //   return value to usage_
-      if (cursor->refs <= 1)
-      {
-          LRU_Remove(cursor);
-          table_.Remove(cursor->key(), cursor->hash);
-          Unref(cursor);
-      }   // if
-  }   // for
-
-  return reinterpret_cast<Cache::Handle*>(e);
-}
-
-
-bool 
-LRUCache2::ReleaseOne()
-{
-    bool ret_flag;
-    LRUHandle2 * next, * cursor;
-    SpinLock lock(&spin_);
-
-    ret_flag=false;
-
-    for (cursor=lru_.next; !ret_flag && parent_->GetUsage() > parent->GetCapacity() && cursor != &lru_; cursor=next)
-    {
-        // take next pointer before potentially destroying cursor
-        next=cursor->next;
-
-        // only delete cursor if it will actually destruct and
-        //   return value to usage_
-        if (cursor->refs <= 1)
-        {
-            LRU_Remove(cursor);
-            table_.Remove(cursor->key(), cursor->hash);
-            Unref(cursor);
-            ret_flag=true;
-        }   // if
-    }   // for
-
-    return(ret_flag);
-
-}   // LRUCache2::ReleaseOne
 
 
 void LRUCache2::Erase(const Slice& key, uint32_t hash) {
@@ -391,17 +299,17 @@ private:
 
  public:
   explicit ShardedLRUCache2(class DoubleCache & Parent, bool IsFileCache)
-      : usage_(0), parent_(Parent), is_file_cache_(IsFileCache), next_shard_, last_id_(0) {
+      : usage_(0), parent_(Parent), is_file_cache_(IsFileCache), next_shard_(0), last_id_(0) {
     for (int s = 0; s < kNumShards; s++) 
     {
-        shard_[s].SetParent(Parent, IsFileCache);
+        shard_[s].SetParent(this, IsFileCache);
     }
 
   }
   virtual ~ShardedLRUCache2() { }
   volatile uint64_t GetUsage() const {return(usage_);};
-  volatile uint64_t * GetUsagePtr() const {return(&usage_);};
-
+  volatile uint64_t * GetUsagePtr() {return(&usage_);};
+  volatile uint64_t GetCapacity() {return(parent_.GetCapacity(is_file_cache_));}
 
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) {
@@ -413,11 +321,11 @@ private:
     return shard_[Shard(hash)].Lookup(key, hash);
   }
   virtual void Addref(Handle* handle) {
-    LRUHandle* h = reinterpret_cast<LRUHandle*>(handle);
+    LRUHandle2* h = reinterpret_cast<LRUHandle2*>(handle);
     shard_[Shard(h->hash)].Addref(handle);
   }
   virtual void Release(Handle* handle) {
-    LRUHandle* h = reinterpret_cast<LRUHandle*>(handle);
+    LRUHandle2* h = reinterpret_cast<LRUHandle2*>(handle);
     shard_[Shard(h->hash)].Release(handle);
   }
   virtual void Erase(const Slice& key) {
@@ -425,12 +333,12 @@ private:
     shard_[Shard(hash)].Erase(key, hash);
   }
   virtual void* Value(Handle* handle) {
-    return reinterpret_cast<LRUHandle*>(handle)->value;
+    return reinterpret_cast<LRUHandle2*>(handle)->value;
   }
   virtual uint64_t NewId() {
       return inc_and_fetch(&last_id_);
   }
-  virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle));};
+  virtual size_t EntryOverheadSize() {return(sizeof(LRUHandle2));};
 
   // reduce usage of all shards to fit within current capacity limit
   void Resize()
@@ -444,7 +352,7 @@ private:
       {
           one_deleted=false;
 
-          if (parent_->GetCapacity(is_file_cache_) < usage_)
+          if (parent_.GetCapacity(is_file_cache_) < usage_)
           {
               // round robin delete ... later, could delete from most full or such
               //   but keep simple since using spin lock
@@ -454,7 +362,7 @@ private:
                   next_shard_=(next_shard_ +1) % kNumShards;
               } while(end_shard!=next_shard_ && !one_deleted);
           }   // if
-      } while((parent_->GetCapacity(is_file_cache_) < usage_) && one_deleted);
+      } while((parent_.GetCapacity(is_file_cache_) < usage_) && one_deleted);
 
       return;
 
@@ -470,10 +378,18 @@ DoubleCache::DoubleCache(
     bool IsInternalDB)
     : m_IsInternalDB(IsInternalDB)
 {
-    m_FileCache=new SharededLRUCache2(this, true);
-    m_BlockCache=new SharededLRUCache2(this, false);
+    m_FileCache=new ShardedLRUCache2(*this, true);
+    m_BlockCache=new ShardedLRUCache2(*this, false);
 
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(IsInternalDB);
+
+}   // DoubleCache::DoubleCache
+
+
+DoubleCache::~DoubleCache()
+{
+    delete m_FileCache;
+    delete m_BlockCache;
 
 }   // DoubleCache::DoubleCache
 
@@ -505,8 +421,8 @@ DoubleCache::GetCapacity(
     ret_val=0;
 
     // got to be a more efficient implementation
-    block_size=m_BlockCache->TotalUsage();
-    file_size=m_FileCache->TotalUsage();
+    block_size=m_BlockCache->GetUsage();
+    file_size=m_FileCache->GetUsage();
 
     if (block_size+file_size < m_TotalAllocation)
         spare=m_TotalAllocation - (block_size+file_size);
@@ -517,8 +433,103 @@ DoubleCache::GetCapacity(
     {
         // rob from block cache if needed
         if (0==spare)
+        {}
+    }
 
+    return(0);
     
 }   // DoubleCache::GetCapacity
 
+
+void LRUCache2::Unref(LRUHandle2* e) {
+  assert(e->refs > 0);
+  e->refs--;
+  if (e->refs <= 0) {
+      sub_and_fetch(parent_->GetUsagePtr(), (uint64_t)e->charge);
+//    usage_ -= e->charge;
+    (*e->deleter)(e->key(), e->value);
+    free(e);
+  }
+}
+
+
+Cache::Handle* LRUCache2::Insert(
+    const Slice& key, uint32_t hash, void* value, size_t charge,
+    void (*deleter)(const Slice& key, void* value)) {
+  SpinLock l(&spin_);
+
+  LRUHandle2* e = reinterpret_cast<LRUHandle2*>(
+      malloc(sizeof(LRUHandle2)-1 + key.size()));
+  e->value = value;
+  e->deleter = deleter;
+  e->charge = charge;
+  e->key_length = key.size();
+  e->hash = hash;
+  e->refs = 2;  // One from LRUCache2, one for the returned handle
+  memcpy(e->key_data, key.data(), key.size());
+  LRU_Append(e);
+  add_and_fetch(parent_->GetUsagePtr(), (uint64_t)charge);
+//  usage_ += charge;
+
+  LRUHandle2* old = table_.Insert(e);
+  if (old != NULL) {
+    LRU_Remove(old);
+    Unref(old);
+  }
+
+  // Riak - matthewv: code added to remove old only if it was not active.
+  //  Had scenarios where file cache would be largely or totally drained
+  //  because an active object does NOT reduce usage_ upon delete.  So
+  //  the previous while loop would basically delete everything.
+  LRUHandle2 * next, * cursor;
+
+  for (cursor=lru_.next; parent_->GetUsage() > parent_->GetCapacity() && cursor != &lru_; cursor=next)
+  {
+      // take next pointer before potentially destroying cursor
+      next=cursor->next;
+
+      // only delete cursor if it will actually destruct and
+      //   return value to usage_
+      if (cursor->refs <= 1)
+      {
+          LRU_Remove(cursor);
+          table_.Remove(cursor->key(), cursor->hash);
+          Unref(cursor);
+      }   // if
+  }   // for
+
+  return reinterpret_cast<Cache::Handle*>(e);
+}
+
+
+bool 
+LRUCache2::ReleaseOne()
+{
+    bool ret_flag;
+    LRUHandle2 * next, * cursor;
+    SpinLock lock(&spin_);
+
+    ret_flag=false;
+
+    for (cursor=lru_.next; !ret_flag && parent_->GetUsage() > parent_->GetCapacity() && cursor != &lru_; cursor=next)
+    {
+        // take next pointer before potentially destroying cursor
+        next=cursor->next;
+
+        // only delete cursor if it will actually destruct and
+        //   return value to usage_
+        if (cursor->refs <= 1)
+        {
+            LRU_Remove(cursor);
+            table_.Remove(cursor->key(), cursor->hash);
+            Unref(cursor);
+            ret_flag=true;
+        }   // if
+    }   // for
+
+    return(ret_flag);
+
+}   // LRUCache2::ReleaseOne
+
 }  // namespace leveldb
+

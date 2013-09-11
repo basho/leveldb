@@ -155,7 +155,7 @@ template <typename ValueT>
 inline ValueT add_and_fetch(volatile ValueT *ptr, ValueT val);
 
 template <>
-inline uint64_t add_and_fetch(volatile uint64_t *ptr, uint64_ val)
+inline uint64_t add_and_fetch(volatile uint64_t *ptr, uint64_t val)
 {
 #if LEVELDB_IS_SOLARIS
     return atomic_add_64_nv(ptr, val);
