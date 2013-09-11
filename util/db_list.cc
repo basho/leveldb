@@ -55,4 +55,31 @@ DBListShutdown()
 }   // DBListShutdown
 
 
+
+DBListImpl::DBListImpl()
+{
+}   // DBListImpl::DBListImpl
+
+
+void
+DBListImpl::AddDB(
+    DBImpl * Dbase,
+    bool IsInternal)
+{
+
+    return;
+
+}   // DBListImpl::AddDB
+
+
+void
+DBListImpl::ReleaseDB(
+    DBImpl * Dbase,
+    bool IsInternal)
+{
+
+    return;
+
+}   // DBListImpl::ReleaseDB
+
 }  // namespace leveldb
