@@ -433,7 +433,6 @@ void leveldb_options_set_write_buffer_size(leveldb_options_t* opt, size_t s) {
   opt->rep.write_buffer_size = s;
 }
 
-#if 0
 void leveldb_options_set_max_open_files(leveldb_options_t* opt, int n) {
   opt->rep.max_open_files = n;
 }
@@ -441,7 +440,6 @@ void leveldb_options_set_max_open_files(leveldb_options_t* opt, int n) {
 void leveldb_options_set_cache(leveldb_options_t* opt, leveldb_cache_t* c) {
   opt->rep.block_cache = c->rep;
 }
-#endif 
 
 void leveldb_options_set_block_size(leveldb_options_t* opt, size_t s) {
   opt->rep.block_size = s;

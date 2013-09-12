@@ -45,19 +45,20 @@ namespace {
 class Repairer {
  public:
   Repairer(const std::string& dbname, const Options& options)
-      : dbname_(dbname),
+      : double_cache_(options.is_internal_db),
+        dbname_(dbname),
         env_(options.env),
         icmp_(options.comparator),
         ipolicy_(options.filter_policy),
-        options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
+        options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options, double_cache_.GetBlockCache())),
         org_options_(options),
         owns_info_log_(options_.info_log != options.info_log),
-//        owns_cache_(options_.block_cache != options.block_cache),
+        owns_cache_(options_.block_cache != options.block_cache),
         has_level_dirs_(false),
         db_lock_(NULL),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, &options_);
+    table_cache_ = new TableCache(dbname_, &options_, double_cache_.GetFileCache());
 
   }
 
@@ -160,6 +161,7 @@ class Repairer {
     SequenceNumber max_sequence;
   };
 
+  DoubleCache double_cache_;
   std::string const dbname_;
   Env* const env_;
   InternalKeyComparator const icmp_;

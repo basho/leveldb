@@ -79,7 +79,7 @@ Status Table::Open(const Options& options,
     rep->file = file;
     rep->metaindex_handle = footer.metaindex_handle();
     rep->index_block = index_block;
-    rep->cache_id = (options.block_cache() ? options.block_cache()->NewId() : 0);
+    rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     rep->filter_data = NULL;
     rep->filter_data_size = 0;
     rep->filter = NULL;
@@ -238,7 +238,7 @@ Iterator* Table::BlockReader(void* arg,
                              const ReadOptions& options,
                              const Slice& index_value) {
   Table* table = reinterpret_cast<Table*>(arg);
-  Cache* block_cache = table->rep_->options.block_cache();
+  Cache* block_cache = table->rep_->options.block_cache;
   Block* block = NULL;
   Cache::Handle* cache_handle = NULL;
 

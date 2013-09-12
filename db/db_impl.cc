@@ -117,12 +117,13 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
 Options SanitizeOptions(const std::string& dbname,
                         const InternalKeyComparator* icmp,
                         const InternalFilterPolicy* ipolicy,
-                        const Options& src) {
+                        const Options& src,
+                        Cache * block_cache) {
   Options result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
 //  ClipToRange(&result.max_open_files,            20,     50000);
-//  ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
+  ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
   if (result.info_log == NULL) {
     // Open a log file in the same directory as the db
@@ -135,20 +136,23 @@ Options SanitizeOptions(const std::string& dbname,
     }
   }
 
-//  if (result.block_cache == NULL) {
+  if (result.block_cache == NULL) {
 //    result.block_cache = NewLRUCache(8 << 20);
-//  }
+      result.block_cache = block_cache;
+  }
   return result;
 }
 
 DBImpl::DBImpl(const Options& options, const std::string& dbname)
-    : env_(options.env),
+    : double_cache(options.is_internal_db),
+      env_(options.env),
       internal_comparator_(options.comparator),
       internal_filter_policy_(options.filter_policy),
       options_(SanitizeOptions(
-          dbname, &internal_comparator_, &internal_filter_policy_, options)),
+          dbname, &internal_comparator_, &internal_filter_policy_, 
+          options, block_cache())),
       owns_info_log_(options_.info_log != options.info_log),
-//      owns_cache_(options_.block_cache != options.block_cache),
+      owns_cache_(options_.block_cache != options.block_cache),
       dbname_(dbname),
       db_lock_(NULL),
       shutting_down_(NULL),
@@ -169,7 +173,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
-  table_cache_ = new TableCache(dbname_, &options_);
+  table_cache_ = new TableCache(dbname_, &options_, file_cache());
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);

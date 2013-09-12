@@ -53,6 +53,12 @@ FlexCache::FlexCache()
             m_TotalMemory=(limit.rlim_max - 1024*1024*1024) / 2;
     }   // if
 
+    // create a default similar to Google's original
+    else
+    {
+        m_TotalMemory=80*1024*1024;
+    }   // else
+
     return;
 
 }   // FlexCache::FlexCache

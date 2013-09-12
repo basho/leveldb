@@ -20,7 +20,7 @@ class Env;
 
 class TableCache {
  public:
-  TableCache(const std::string& dbname, const Options* options);
+  TableCache(const std::string& dbname, const Options* options, Cache * file_cache);
   ~TableCache();
 
   // Return an iterator for the specified file number (the corresponding

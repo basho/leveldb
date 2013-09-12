@@ -26,19 +26,13 @@ static void UnrefEntry(void* arg1, void* arg2) {
 }
 
 TableCache::TableCache(const std::string& dbname,
-                       const Options* options)
+                       const Options* options,
+                       Cache * file_cache)
     : env_(options->env),
       dbname_(dbname),
-      options_(options)
-
-      // convert file handle limit into a size limit
-      //  based upon sampling of metadata data sizes across
-      //  levels and various load characteristics
-      // Use NewLRUCache2 because it is NOT sharded.  Sharding
-      //  does horrible things to file cache due to hash function
-      //  not being very good and "capacity" does not split well
+      options_(options),
+      cache_(file_cache)
 {
-      cache_=options_->file_cache();
 }
 
 TableCache::~TableCache() {

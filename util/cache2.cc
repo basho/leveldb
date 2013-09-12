@@ -348,21 +348,20 @@ private:
 
       SpinLock l(&id_spin_);
       end_shard=next_shard_;
-      do
+      one_deleted=true;
+
+      while((parent_.GetCapacity(is_file_cache_) < usage_) && one_deleted)
       {
           one_deleted=false;
-
-          if (parent_.GetCapacity(is_file_cache_) < usage_)
+          
+          // round robin delete ... later, could delete from most full or such
+          //   but keep simple since using spin lock
+          do
           {
-              // round robin delete ... later, could delete from most full or such
-              //   but keep simple since using spin lock
-              do
-              {
-                  one_deleted=shard_[next_shard_].ReleaseOne();
-                  next_shard_=(next_shard_ +1) % kNumShards;
-              } while(end_shard!=next_shard_ && !one_deleted);
-          }   // if
-      } while((parent_.GetCapacity(is_file_cache_) < usage_) && one_deleted);
+              one_deleted=shard_[next_shard_].ReleaseOne();
+              next_shard_=(next_shard_ +1) % kNumShards;
+          } while(end_shard!=next_shard_ && !one_deleted);
+      }   // while
 
       return;
 
@@ -420,27 +419,32 @@ DoubleCache::GetCapacity(
 
     ret_val=0;
 
-    // got to be a more efficient implementation
-    block_size=m_BlockCache->GetUsage();
-    file_size=m_FileCache->GetUsage();
-
-    if (block_size+file_size < m_TotalAllocation)
-        spare=m_TotalAllocation - (block_size+file_size);
-    else 
-        spare=0;
-
+    // file capacity is "fixed", it is always the entire
+    //  cache allocation less minimum block size
     if (IsFileCache)
     {
-        // rob from block cache if needed
-        if (0==spare)
-        {}
-    }
+        ret_val=m_TotalAllocation - (2*1024*1024);
+    }   // if
+
+    // block cache capacity is whatever file cache is not
+    //  not using, or its minimum ... whichever is larger
+    else
+    {
+        ret_val=m_TotalAllocation - m_FileCache->GetUsage();
+        if (ret_val < (2*1024*1024))
+            ret_val=(2*1024*1024);
+    }   // else
 
     return(0);
     
 }   // DoubleCache::GetCapacity
 
 
+//
+// Definitions moved so they could access ShardedLRUCache members
+//  (subtle hint to Google that every object should have .h file 
+//    because future reuse is unknowable)
+//
 void LRUCache2::Unref(LRUHandle2* e) {
   assert(e->refs > 0);
   e->refs--;

@@ -12,6 +12,7 @@
 #include "table/format.h"
 #include "table/block.h"
 #include "table/filter_block.h"
+#include "util/cache2.h"
 
 //#include "util/logging.h"
 //#include "db/log_reader.h"
@@ -70,6 +71,7 @@ main(
         // sst file
         else
         {
+            leveldb::DoubleCache double_cache(false);
             leveldb::Options options;
             leveldb::ReadOptions read_options;
             std::string table_name, dbname, path_temp;
@@ -89,7 +91,7 @@ main(
             meta.number=strtol(table_name.c_str(), NULL, 10);
 
             options.filter_policy=leveldb::NewBloomFilterPolicy(10);
-            table_cache=new leveldb::TableCache(dbname, &options, 10);
+            table_cache=new leveldb::TableCache(dbname, &options, double_cache.GetFileCache());
             table_name = leveldb::TableFileName(dbname, meta.number, search_level);
 
             // open table, step 1 get file size

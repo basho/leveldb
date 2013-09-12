@@ -114,13 +114,16 @@ class DBImpl : public DB {
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact);
 
+  // initialized before options so its block_cache is available
+  class DoubleCache double_cache;
+
   // Constant after construction
   Env* const env_;
   const InternalKeyComparator internal_comparator_;
   const InternalFilterPolicy internal_filter_policy_;
   const Options options_;  // options_.comparator == &internal_comparator_
   bool owns_info_log_;
-//  bool owns_cache_;
+  bool owns_cache_;
   const std::string dbname_;
 
   // table_cache_ provides its own synchronization
@@ -193,6 +196,11 @@ class DBImpl : public DB {
 
   volatile uint64_t throttle_end;
 
+
+  // accessor to new, dynamic block_cache
+  Cache * block_cache() {return(double_cache.GetBlockCache());};
+  Cache * file_cache() {return(double_cache.GetFileCache());};
+
   // No copying allowed
   DBImpl(const DBImpl&);
   void operator=(const DBImpl&);
@@ -207,7 +215,8 @@ class DBImpl : public DB {
 extern Options SanitizeOptions(const std::string& db,
                                const InternalKeyComparator* icmp,
                                const InternalFilterPolicy* ipolicy,
-                               const Options& src);
+                               const Options& src,
+                               Cache * block_cache);
 
 }  // namespace leveldb
 

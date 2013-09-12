@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <string>
+#include <memory>
 
 namespace leveldb {
 
@@ -98,9 +99,9 @@ struct Options {
   // Number of open files that can be used by the DB.  You may need to
   // increase this if your database has a large working set (budget
   // one open file per 2MB of working set).
-  //
+  // RIAK: NO LONGER USED
   // Default: 1000
-//  int max_open_files;
+  int max_open_files;
 
   // Control over blocks (user data is stored in a set of blocks, and
   // a block is the unit of reading from disk).
@@ -108,7 +109,7 @@ struct Options {
   // If non-NULL, use the specified cache for blocks.
   // If NULL, leveldb will automatically create and use an 8MB internal cache.
   // Default: NULL
-//  Cache* block_cache;
+  Cache* block_cache;
 
   // Approximate size of user data packed per block.  Note that the
   // block size specified here corresponds to uncompressed data.  The
@@ -163,19 +164,10 @@ struct Options {
 
   // Create an Options object with default values for all fields.
   Options();
-  ~Options();
-  void CreateDoubleCache();
 
-  // accessor to new, dynamic block_cache
-  Cache * block_cache() const;
-  Cache * file_cache() const;
   void Dump(Logger * log) const;
 
 private:
-  // Riak specific:  block_cache is now part of DoubleCache.  Do NOT want
-  //  user routines modifying ... hence "private"
-  // Default: <no concern to user>
-  class DoubleCache * double_cache;
 
 };
 
