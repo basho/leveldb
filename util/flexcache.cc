@@ -23,6 +23,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#include "util/db_list.h"
 #include "util/flexcache.h"
 
 namespace leveldb {
@@ -74,12 +75,29 @@ uint64_t
 FlexCache::GetDBCacheCapacity(
     bool IsInternal)   //!< value describing cache attributes of caller
 {
-    uint64_t ret_val;
+    uint64_t ret_val, shared_total;
+    size_t count, internal_count;
 
-    ret_val=IsInternal*0;  // dummy line for now
+    // get count of database by type
+    count=DBList()->GetDBCount(IsInternal);
+    if (IsInternal)
+        internal_count=count;
+    else
+        internal_count=DBList()->GetDBCount(true);
 
+    // what is total memory assigned to a type
+    if (IsInternal)
+        shared_total=(m_TotalMemory*2)/10;  // integer *.2
+    else if (0!=internal_count)
+        shared_total=(m_TotalMemory*8)/10;
+    else // no internal database
+        shared_total=m_TotalMemory;
 
-/// need current size of file and block cache from db.  How to get db?
+    // split up type specific aggregate to "per database" value
+    if (0!=count)
+        ret_val=shared_total / count;
+    else
+        ret_val=shared_total;
 
     return(ret_val);
 
@@ -100,7 +118,8 @@ FlexCache::SetTotalMemory(
     {
         m_TotalMemory=Total;
 
-        // ask each cache within each db to resize
+        DBList()->ScanDBs(true, &DBImpl::ResizeCaches);
+        DBList()->ScanDBs(false, &DBImpl::ResizeCaches);
     }   // if
 
     return;

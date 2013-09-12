@@ -181,6 +181,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
 
   options_.Dump(options_.info_log);
+  Log(options_.info_log,"               File cache size: %zd" PRIu64, double_cache.GetCapacity(true));
+  Log(options_.info_log,"              Block cache size: %zd", double_cache.GetCapacity(false));
 
 }
 

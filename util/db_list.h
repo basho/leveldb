@@ -54,7 +54,9 @@ public:
    void AddDB(DBImpl *, bool is_internal);
    void ReleaseDB(DBImpl *, bool is_internal);
 
-   void ScanDBs(bool is_internal/*, functor*/);
+   size_t GetDBCount(bool is_internal);
+
+   void ScanDBs(bool is_internal, void (DBImpl::*)());
 protected:
 
 

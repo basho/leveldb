@@ -63,6 +63,8 @@ class DBImpl : public DB {
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
 
+  void ResizeCaches() {double_cache.ResizeCaches();};
+
  private:
   friend class DB;
   struct CompactionState;
