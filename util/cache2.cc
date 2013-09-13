@@ -400,6 +400,7 @@ void
 DoubleCache::ResizeCaches()
 {
     // worst case is size reduction, take from block cache first
+    m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
     m_BlockCache->Resize();
     m_FileCache->Resize();
 

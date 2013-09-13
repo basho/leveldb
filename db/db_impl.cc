@@ -122,7 +122,7 @@ Options SanitizeOptions(const std::string& dbname,
   Options result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
-//  ClipToRange(&result.max_open_files,            20,     50000);
+  ClipToRange(&result.max_open_files,            20,     50000);
   ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
   if (result.info_log == NULL) {
@@ -178,7 +178,6 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 
-//  options_.total_leveldb_mem=32*1024*1024*1024L;
   gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
 
   options_.Dump(options_.info_log);
@@ -197,6 +196,9 @@ DBImpl::~DBImpl() {
     bg_cv_.Wait();
   }
   mutex_.Unlock();
+
+  // make sure flex cache knows this db is gone
+  gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
 
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
@@ -1828,6 +1830,16 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
       total += versions_->NumLevelBytes(level);
     }
     snprintf(buf, sizeof(buf), "%" PRIu64, total);
+    value->append(buf);
+    return true;
+  } else if (in == "file-cache") {
+    char buf[50];
+    snprintf(buf, sizeof(buf), "%" PRIu64, double_cache.GetCapacity(true));
+    value->append(buf);
+    return true;
+  } else if (in == "block-cache") {
+    char buf[50];
+    snprintf(buf, sizeof(buf), "%" PRIu64, double_cache.GetCapacity(false));
     value->append(buf);
     return true;
   } else if (-1!=gPerfCounters->LookupCounter(in.ToString().c_str())) {

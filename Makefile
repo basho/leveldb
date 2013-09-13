@@ -43,6 +43,7 @@ TESTS = \
 	env_test \
 	filename_test \
 	filter_block_test \
+	flexcache_test \
 	log_test \
 	memenv_test \
 	skiplist_test \
@@ -152,6 +153,9 @@ filename_test: db/filename_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 filter_block_test: table/filter_block_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) table/filter_block_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+flexcache_test: util/flexcache_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) util/flexcache_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
 log_test: db/log_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/log_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)

@@ -24,6 +24,7 @@
 #include <algorithm>
 
 #include "util/db_list.h"
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
@@ -72,6 +73,8 @@ DBListImpl::AddDB(
     DBImpl * Dbase,
     bool IsInternal)
 {
+    SpinLock lock(&m_Lock);
+
     if (IsInternal)
     {
         if (m_InternalDBs.insert(Dbase).second)
@@ -99,6 +102,7 @@ DBListImpl::ReleaseDB(
     bool IsInternal)
 {
     db_set_t::iterator it;
+    SpinLock lock(&m_Lock);
 
     if (IsInternal)
     {
@@ -134,6 +138,8 @@ size_t
 DBListImpl::GetDBCount(
     bool IsInternal)
 {
+    SpinLock lock(&m_Lock);
+
     size_t ret_val;
 
     if (IsInternal)
@@ -151,10 +157,31 @@ DBListImpl::ScanDBs(
     bool IsInternal,
     void (DBImpl::* Function)())
 {
+    db_set_t::iterator it, first, last;
+    SpinLock lock(&m_Lock);
+
+    // for_each() would have been fun, but setup deadlock
+    //  scenarios
+    // Now we have a race condition of us using the db object
+    //  while someone is shutting it down ... hmm
     if (IsInternal)
-        for_each(m_InternalDBs.begin(), m_InternalDBs.end(), std::mem_fun(Function));
+    {
+        first=m_InternalDBs.begin();
+        last=m_InternalDBs.end();
+    }   // if
     else
-        for_each(m_UserDBs.begin(), m_UserDBs.end(), std::mem_fun(Function));
+    {
+        first=m_UserDBs.begin();
+        last=m_UserDBs.end();
+    }   // else
+
+    // call member function of each database
+    for (it=first; last!=it; ++it)
+    {
+        m_Lock.Unlock();
+        ((*it)->*Function)();
+        m_Lock.Lock();
+    }   // for
 
     return;
 
