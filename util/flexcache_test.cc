@@ -34,7 +34,7 @@ namespace leveldb {
 
 class FlexCacheTest { };
 
-TEST(FlexCacheTest, DBListTracking) {
+TEST(FlexCacheTest, UserSizing) {
     Options options;
     DB * db[10];
     Status st;
@@ -126,24 +126,103 @@ TEST(FlexCacheTest, DBListTracking) {
     }   // for
 }
 
-#if 0
-TEST(CRC, Values) {
-  ASSERT_NE(Value("a", 1), Value("foo", 3));
+TEST(FlexCacheTest, MixedSizing) {
+    Options options;
+    DB * db[10];
+    Status st;
+    std::string dbname, value;
+    int loop;
+    char buffer[12];
+
+    options.create_if_missing=true;
+    options.filter_policy=NewBloomFilterPolicy2(16);
+    options.total_leveldb_mem=300*1024*1024L;
+
+    // verify accounting with one user & one internal
+    dbname = test::TmpDir() + "/flexcache0";
+    st=DB::Open(options, dbname, &db[0]);
+    ASSERT_OK(st);
+    ASSERT_EQ(1, DBList()->GetDBCount(false));
+    ASSERT_EQ(0, DBList()->GetDBCount(true));
+
+    db[0]->GetProperty("leveldb.block-cache", &value);
+    ASSERT_EQ(300*1024*1024l, atoi(value.c_str()));
+
+    db[0]->GetProperty("leveldb.file-cache", &value);
+    ASSERT_EQ(298*1024*1024L, atoi(value.c_str()));
+
+    dbname = test::TmpDir() + "/flexcache1";
+    options.is_internal_db=true;
+    st=DB::Open(options, dbname, &db[1]);
+    ASSERT_OK(st);
+    ASSERT_EQ(1, DBList()->GetDBCount(false));
+    ASSERT_EQ(1, DBList()->GetDBCount(true));
+
+    db[0]->GetProperty("leveldb.block-cache", &value);
+    ASSERT_EQ(240*1024*1024l, atoi(value.c_str()));
+
+    db[0]->GetProperty("leveldb.file-cache", &value);
+    ASSERT_EQ(238*1024*1024L, atoi(value.c_str()));
+
+    db[1]->GetProperty("leveldb.block-cache", &value);
+    ASSERT_EQ(60*1024*1024l, atoi(value.c_str()));
+
+    db[1]->GetProperty("leveldb.file-cache", &value);
+    ASSERT_EQ(58*1024*1024L, atoi(value.c_str()));
+
+    delete db[0];
+    db[1]->GetProperty("leveldb.block-cache", &value);
+    ASSERT_EQ(60*1024*1024l, atoi(value.c_str()));
+
+    db[1]->GetProperty("leveldb.file-cache", &value);
+    ASSERT_EQ(58*1024*1024L, atoi(value.c_str()));
+
+    delete db[1];
+
+
+    // rebuild from zero to ten databases, verify accounting
+    for(loop=0; loop<10; ++loop)
+    {
+        options.is_internal_db=(1==(loop %2));
+        snprintf(buffer, sizeof(buffer), "/flexcache%u", loop);
+        dbname=test::TmpDir() + buffer;
+        st=DB::Open(options, dbname, &db[loop]);
+        ASSERT_OK(st);
+    }   // for
+
+    ASSERT_EQ(5, DBList()->GetDBCount(false));
+    ASSERT_EQ(5, DBList()->GetDBCount(true));
+
+    for(loop=0; loop<10; ++loop)
+    {
+        if (0==(loop %2))
+        {
+            db[loop]->GetProperty("leveldb.block-cache", &value);
+            ASSERT_EQ(48*1024*1024l, atoi(value.c_str()));
+
+            db[loop]->GetProperty("leveldb.file-cache", &value);
+            ASSERT_EQ(46*1024*1024L, atoi(value.c_str()));
+        }   // if
+        else
+        {
+            db[loop]->GetProperty("leveldb.block-cache", &value);
+            ASSERT_EQ(12*1024*1024l, atoi(value.c_str()));
+
+            db[loop]->GetProperty("leveldb.file-cache", &value);
+            ASSERT_EQ(10*1024*1024L, atoi(value.c_str()));
+        }   // else
+    }   // for
+
+    for (loop=0; loop<10; ++loop)
+    {
+        delete db[loop];
+        snprintf(buffer, sizeof(buffer), "/flexcache%u", loop);
+        dbname=test::TmpDir() + buffer;
+        st=DestroyDB(dbname, options);
+        ASSERT_OK(st);
+    }   // for
 }
 
-TEST(CRC, Extend) {
-  ASSERT_EQ(Value("hello world", 11),
-            Extend(Value("hello ", 6), "world", 5));
-}
-
-TEST(CRC, Mask) {
-  uint32_t crc = Value("foo", 3);
-  ASSERT_NE(crc, Mask(crc));
-  ASSERT_NE(crc, Mask(Mask(crc)));
-  ASSERT_EQ(crc, Unmask(Mask(crc)));
-  ASSERT_EQ(crc, Unmask(Unmask(Mask(Mask(crc)))));
-}
-#endif
 
 }  // namespace leveldb
 
