@@ -48,16 +48,16 @@ FlexCache::FlexCache()
     if (0==ret_val && RLIM_INFINITY!=limit.rlim_max)
     {
         // 2Gig is "small ram", Riak going to be tight
-        if (limit.rlim_max < 2*1024*1024*1024)
-            m_TotalMemory=256*1024*1024;
+        if (limit.rlim_max < 2*1024*1024*1024L)
+            m_TotalMemory=256*1024*1024L;
         else
-            m_TotalMemory=(limit.rlim_max - 1024*1024*1024) / 2;
+            m_TotalMemory=(limit.rlim_max - 1024*1024*1024L) / 2;
     }   // if
 
     // create a default similar to Google's original
     else
     {
-        m_TotalMemory=80*1024*1024;
+        m_TotalMemory=80*1024*1024L;
     }   // else
 
     return;
@@ -112,15 +112,15 @@ void
 FlexCache::SetTotalMemory(
     uint64_t Total)    //!< new memory allocated to all caches
 {
-    // only review current allocation if new value is different 
+    // only review current allocation if new value is different
     //  and not zero default
     if (0!=Total && Total!=m_TotalMemory)
     {
         m_TotalMemory=Total;
-
-        DBList()->ScanDBs(true, &DBImpl::ResizeCaches);
-        DBList()->ScanDBs(false, &DBImpl::ResizeCaches);
     }   // if
+
+    DBList()->ScanDBs(true, &DBImpl::ResizeCaches);
+    DBList()->ScanDBs(false, &DBImpl::ResizeCaches);
 
     return;
 

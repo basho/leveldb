@@ -181,7 +181,7 @@ class LRUCache2 : public Cache {
 
   virtual void Addref(Cache::Handle* handle);
 
-  void SetParent(ShardedLRUCache2 * Parent, bool IsFileCache) 
+  void SetParent(ShardedLRUCache2 * Parent, bool IsFileCache)
     {parent_=Parent; is_file_cache_=IsFileCache;};
 
  private:
@@ -205,7 +205,7 @@ class LRUCache2 : public Cache {
 };
 
 LRUCache2::LRUCache2()
-  : parent_(NULL), is_file_cache_(true), last_id_(0) 
+  : parent_(NULL), is_file_cache_(true), last_id_(0)
 {
   // Make empty circular linked list
   lru_.next = &lru_;
@@ -300,7 +300,7 @@ private:
  public:
   explicit ShardedLRUCache2(class DoubleCache & Parent, bool IsFileCache)
       : usage_(0), parent_(Parent), is_file_cache_(IsFileCache), next_shard_(0), last_id_(0) {
-    for (int s = 0; s < kNumShards; s++) 
+    for (int s = 0; s < kNumShards; s++)
     {
         shard_[s].SetParent(this, IsFileCache);
     }
@@ -353,7 +353,7 @@ private:
       while((parent_.GetCapacity(is_file_cache_) < usage_) && one_deleted)
       {
           one_deleted=false;
-          
+
           // round robin delete ... later, could delete from most full or such
           //   but keep simple since using spin lock
           do
@@ -415,7 +415,7 @@ size_t
 DoubleCache::GetCapacity(
     bool IsFileCache)
 {
-    size_t file_size, block_size, ret_val, spare;
+    size_t  ret_val;
 
     ret_val=0;
 
@@ -435,14 +435,14 @@ DoubleCache::GetCapacity(
             ret_val=(2*1024*1024);
     }   // else
 
-    return(0);
-    
+    return(ret_val);
+
 }   // DoubleCache::GetCapacity
 
 
 //
 // Definitions moved so they could access ShardedLRUCache members
-//  (subtle hint to Google that every object should have .h file 
+//  (subtle hint to Google that every object should have .h file
 //    because future reuse is unknowable)
 //
 void LRUCache2::Unref(LRUHandle2* e) {
@@ -506,7 +506,7 @@ Cache::Handle* LRUCache2::Insert(
 }
 
 
-bool 
+bool
 LRUCache2::ReleaseOne()
 {
     bool ret_flag;

@@ -149,7 +149,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       internal_comparator_(options.comparator),
       internal_filter_policy_(options.filter_policy),
       options_(SanitizeOptions(
-          dbname, &internal_comparator_, &internal_filter_policy_, 
+          dbname, &internal_comparator_, &internal_filter_policy_,
           options, block_cache())),
       owns_info_log_(options_.info_log != options.info_log),
       owns_cache_(options_.block_cache != options.block_cache),
@@ -178,10 +178,11 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 
+//  options_.total_leveldb_mem=32*1024*1024*1024L;
   gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
 
   options_.Dump(options_.info_log);
-  Log(options_.info_log,"               File cache size: %zd" PRIu64, double_cache.GetCapacity(true));
+  Log(options_.info_log,"               File cache size: %zd", double_cache.GetCapacity(true));
   Log(options_.info_log,"              Block cache size: %zd", double_cache.GetCapacity(false));
 
 }
@@ -1595,7 +1596,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
-      // server may have been busy since previous write, 
+      // server may have been busy since previous write,
       //  use only the remaining time as throttle
       now=env_->NowMicros();
 
