@@ -13,6 +13,7 @@
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
@@ -61,6 +62,13 @@ class DBImpl : public DB {
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
+
+  // spinlock access to write buffers
+  void RefAccess(MemTable ** mem, MemTable ** imm, Version ** version);
+  void UnrefAccess(MemTable ** mem, MemTable ** imm, Version ** current);
+  static void UnrefAccess(MemTable ** mem, MemTable ** imm, Version ** current, port::Spin * spin);
+  void RotateWriteBufs();
+  void ReleasePendingWriteBuf();
 
  private:
   friend class DB;
@@ -133,9 +141,16 @@ class DBImpl : public DB {
   port::Mutex throttle_mutex_;   // used by write throttle to force sequential waits on callers
   port::AtomicPointer shutting_down_;
   port::CondVar bg_cv_;          // Signalled when background work finishes
-  MemTable* mem_;
-  MemTable* imm_;                // Memtable being compacted
+
+  // mem_ and imm_ are now mem2_ and imm2_ to force adjustment to all code
+  //  directly using the variables.  Access to the two variables is now controlled
+  //  by m_RefLock, NOT mutex_.  This is to allow performance gains under Riak
+  //  on platforms supporting pthread_spinlock_t
+  port::Spin m_RefLock;
+  MemTable* mem2_;
+  MemTable* imm2_;                // Memtable being compacted
   port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
+
   WritableFile* logfile_;
   uint64_t logfile_number_;
   log::Writer* log_;
