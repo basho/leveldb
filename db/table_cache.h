@@ -50,8 +50,9 @@ class TableCache {
   void Evict(uint64_t file_number, bool is_overlapped);
 
   // access for testing tools, not for public access
-  Status TEST_FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle** handle)
-  {return( FindTable(file_number, file_size, level, handle));};
+  Status TEST_FindTable(uint64_t file_number, uint64_t file_size, int level, 
+                        Cache::Handle** handle, const ReadOptions & options)
+  {return( FindTable(file_number, file_size, level, handle, options));};
 
   Cache* TEST_GetInternalCache() {return(cache_);};
 
@@ -61,7 +62,8 @@ class TableCache {
   const Options* options_;
   Cache* cache_;
 
-  Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
+  Status FindTable(uint64_t file_number, uint64_t file_size, int level, 
+                   Cache::Handle**, const ReadOptions & options);
 };
 
 

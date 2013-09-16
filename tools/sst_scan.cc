@@ -108,7 +108,7 @@ main(
 
                 fhandle=NULL;
 
-                status=table_cache->TEST_FindTable(meta.number, meta.file_size, search_level, &fhandle);
+                status=table_cache->TEST_FindTable(meta.number, meta.file_size, search_level, &fhandle, read_options);
 
                 // count keys and size keys/filter
                 if (status.ok())

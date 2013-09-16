@@ -259,6 +259,8 @@ Iterator* Table::BlockReader(void* arg,
       if (cache_handle != NULL) {
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
         gPerfCounters->Inc(ePerfBlockCached);
+      } else if (options.nonblocking) {
+          s=Status::WouldBlock("Table::BlockReader would block");
       } else {
         s = ReadBlock(table->rep_->file, options, handle, &contents);
         gPerfCounters->Inc(ePerfBlockRead);
@@ -272,6 +274,8 @@ Iterator* Table::BlockReader(void* arg,
           }
         }
       }
+    } else if (options.nonblocking) {
+      s=Status::WouldBlock("Table::BlockReader 2 would block");
     } else {
       s = ReadBlock(table->rep_->file, options, handle, &contents);
         gPerfCounters->Inc(ePerfBlockRead);

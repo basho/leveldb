@@ -47,13 +47,13 @@ TableCache::~TableCache() {
 }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level,
-                             Cache::Handle** handle, bool is_compaction) {
+                             Cache::Handle** handle, const ReadOptions & options) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
-  if (*handle == NULL) {
+  if (*handle == NULL && !options.nonblocking) {
     std::string fname = TableFileName(dbname_, file_number, level);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
@@ -62,7 +62,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       s = Table::Open(*options_, file, file_size, &table);
 
       // Riak:  support opportunity to manage Linux page cache
-      if (is_compaction)
+      if (options.IsCompaction())
           file->SetForCompaction(file_size);
     }
 
@@ -86,10 +86,14 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
           cache_->Addref(*handle);
     }
   }
+  else if (NULL==*handle && options.nonblocking)
+  {
+      s=Status::WouldBlock("tablecache::FindTable would block");
+  }   // else
   else
   {
       // for Linux, let fadvise start precaching
-      if (is_compaction)
+      if (options.IsCompaction())
       {
           RandomAccessFile *file = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->file;
           file->SetForCompaction(file_size);
@@ -110,7 +114,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   }
 
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, level, &handle, options.IsCompaction());
+  Status s = FindTable(file_number, file_size, level, &handle, options);
 
   if (!s.ok()) {
     return NewErrorIterator(s);
@@ -133,7 +137,7 @@ Status TableCache::Get(const ReadOptions& options,
                        void* arg,
                        bool (*saver)(void*, const Slice&, const Slice&)) {
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, level, &handle);
+  Status s = FindTable(file_number, file_size, level, &handle, options);
 
   if (s.ok()) {
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;

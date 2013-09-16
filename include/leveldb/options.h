@@ -178,10 +178,17 @@ struct ReadOptions {
   // Default: NULL
   const Snapshot* snapshot;
 
+  // Riak specific flag:  Perform a Get operations, but fail if
+  //  with status.WouldBlock() if a disk operation would be 
+  //  required to complete
+  bool nonblocking;
+
+
   ReadOptions()
   : verify_checksums(true),
       fill_cache(true),
       snapshot(NULL),
+      nonblocking(false),
       is_compaction(false),
       env(NULL),
       info_log(NULL)
