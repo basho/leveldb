@@ -1834,12 +1834,12 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     return true;
   } else if (in == "file-cache") {
     char buf[50];
-    snprintf(buf, sizeof(buf), "%" PRIu64, double_cache.GetCapacity(true));
+    snprintf(buf, sizeof(buf), "%zd", double_cache.GetCapacity(true));
     value->append(buf);
     return true;
   } else if (in == "block-cache") {
     char buf[50];
-    snprintf(buf, sizeof(buf), "%" PRIu64, double_cache.GetCapacity(false));
+    snprintf(buf, sizeof(buf), "%zd", double_cache.GetCapacity(false));
     value->append(buf);
     return true;
   } else if (-1!=gPerfCounters->LookupCounter(in.ToString().c_str())) {

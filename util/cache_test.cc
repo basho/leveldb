@@ -135,7 +135,7 @@ TEST(CacheTest, EntriesArePinned) {
 TEST(CacheTest, EvictionPolicy) {
   Insert(100, 101);
   Insert(200, 201);
-#if 0  // cache switched from lru to fifo ... matthewv Feb 5, 2013
+#if 1  // cache switched from lru to fifo ... matthewv Feb 5, 2013
   // Frequently used entry must be kept around
   for (int i = 0; i < kCacheSize + 100; i++) {
     Insert(1000+i, 2000+i);
