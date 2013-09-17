@@ -1590,7 +1590,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
-      // server may have been busy since previous write, 
+      // server may have been busy since previous write,
       //  use only the remaining time as throttle
       now=env_->NowMicros();
 
@@ -2028,7 +2028,7 @@ DBImpl::VerifyLevels()
 
 
   // spinlock access to write buffers
-void 
+void
 DBImpl::RefAccess(MemTable ** mem, MemTable ** imm, Version ** version)
 {
     SpinLock lock(&m_RefLock);
@@ -2051,7 +2051,7 @@ DBImpl::RefAccess(MemTable ** mem, MemTable ** imm, Version ** version)
     }   // if
 }   // RefAccess
 
-void 
+void
 DBImpl::UnrefAccess(MemTable ** mem, MemTable ** imm, Version ** version)
 {
     SpinLock lock(&m_RefLock);
@@ -2076,7 +2076,7 @@ DBImpl::UnrefAccess(MemTable ** mem, MemTable ** imm, Version ** version)
 }   // UnrefAccess
 
 // static version
-void 
+void
 DBImpl::UnrefAccess(MemTable ** mem, MemTable ** imm, Version ** version, port::Spin * spin)
 {
     SpinLock lock(spin);
@@ -2100,7 +2100,7 @@ DBImpl::UnrefAccess(MemTable ** mem, MemTable ** imm, Version ** version, port::
     }   // if
 }   // UnrefAccess
 
-void 
+void
 DBImpl::RotateWriteBufs()
 {
     // imm2 known to be NULL
@@ -2112,13 +2112,14 @@ DBImpl::RotateWriteBufs()
     mem2_->Ref();
 }
 
-void 
+void
 DBImpl::ReleasePendingWriteBuf()
 {
     assert(NULL!=imm2_);
     SpinLock lock(&m_RefLock);
     has_imm_.Release_Store(NULL);
-    imm2_->Unref();
+    imm2_->Unref();  // RefAccess call
+    imm2_->Unref();  // original RotateWriteBufs call
     imm2_=NULL;
 }
 
