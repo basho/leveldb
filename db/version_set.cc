@@ -12,12 +12,13 @@
 #include "db/memtable.h"
 #include "db/table_cache.h"
 #include "leveldb/env.h"
+#include "leveldb/perf_count.h"
 #include "leveldb/table_builder.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/logging.h"
-#include "leveldb/perf_count.h"
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
@@ -90,8 +91,11 @@ Version::~Version() {
   assert(refs_ == 0);
 
   // Remove from linked list
-  prev_->next_ = next_;
-  next_->prev_ = prev_;
+  {
+      SpinLock lock(vset_->version_spinlock());
+      prev_->next_ = next_;
+      next_->prev_ = prev_;
+  }
 
   // Drop references to files
   for (int level = 0; level < config::kNumLevels; level++) {
@@ -446,14 +450,13 @@ bool Version::UpdateStats(const GetStats& stats) {
 }
 
 void Version::Ref() {
-  ++refs_;
+    __sync_add_and_fetch(&refs_,1);
 }
 
 void Version::Unref() {
   assert(this != &vset_->dummy_versions_);
   assert(refs_ >= 1);
-  --refs_;
-  if (refs_ == 0) {
+  if (0==__sync_sub_and_fetch(&refs_,1)) {
     delete this;
   }
 }
@@ -818,10 +821,8 @@ VersionSet::VersionSet(const std::string& dbname,
 }
 
 VersionSet::~VersionSet() {
-  // must remove second ref counter that keeps overlapped files locked
-  //  table cache
-
   current_->Unref();
+
   assert(dummy_versions_.next_ == &dummy_versions_);  // List must be empty
   delete descriptor_log_;
   delete descriptor_file_;
@@ -829,19 +830,30 @@ VersionSet::~VersionSet() {
 
 void VersionSet::AppendVersion(Version* v) {
   // Make "v" current
+  Version * old_cur;
+
   assert(v->refs_ == 0);
   assert(v != current_);
-  if (current_ != NULL) {
-    current_->Unref();
-  }
-  current_ = v;
-  v->Ref();
 
-  // Append to linked list
-  v->prev_ = dummy_versions_.prev_;
-  v->next_ = &dummy_versions_;
-  v->prev_->next_ = v;
-  v->next_->prev_ = v;
+  {
+    SpinLock lock(version_spinlock());
+
+    old_cur=current_;
+    current_ = v;
+    v->Ref();
+
+    // Append to linked list
+    v->prev_ = dummy_versions_.prev_;
+    v->next_ = &dummy_versions_;
+    v->prev_->next_ = v;
+    v->next_->prev_ = v;
+  }
+
+  if (old_cur != NULL) {
+      old_cur->Unref();
+  }
+
+
 }
 
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {

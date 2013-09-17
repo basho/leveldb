@@ -24,13 +24,13 @@ class MemTable {
   explicit MemTable(const InternalKeyComparator& comparator);
 
   // Increase reference count.
-  void Ref() { ++refs_; }
-
+  void Ref() {
+    __sync_add_and_fetch(&refs_,1);
+  }
   // Drop reference count.  Delete if no more references exist.
   void Unref() {
-    --refs_;
-    assert(refs_ >= 0);
-    if (refs_ <= 0) {
+    assert(refs_ > 0);
+    if (0==__sync_sub_and_fetch(&refs_,1)) {
       delete this;
     }
   }

@@ -179,6 +179,10 @@ class VersionSet {
   // Return the current version.
   Version* current() const { return current_; }
 
+  // Control interaction between different versions that might
+  //  have simultaneous create/delete outside of mutex_
+  port::Spin * version_spinlock() {return &version_lock_; }
+
   // Return the current manifest file number
   uint64_t ManifestFileNumber() const { return manifest_file_number_; }
 
@@ -315,6 +319,8 @@ class VersionSet {
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
+
+  port::Spin version_lock_; // control current / dummy_version_ access outside mutex_
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
 

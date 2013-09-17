@@ -2031,21 +2031,24 @@ DBImpl::VerifyLevels()
 void
 DBImpl::RefAccess(MemTable ** mem, MemTable ** imm, Version ** version)
 {
-    SpinLock lock(&m_RefLock);
-    if (NULL!=mem)
     {
-        *mem=mem2_;
-        if (NULL!=mem2_) mem2_->Ref();
-    }   // if
+        SpinLock lock(&m_RefLock);
+        if (NULL!=mem)
+        {
+            *mem=mem2_;
+            if (NULL!=mem2_) mem2_->Ref();
+        }   // if
 
-    if (NULL!=imm)
-    {
-        *imm=imm2_;
-        if (NULL!=imm2_) imm2_->Ref();
-    }   // if
+        if (NULL!=imm)
+        {
+            *imm=imm2_;
+            if (NULL!=imm2_) imm2_->Ref();
+        }   // if
+    }   // lock
 
     if (NULL!=version)
     {
+        SpinLock lock(versions_->version_spinlock());
         *version=versions_->current();
         if (NULL!=*version) versions_->current()->Ref();
     }   // if
