@@ -64,6 +64,7 @@ class DBImpl : public DB {
   int64_t TEST_MaxNextLevelOverlappingBytes();
 
   void ResizeCaches() {double_cache.ResizeCaches();};
+  size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
 
  private:
   friend class DB;

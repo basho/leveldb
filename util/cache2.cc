@@ -436,6 +436,13 @@ DoubleCache::GetCapacity(
             ret_val=(2*1024*1024);
     }   // else
 
+    // fixed allocation for recovery log and info LOG: 20M each
+    //  (with 64 or open databases, this is a serious number)
+    if (40*1024*1024L < ret_val)
+        ret_val-=40*1024*1024L;
+    else
+        ret_val=0;
+
     return(ret_val);
 
 }   // DoubleCache::GetCapacity

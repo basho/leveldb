@@ -198,7 +198,8 @@ DBImpl::~DBImpl() {
   mutex_.Unlock();
 
   // make sure flex cache knows this db is gone
-  gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
+  //   but we do not know the current size ... give 0
+  gFlexCache.SetTotalMemory(0);
 
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
@@ -1905,7 +1906,15 @@ Status DB::Open(const Options& options, const std::string& dbname,
   DBImpl* impl = new DBImpl(options, dbname);
   impl->mutex_.Lock();
   VersionEdit edit;
-  Status s = impl->Recover(&edit); // Handles create_if_missing, error_if_exists
+  Status s;
+
+  // 8 files at 4Mbytes and 2Mbytes of block cache
+  if (impl->GetCacheCapacity() < 34*1024*1024L)
+      s=Status::InvalidArgument("Less than 34Mbytes per database/vnode");
+
+  if (s.ok())
+      s = impl->Recover(&edit); // Handles create_if_missing, error_if_exists
+
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
