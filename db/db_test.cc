@@ -1460,6 +1460,7 @@ TEST(DBTest, DBOpen_Options) {
   DB* db = NULL;
   Options opts;
   opts.create_if_missing = false;
+  opts.total_leveldb_mem=200*1024*1024L;  // this will be second open db ... need more ram
   Status s = DB::Open(opts, dbname, &db);
   ASSERT_TRUE(strstr(s.ToString().c_str(), "does not exist") != NULL);
   ASSERT_TRUE(db == NULL);
