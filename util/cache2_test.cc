@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "leveldb/cache.h"
+//
+// Google's cache_test.cc modified to support Riak DoubleCache
+//
 
 #include <vector>
+
+#include "util/cache2.h"
 #include "util/coding.h"
 #include "util/testharness.h"
 
@@ -26,7 +30,7 @@ static int DecodeValue(void* v) { return reinterpret_cast<uintptr_t>(v); }
 class CacheTest {
  public:
   static CacheTest* current_;
-
+   
   static void Deleter(const Slice& key, void* v) {
     current_->deleted_keys_.push_back(DecodeKey(key));
     current_->deleted_values_.push_back(DecodeValue(v));
@@ -35,14 +39,19 @@ class CacheTest {
   static const int kCacheSize = 1000;
   std::vector<int> deleted_keys_;
   std::vector<int> deleted_values_;
+  Options options_;
+
+  DoubleCache double_cache_;
+
   Cache* cache_;
 
-  CacheTest() : cache_(NewLRUCache(kCacheSize)) {
+  CacheTest() 
+     : double_cache_(options_)
+  {
     current_ = this;
   }
 
   ~CacheTest() {
-    delete cache_;
   }
 
   int Lookup(int key) {
