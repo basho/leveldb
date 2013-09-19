@@ -71,8 +71,8 @@ main(
         // sst file
         else
         {
-            leveldb::DoubleCache double_cache(false);
             leveldb::Options options;
+            leveldb::DoubleCache double_cache(options);
             leveldb::ReadOptions read_options;
             std::string table_name, dbname, path_temp;
             leveldb::Env * env;

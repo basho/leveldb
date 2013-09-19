@@ -54,10 +54,11 @@ FlexCache::FlexCache()
             m_TotalMemory=(limit.rlim_max - 1024*1024*1024L) / 2;
     }   // if
 
-    // create a default similar to Google's original
+    // create a default similar to Google's original,
+    //  but enough for 2 vnodes including Riak default buffer sizes
     else
     {
-        m_TotalMemory=80*1024*1024L;
+        m_TotalMemory=340*1024*1024L;
     }   // else
 
     return;
