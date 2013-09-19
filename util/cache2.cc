@@ -374,13 +374,14 @@ private:
  * Initialize cache pair based upon current conditions
  */
 DoubleCache::DoubleCache(
-    bool IsInternalDB)
-    : m_IsInternalDB(IsInternalDB)
+    const Options & options)
+    : m_IsInternalDB(options.is_internal_db), 
+      m_WriteBufferSize(options.write_buffer_size)
 {
     m_FileCache=new ShardedLRUCache2(*this, true);
     m_BlockCache=new ShardedLRUCache2(*this, false);
 
-    m_TotalAllocation=gFlexCache.GetDBCacheCapacity(IsInternalDB);
+    m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
 
 }   // DoubleCache::DoubleCache
 
@@ -416,7 +417,7 @@ size_t
 DoubleCache::GetCapacity(
     bool IsFileCache)
 {
-    size_t  ret_val;
+    size_t  ret_val, overhead;
 
     ret_val=0;
 
@@ -438,8 +439,10 @@ DoubleCache::GetCapacity(
 
     // fixed allocation for recovery log and info LOG: 20M each
     //  (with 64 or open databases, this is a serious number)
-    if (40*1024*1024L < ret_val)
-        ret_val-=40*1024*1024L;
+    // and fixed allocation for two write buffers
+    overhead=m_WriteBufferSize*2 + 40*1024*1024L;
+    if (overhead < ret_val)
+        ret_val-=overhead;
     else
         ret_val=0;
 

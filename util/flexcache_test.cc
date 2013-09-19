@@ -45,6 +45,7 @@ TEST(FlexCacheTest, UserSizing) {
     options.create_if_missing=true;
     options.filter_policy=NewBloomFilterPolicy2(16);
     options.total_leveldb_mem=300*1024*1024L;
+    options.write_buffer_size=4*1024*1024L;
 
     // verify accounting with one database
     dbname = test::TmpDir() + "/flexcache0";
@@ -53,10 +54,10 @@ TEST(FlexCacheTest, UserSizing) {
     ASSERT_EQ(1, DBList()->GetDBCount(false));
 
     db[0]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(260*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(252*1024*1024l, atoi(value.c_str()));
 
     db[0]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(258*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(250*1024*1024L, atoi(value.c_str()));
 
     // verify accounting with three databases
     dbname = test::TmpDir() + "/flexcache1";
@@ -68,32 +69,32 @@ TEST(FlexCacheTest, UserSizing) {
     ASSERT_EQ(3, DBList()->GetDBCount(false));
 
     db[0]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(60*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(52*1024*1024l, atoi(value.c_str()));
 
     db[0]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(58*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(50*1024*1024L, atoi(value.c_str()));
 
     db[1]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(60*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(52*1024*1024l, atoi(value.c_str()));
 
     db[1]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(58*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(50*1024*1024L, atoi(value.c_str()));
 
     db[2]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(60*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(52*1024*1024l, atoi(value.c_str()));
 
     db[2]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(58*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(50*1024*1024L, atoi(value.c_str()));
 
     // verify accounting after two databases go away
     delete db[0];
     delete db[2];
 
     db[1]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(260*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(252*1024*1024l, atoi(value.c_str()));
 
     db[1]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(258*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(250*1024*1024L, atoi(value.c_str()));
 
     // rebuild from zero to ten databases, verify accounting
     delete db[1];
@@ -111,10 +112,10 @@ TEST(FlexCacheTest, UserSizing) {
     for(loop=0; loop<10; ++loop)
     {
         db[loop]->GetProperty("leveldb.block-cache", &value);
-        ASSERT_EQ(260*1024*1024l, atoi(value.c_str()));
+        ASSERT_EQ(252*1024*1024l, atoi(value.c_str()));
 
         db[loop]->GetProperty("leveldb.file-cache", &value);
-        ASSERT_EQ(258*1024*1024L, atoi(value.c_str()));
+        ASSERT_EQ(250*1024*1024L, atoi(value.c_str()));
     }   // for
 
     for (loop=0; loop<10; ++loop)
@@ -138,6 +139,7 @@ TEST(FlexCacheTest, MixedSizing) {
     options.create_if_missing=true;
     options.filter_policy=NewBloomFilterPolicy2(16);
     options.total_leveldb_mem=300*1024*1024L;
+    options.write_buffer_size=4*1024*1024L;
 
     // verify accounting with one user & one internal
     dbname = test::TmpDir() + "/flexcache0";
@@ -147,10 +149,10 @@ TEST(FlexCacheTest, MixedSizing) {
     ASSERT_EQ(0, DBList()->GetDBCount(true));
 
     db[0]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(260*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(252*1024*1024l, atoi(value.c_str()));
 
     db[0]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(258*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(250*1024*1024L, atoi(value.c_str()));
 
     // raise memory and add internal
     dbname = test::TmpDir() + "/flexcache1";
@@ -162,25 +164,25 @@ TEST(FlexCacheTest, MixedSizing) {
     ASSERT_EQ(1, DBList()->GetDBCount(true));
 
     db[0]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(440*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(432*1024*1024l, atoi(value.c_str()));
 
     db[0]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(438*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(430*1024*1024L, atoi(value.c_str()));
 
     db[1]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(80*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(72*1024*1024l, atoi(value.c_str()));
 
     db[1]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(78*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(70*1024*1024L, atoi(value.c_str()));
 
     delete db[0];
     ASSERT_EQ(0, DBList()->GetDBCount(false));
     ASSERT_EQ(1, DBList()->GetDBCount(true));
     db[1]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(80*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(72*1024*1024l, atoi(value.c_str()));
 
     db[1]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(78*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(70*1024*1024L, atoi(value.c_str()));
 
     delete db[1];
 
@@ -205,18 +207,18 @@ TEST(FlexCacheTest, MixedSizing) {
         if (0==(loop %2))
         {
             db[loop]->GetProperty("leveldb.block-cache", &value);
-            ASSERT_EQ(440*1024*1024l, atoi(value.c_str()));
+            ASSERT_EQ(432*1024*1024l, atoi(value.c_str()));
 
             db[loop]->GetProperty("leveldb.file-cache", &value);
-            ASSERT_EQ(438*1024*1024L, atoi(value.c_str()));
+            ASSERT_EQ(430*1024*1024L, atoi(value.c_str()));
         }   // if
         else
         {
             db[loop]->GetProperty("leveldb.block-cache", &value);
-            ASSERT_EQ(80*1024*1024l, atoi(value.c_str()));
+            ASSERT_EQ(72*1024*1024l, atoi(value.c_str()));
 
             db[loop]->GetProperty("leveldb.file-cache", &value);
-            ASSERT_EQ(78*1024*1024L, atoi(value.c_str()));
+            ASSERT_EQ(70*1024*1024L, atoi(value.c_str()));
         }   // else
     }   // for
 

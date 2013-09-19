@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include "leveldb/cache.h"
+#include "leveldb/options.h"
 #include "leveldb/slice.h"
 #include "util/flexcache.h"
 
@@ -40,7 +41,7 @@ class ShardedLRUCache2;
 class DoubleCache
 {
 public:
-    explicit DoubleCache(bool IsInternalDb);
+    explicit DoubleCache(const Options & options);
     virtual ~DoubleCache();
 
     Cache * GetFileCache() {return((Cache *)m_FileCache);};
@@ -53,8 +54,9 @@ protected:
     ShardedLRUCache2 * m_FileCache;   //!< file cache used by db/tablecache.cc
     ShardedLRUCache2 * m_BlockCache;  //!< used by table/table.cc
 
+    bool m_IsInternalDB;        //!< internal db gets smaller allocation from FlexCache
+    size_t m_WriteBufferSize;   //!< reduce from allocation to better estimate limits
     size_t m_TotalAllocation;
-    bool m_IsInternalDB;  //!< internal db gets smaller allocation from FlexCache
 
 private:
     DoubleCache();                       //!< no default constructor

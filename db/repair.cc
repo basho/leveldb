@@ -45,7 +45,7 @@ namespace {
 class Repairer {
  public:
   Repairer(const std::string& dbname, const Options& options)
-      : double_cache_(options.is_internal_db),
+      : double_cache_(options),
         dbname_(dbname),
         env_(options.env),
         icmp_(options.comparator),
