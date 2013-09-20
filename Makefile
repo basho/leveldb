@@ -35,6 +35,7 @@ TESTS = \
 	bloom_test \
 	c_test \
 	cache_test \
+	cache2_test \
 	coding_test \
 	corruption_test \
 	crc32c_test \
@@ -129,6 +130,9 @@ c_test: db/c_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 cache_test: util/cache_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) util/cache_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+cache2_test: util/cache2_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) util/cache2_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
 coding_test: util/coding_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) util/coding_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)

@@ -55,7 +55,7 @@ protected:
     ShardedLRUCache2 * m_BlockCache;  //!< used by table/table.cc
 
     bool m_IsInternalDB;        //!< internal db gets smaller allocation from FlexCache
-    size_t m_WriteBufferSize;   //!< reduce from allocation to better estimate limits
+    size_t m_Overhead;          //!< reduce from allocation to better estimate limits
     size_t m_TotalAllocation;
 
 private:

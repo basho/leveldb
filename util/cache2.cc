@@ -375,13 +375,21 @@ private:
  */
 DoubleCache::DoubleCache(
     const Options & options)
-    : m_IsInternalDB(options.is_internal_db), 
-      m_WriteBufferSize(options.write_buffer_size)
+    : m_IsInternalDB(options.is_internal_db)
 {
     m_FileCache=new ShardedLRUCache2(*this, true);
     m_BlockCache=new ShardedLRUCache2(*this, false);
 
+    // fixed allocation for recovery log and info LOG: 20M each
+    //  (with 64 or open databases, this is a serious number)
+    // and fixed allocation for two write buffers
+    m_Overhead=options.write_buffer_size*2 + 40*1024*1024L;
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
+
+    if (m_Overhead < m_TotalAllocation)
+        m_TotalAllocation -= m_Overhead;
+    else
+        m_TotalAllocation=0;
 
 }   // DoubleCache::DoubleCache
 
@@ -400,8 +408,13 @@ DoubleCache::~DoubleCache()
 void
 DoubleCache::ResizeCaches()
 {
-    // worst case is size reduction, take from block cache first
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
+    if (m_Overhead < m_TotalAllocation)
+        m_TotalAllocation -= m_Overhead;
+    else
+        m_TotalAllocation=0;
+
+    // worst case is size reduction, take from block cache first
     m_BlockCache->Resize();
     m_FileCache->Resize();
 
@@ -417,34 +430,38 @@ size_t
 DoubleCache::GetCapacity(
     bool IsFileCache)
 {
-    size_t  ret_val, overhead;
+    size_t  ret_val;
 
     ret_val=0;
 
-    // file capacity is "fixed", it is always the entire
-    //  cache allocation less minimum block size
-    if (IsFileCache)
+    if (2*1024*1024L < m_TotalAllocation)
     {
-        ret_val=m_TotalAllocation - (2*1024*1024);
+        // file capacity is "fixed", it is always the entire
+        //  cache allocation less minimum block size
+        if (IsFileCache)
+        {
+            ret_val=m_TotalAllocation - (2*1024*1024);
+        }   // if
+
+        // block cache capacity is whatever file cache is not
+        //  not using, or its minimum ... whichever is larger
+        else
+        {
+            size_t temp;
+
+            // usage could vary between two calls, 
+            //   get it once and use same twice
+            temp=m_FileCache->GetUsage();
+
+            if (temp<m_TotalAllocation)
+            {
+                ret_val=m_TotalAllocation - temp;
+
+                if (ret_val < (2*1024*1024))
+                    ret_val=(2*1024*1024);
+            }   // if
+        }   // else
     }   // if
-
-    // block cache capacity is whatever file cache is not
-    //  not using, or its minimum ... whichever is larger
-    else
-    {
-        ret_val=m_TotalAllocation - m_FileCache->GetUsage();
-        if (ret_val < (2*1024*1024))
-            ret_val=(2*1024*1024);
-    }   // else
-
-    // fixed allocation for recovery log and info LOG: 20M each
-    //  (with 64 or open databases, this is a serious number)
-    // and fixed allocation for two write buffers
-    overhead=m_WriteBufferSize*2 + 40*1024*1024L;
-    if (overhead < ret_val)
-        ret_val-=overhead;
-    else
-        ret_val=0;
 
     return(ret_val);
 
@@ -471,47 +488,36 @@ void LRUCache2::Unref(LRUHandle2* e) {
 Cache::Handle* LRUCache2::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
-  SpinLock l(&spin_);
 
-  LRUHandle2* e = reinterpret_cast<LRUHandle2*>(
-      malloc(sizeof(LRUHandle2)-1 + key.size()));
-  e->value = value;
-  e->deleter = deleter;
-  e->charge = charge;
-  e->key_length = key.size();
-  e->hash = hash;
-  e->refs = 2;  // One from LRUCache2, one for the returned handle
-  memcpy(e->key_data, key.data(), key.size());
-  LRU_Append(e);
-  add_and_fetch(parent_->GetUsagePtr(), (uint64_t)charge);
-//  usage_ += charge;
+    LRUHandle2* e = reinterpret_cast<LRUHandle2*>(
+        malloc(sizeof(LRUHandle2)-1 + key.size()));
 
-  LRUHandle2* old = table_.Insert(e);
-  if (old != NULL) {
-    LRU_Remove(old);
-    Unref(old);
-  }
+    e->value = value;
+    e->deleter = deleter;
+    e->charge = charge;
+    e->key_length = key.size();
+    e->hash = hash;
+    e->refs = 2;  // One from LRUCache2, one for the returned handle
+    memcpy(e->key_data, key.data(), key.size());
 
-  // Riak - matthewv: code added to remove old only if it was not active.
-  //  Had scenarios where file cache would be largely or totally drained
-  //  because an active object does NOT reduce usage_ upon delete.  So
-  //  the previous while loop would basically delete everything.
-  LRUHandle2 * next, * cursor;
+    {
+        SpinLock l(&spin_);
 
-  for (cursor=lru_.next; parent_->GetUsage() > parent_->GetCapacity() && cursor != &lru_; cursor=next)
-  {
-      // take next pointer before potentially destroying cursor
-      next=cursor->next;
+        LRU_Append(e);
+        add_and_fetch(parent_->GetUsagePtr(), (uint64_t)charge);
 
-      // only delete cursor if it will actually destruct and
-      //   return value to usage_
-      if (cursor->refs <= 1)
-      {
-          LRU_Remove(cursor);
-          table_.Remove(cursor->key(), cursor->hash);
-          Unref(cursor);
-      }   // if
-  }   // for
+        LRUHandle2* old = table_.Insert(e);
+        if (old != NULL) {
+            LRU_Remove(old);
+            Unref(old);
+        }
+    }   // SpinLock
+
+    // call parent to rebalance across all shards, not just this one
+    if (parent_->GetCapacity() <parent_->GetUsage())
+    {
+        parent_->Resize();
+    }   // if
 
   return reinterpret_cast<Cache::Handle*>(e);
 }

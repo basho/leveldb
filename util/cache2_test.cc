@@ -36,7 +36,8 @@ class CacheTest {
     current_->deleted_values_.push_back(DecodeValue(v));
   }
 
-  static const int kCacheSize = 1000;
+  static const int kOneMeg = 1024*1024L;
+  static const int kCacheSize = 180;    // 180Mbytes is default
   std::vector<int> deleted_keys_;
   std::vector<int> deleted_values_;
   Options options_;
@@ -44,11 +45,14 @@ class CacheTest {
   DoubleCache double_cache_;
 
   Cache* cache_;
+  Cache* file_;
 
   CacheTest() 
      : double_cache_(options_)
   {
     current_ = this;
+    cache_=double_cache_.GetBlockCache();
+    file_=double_cache_.GetFileCache();
   }
 
   ~CacheTest() {
@@ -65,6 +69,11 @@ class CacheTest {
 
   void Insert(int key, int value, int charge = 1) {
     cache_->Release(cache_->Insert(EncodeKey(key), EncodeValue(value), charge,
+                                   &CacheTest::Deleter));
+  }
+
+  void InsertFile(int key, int value, int charge = 1) {
+    file_->Release(file_->Insert(EncodeKey(key), EncodeValue(value), charge,
                                    &CacheTest::Deleter));
   }
 
@@ -142,18 +151,16 @@ TEST(CacheTest, EntriesArePinned) {
 }
 
 TEST(CacheTest, EvictionPolicy) {
-  Insert(100, 101);
-  Insert(200, 201);
-#if 1  // cache switched from lru to fifo ... matthewv Feb 5, 2013
+  Insert(100, 101, kOneMeg);
+  Insert(200, 201, kOneMeg);
   // Frequently used entry must be kept around
   for (int i = 0; i < kCacheSize + 100; i++) {
-    Insert(1000+i, 2000+i);
+    Insert(1000+i, 2000+i, kOneMeg);
     ASSERT_EQ(2000+i, Lookup(1000+i));
     ASSERT_EQ(101, Lookup(100));
   }
   ASSERT_EQ(101, Lookup(100));
   ASSERT_EQ(-1, Lookup(200));
-#endif
 }
 
 TEST(CacheTest, HeavyEntries) {
@@ -166,7 +173,7 @@ TEST(CacheTest, HeavyEntries) {
   int index = 0;
   while (added < 2*kCacheSize) {
     const int weight = (index & 1) ? kLight : kHeavy;
-    Insert(index, 1000+index, weight);
+    Insert(index, 1000+index, weight*kOneMeg);
     added += weight;
     index++;
   }
@@ -176,11 +183,41 @@ TEST(CacheTest, HeavyEntries) {
     const int weight = (i & 1 ? kLight : kHeavy);
     int r = Lookup(i);
     if (r >= 0) {
-      cached_weight += weight;
+      cached_weight += weight*kOneMeg;
       ASSERT_EQ(1000+i, r);
     }
   }
-  ASSERT_LE(cached_weight, kCacheSize + kCacheSize/10);
+  ASSERT_LE(cached_weight, (kCacheSize + kCacheSize/10)*kOneMeg);
+}
+
+TEST(CacheTest, FlushedEntries) {
+  int added = 0;
+  int index = 0;
+  while (added < 2*kCacheSize) {
+    Insert(index, 1000+index, kOneMeg);
+    added += 1;
+    index++;
+  }
+
+  added=0;
+  while (added < kCacheSize/2) {
+    InsertFile(index, 1000+index, kOneMeg);
+    added += 1;
+    index++;
+  }
+
+  // one insert to block cache should rebalance both
+  Insert(index, 1000+index, kOneMeg);
+
+  int cached_weight = 0;
+  for (int i = 0; i < index; i++) {
+    int r = Lookup(i);
+    if (r >= 0) {
+      cached_weight += 1;
+      ASSERT_EQ(1000+i, r);
+    }
+  }
+  ASSERT_LE(cached_weight, (kCacheSize/2 + kCacheSize/10));
 }
 
 TEST(CacheTest, NewId) {
