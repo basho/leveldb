@@ -30,7 +30,7 @@ static int DecodeValue(void* v) { return reinterpret_cast<uintptr_t>(v); }
 class CacheTest {
  public:
   static CacheTest* current_;
-   
+
   static void Deleter(const Slice& key, void* v) {
     current_->deleted_keys_.push_back(DecodeKey(key));
     current_->deleted_values_.push_back(DecodeValue(v));
@@ -47,7 +47,7 @@ class CacheTest {
   Cache* cache_;
   Cache* file_;
 
-  CacheTest() 
+  CacheTest()
      : double_cache_(options_)
   {
     current_ = this;
@@ -219,6 +219,76 @@ TEST(CacheTest, FlushedEntries) {
   }
   ASSERT_LE(cached_weight, (kCacheSize/2 + kCacheSize/10));
 }
+
+TEST(CacheTest, FileCacheExpire) {
+    time_t expire_default;
+    size_t beginning_size;
+
+    double_cache_.Flush();
+    expire_default=double_cache_.GetFileTimeout();
+
+    // quick two second timeout
+    double_cache_.SetFileTimeout(2);
+
+    // what is block cache's starting size
+    beginning_size=double_cache_.GetCapacity(false);
+
+    // add bunch of stuff to file cache
+    int added = 0;
+    int index = 0;
+    while (added < kCacheSize/2) {
+        InsertFile(index, 1000+index, kOneMeg);
+        added += 1;
+        index++;
+    }   // while
+
+    // did file cache take away?
+    ASSERT_EQ(beginning_size-(kCacheSize/2)*kOneMeg, double_cache_.GetCapacity(false));
+
+    // sleep two seconds
+    Env::Default()->SleepForMicroseconds(2000000);
+
+    // force time purge
+    double_cache_.PurgeExpiredFiles();
+
+    ASSERT_EQ(beginning_size, double_cache_.GetCapacity(false));
+
+    // add bunch of stuff to file cache with 2 second timeout
+    added = 0;
+    index = 0;
+    while (added < kCacheSize/4) {
+        InsertFile(index, 1000+index, kOneMeg);
+        added += 1;
+        index++;
+    }   // while
+
+    // add bunch of stuff to file cache with 5 second timeout
+    double_cache_.SetFileTimeout(5);
+    while (added < kCacheSize/2) {
+        InsertFile(index, 1000+index, kOneMeg);
+        added += 1;
+        index++;
+    }   // while
+
+    // did file cache take away?
+    ASSERT_EQ(beginning_size-(kCacheSize/2)*kOneMeg, double_cache_.GetCapacity(false));
+
+    // sleep two seconds
+    Env::Default()->SleepForMicroseconds(2000000);
+
+    // force time purge
+    double_cache_.PurgeExpiredFiles();
+
+    // did only half get purged
+    ASSERT_EQ(beginning_size-(kCacheSize/4)*kOneMeg, double_cache_.GetCapacity(false));
+
+    // reset timeout to default
+    double_cache_.SetFileTimeout(expire_default);
+
+    return;
+
+}   // CacheTest::FileCacheExpire
+
 
 TEST(CacheTest, NewId) {
   uint64_t a = cache_->NewId();

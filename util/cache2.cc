@@ -13,6 +13,7 @@
 #include <stdlib.h>
 
 #include "leveldb/atomics.h"
+#include "leveldb/env.h"
 #include "util/cache2.h"
 #include "port/port.h"
 #include "util/hash.h"
@@ -20,7 +21,7 @@
 
 namespace leveldb {
 
-namespace {
+//namespace {
 
 // LRU cache implementation
 
@@ -36,6 +37,7 @@ struct LRUHandle2 {
   size_t key_length;
   uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
+  time_t expire_seconds; // zero (no expire) or time when this object expires
   char key_data[1];   // Beginning of key
 
   Slice key() const {
@@ -184,6 +186,15 @@ class LRUCache2 : public Cache {
   void SetParent(ShardedLRUCache2 * Parent, bool IsFileCache)
     {parent_=Parent; is_file_cache_=IsFileCache;};
 
+  LRUHandle2 * LRUHead() {return(&lru_);}
+
+  void LRUErase(LRUHandle2 * cursor)
+  {
+    LRU_Remove(cursor);
+    table_.Remove(cursor->key(), cursor->hash);
+    Unref(cursor);
+  }
+
  private:
   void LRU_Remove(LRUHandle2* e);
   void LRU_Append(LRUHandle2* e);
@@ -210,6 +221,7 @@ LRUCache2::LRUCache2()
   // Make empty circular linked list
   lru_.next = &lru_;
   lru_.prev = &lru_;
+  lru_.expire_seconds=0;
 }
 
 LRUCache2::~LRUCache2() {
@@ -235,16 +247,7 @@ void LRUCache2::LRU_Append(LRUHandle2* e) {
   e->next->prev = e;
 }
 
-Cache::Handle* LRUCache2::Lookup(const Slice& key, uint32_t hash) {
-  SpinLock l(&spin_);
-  LRUHandle2* e = table_.Lookup(key, hash);
-  if (e != NULL) {
-    e->refs++;
-    LRU_Remove(e);
-    LRU_Append(e);
-  }
-  return reinterpret_cast<Cache::Handle*>(e);
-}
+//Cache::Handle* LRUCache2::Lookup(const Slice& key, uint32_t hash);
 
 void LRUCache2::Release(Cache::Handle* handle) {
   SpinLock l(&spin_);
@@ -270,7 +273,7 @@ void LRUCache2::Erase(const Slice& key, uint32_t hash) {
   }
 }
 
-}  // end anonymous namespace
+//}  // end anonymous namespace
 
 
 static const int kNumShardBits = 4;
@@ -310,6 +313,7 @@ private:
   volatile uint64_t GetUsage() const {return(usage_);};
   volatile uint64_t * GetUsagePtr() {return(&usage_);};
   volatile uint64_t GetCapacity() {return(parent_.GetCapacity(is_file_cache_));}
+  time_t GetFileTimeout() {return(parent_.GetFileTimeout());};
 
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) {
@@ -367,6 +371,43 @@ private:
 
   } // ShardedLRUCache2::Resize
 
+  // Only used on file cache.  Remove entries that are too old
+  void PurgeExpiredFiles()
+  {
+      if (is_file_cache_)
+      {
+          int loop;
+          time_t now;
+
+          now=Env::Default()->NowMicros() / 1000000L;
+
+          SpinLock l(&id_spin_);  // release between shards to give access
+
+          for (loop=0; loop<kNumShards; ++loop)
+          {
+              LRUHandle2 * next, * cursor;
+
+              for (cursor=shard_[loop].LRUHead()->next;
+                   cursor->expire_seconds <= now && cursor != shard_[loop].LRUHead();
+                   cursor=next)
+              {
+                  // take next pointer before potentially destroying cursor
+                  next=cursor->next;
+
+                  // only delete cursor if it will actually destruct and
+                  //   return value to usage_
+                  if (cursor->refs <= 1 && 0!=cursor->expire_seconds)
+                  {
+                      shard_[loop].LRUErase(cursor);
+                  }   // if
+              }   // for
+          }   // for
+      }   // if
+
+      return;
+
+  } // ShardedLRUCache2::PurgeExpiredFiles
+
 };  //ShardedLRUCache2
 
 
@@ -375,10 +416,12 @@ private:
  */
 DoubleCache::DoubleCache(
     const Options & options)
-    : m_IsInternalDB(options.is_internal_db)
+    : m_FileCache(NULL), m_BlockCache(NULL),
+      m_IsInternalDB(options.is_internal_db),
+      m_FileTimeout(4*24*60*60)  // default is 4 days
 {
-    m_FileCache=new ShardedLRUCache2(*this, true);
-    m_BlockCache=new ShardedLRUCache2(*this, false);
+    // build two new caches
+    Flush();
 
     // fixed allocation for recovery log and info LOG: 20M each
     //  (with 64 or open databases, this is a serious number)
@@ -449,7 +492,7 @@ DoubleCache::GetCapacity(
         {
             size_t temp;
 
-            // usage could vary between two calls, 
+            // usage could vary between two calls,
             //   get it once and use same twice
             temp=m_FileCache->GetUsage();
 
@@ -466,6 +509,63 @@ DoubleCache::GetCapacity(
     return(ret_val);
 
 }   // DoubleCache::GetCapacity
+
+
+/**
+ * Wipe out existing caches (if any), create two new ones
+ */
+void
+DoubleCache::Flush()
+{
+    delete m_FileCache;
+    delete m_BlockCache;
+
+    m_FileCache=new ShardedLRUCache2(*this, true);
+    m_BlockCache=new ShardedLRUCache2(*this, false);
+
+    return;
+
+}   // DoubleCache::Flush
+
+
+/**
+ * Make room in block cache by killing off file cache
+ *  entries that have been unused for a while
+ */
+void
+DoubleCache::PurgeExpiredFiles()
+{
+    m_FileCache->PurgeExpiredFiles();
+
+    return;
+
+}   // DoubleCache::PurgExpiredFiles
+
+
+//
+// Definitions moved so they could access ShardedLRUCache members
+//  (subtle hint to Google that every object should have .h file
+//    because future reuse is unknowable ... and this ain't Java)
+//
+Cache::Handle* LRUCache2::Lookup(const Slice& key, uint32_t hash) {
+  SpinLock l(&spin_);
+  LRUHandle2* e = table_.Lookup(key, hash);
+  if (e != NULL) {
+    e->refs++;
+    LRU_Remove(e);
+    LRU_Append(e);
+
+    // establish time limit on files in file cache (like 4 days)
+    //  so they do not go stale and steal from block cache
+    if (is_file_cache_)
+    {
+        e->expire_seconds=Env::Default()->NowMicros() / 1000000L
+            + parent_->GetFileTimeout();
+    }   // if
+  }
+  return reinterpret_cast<Cache::Handle*>(e);
+}
+
 
 
 //
@@ -498,7 +598,16 @@ Cache::Handle* LRUCache2::Insert(
     e->key_length = key.size();
     e->hash = hash;
     e->refs = 2;  // One from LRUCache2, one for the returned handle
+    e->expire_seconds=0;
     memcpy(e->key_data, key.data(), key.size());
+
+    // establish time limit on files in file cache (like 4 days)
+    //  so they do not go stale and steal from block cache
+    if (is_file_cache_)
+    {
+        e->expire_seconds=Env::Default()->NowMicros() / 1000000L
+            + parent_->GetFileTimeout();
+    }   // if
 
     {
         SpinLock l(&spin_);
