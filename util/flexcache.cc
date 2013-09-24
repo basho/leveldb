@@ -48,17 +48,17 @@ FlexCache::FlexCache()
     if (0==ret_val && RLIM_INFINITY!=limit.rlim_max)
     {
         // 2Gig is "small ram", Riak going to be tight
-        if (limit.rlim_max < 2*1024*1024*1024L)
-            m_TotalMemory=256*1024*1024L;
+       if (limit.rlim_max < flex::kRlimSizeIsSmall)
+            m_TotalMemory=flex::kRlimSmall;
         else
-            m_TotalMemory=(limit.rlim_max - 1024*1024*1024L) / 2;
+            m_TotalMemory=(limit.rlim_max - flex::kRlimLargeReserve) / 2;
     }   // if
 
     // create a default similar to Google's original,
     //  but enough for 2 vnodes including Riak default buffer sizes
     else
     {
-        m_TotalMemory=340*1024*1024L;
+        m_TotalMemory=flex::kDefaultMemory;
     }   // else
 
     return;
