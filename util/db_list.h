@@ -51,7 +51,7 @@ public:
    DBListImpl();
    virtual ~DBListImpl() {};
 
-   void AddDB(DBImpl *, bool is_internal);
+   bool AddDB(DBImpl *, bool is_internal);
    void ReleaseDB(DBImpl *, bool is_internal);
 
    size_t GetDBCount(bool is_internal);

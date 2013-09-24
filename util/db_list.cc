@@ -20,7 +20,6 @@
 //
 // -------------------------------------------------------------------
 
-#include <syslog.h>
 #include <algorithm>
 
 #include "util/db_list.h"
@@ -35,8 +34,6 @@ static DBListImpl * dblist=NULL;
 static void InitModule()
 {
     dblist=new DBListImpl;
-
-    syslog(LOG_ERR,"DBListImpl::InitModule");
 }   // InitModule
 
 
@@ -55,8 +52,6 @@ DBListShutdown()
     DBList();
     delete dblist;
 
-    syslog(LOG_ERR,"DBListImpl::DBListShutdown");
-
     return;
 
 }   // DBListShutdown
@@ -68,30 +63,25 @@ DBListImpl::DBListImpl()
 }   // DBListImpl::DBListImpl
 
 
-void
+bool
 DBListImpl::AddDB(
     DBImpl * Dbase,
     bool IsInternal)
 {
+    bool ret_flag;
+
     SpinLock lock(&m_Lock);
 
     if (IsInternal)
     {
-        if (m_InternalDBs.insert(Dbase).second)
-            syslog(LOG_ERR,"DBListImpl::AddDB succeeded");
-        else
-            syslog(LOG_ERR,"DBListImpl::AddDB failed");
-
+        ret_flag=m_InternalDBs.insert(Dbase).second;
     }   // if
     else
     {
-        if (m_UserDBs.insert(Dbase).second)
-            syslog(LOG_ERR,"DBListImpl::AddDB succeeded");
-        else
-            syslog(LOG_ERR,"DBListImpl::AddDB failed");
+        ret_flag=m_UserDBs.insert(Dbase).second;
     }   // else
 
-    return;
+    return(ret_flag);
 
 }   // DBListImpl::AddDB
 
@@ -110,11 +100,7 @@ DBListImpl::ReleaseDB(
         if (m_InternalDBs.end()!=it)
         {
             m_InternalDBs.erase(it);
-            syslog(LOG_ERR,"DBListImpl::ReleaseDB succeeded");
         }   // if
-        else
-            syslog(LOG_ERR,"DBListImpl::ReleaseDB failed");
-
     }   // if
     else
     {
@@ -122,11 +108,7 @@ DBListImpl::ReleaseDB(
         if (m_UserDBs.end()!=it)
         {
             m_UserDBs.erase(it);
-            syslog(LOG_ERR,"DBListImpl::ReleaseDB succeeded");
         }   // if
-        else
-            syslog(LOG_ERR,"DBListImpl::ReleaseDB failed");
-
     }   // else
 
     return;
@@ -185,9 +167,6 @@ DBListImpl::ScanDBs(
 
     return;
 
-}   // DBListImpl::AddDB
-
-
-
+}   // DBListImpl::ScanDBs
 
 }  // namespace leveldb
