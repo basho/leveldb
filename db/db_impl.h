@@ -65,6 +65,7 @@ class DBImpl : public DB {
 
   void ResizeCaches() {double_cache.ResizeCaches();};
   size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
+  void PurgeExpiredFileCache() {double_cache.PurgeExpiredFiles();};
 
  private:
   friend class DB;

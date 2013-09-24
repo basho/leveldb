@@ -49,6 +49,11 @@ public:
 
     void ResizeCaches();
     size_t GetCapacity(bool IsFileCache);
+    time_t GetFileTimeout() {return(m_FileTimeout);};
+    void SetFileTimeout(time_t Timeout) {m_FileTimeout=Timeout;};
+
+    void Flush();
+    void PurgeExpiredFiles();
 
 protected:
     ShardedLRUCache2 * m_FileCache;   //!< file cache used by db/tablecache.cc
@@ -57,6 +62,7 @@ protected:
     bool m_IsInternalDB;        //!< internal db gets smaller allocation from FlexCache
     size_t m_Overhead;          //!< reduce from allocation to better estimate limits
     size_t m_TotalAllocation;
+    time_t m_FileTimeout;       //!< seconds to allow file to stay cached.  default 4 days.
 
 private:
     DoubleCache();                       //!< no default constructor
