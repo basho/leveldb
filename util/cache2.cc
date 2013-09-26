@@ -513,6 +513,9 @@ DoubleCache::GetCapacity(
 
 /**
  * Wipe out existing caches (if any), create two new ones
+ *  WARNING:  this is really for UNIT TESTS.  DBImpl and TableCache
+ *  save a copy of the pointers below and will not know of a change.
+ *  The old pointer technology is holdover from original implementation.
  */
 void
 DoubleCache::Flush()

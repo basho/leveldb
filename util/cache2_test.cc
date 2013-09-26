@@ -58,6 +58,13 @@ class CacheTest {
   ~CacheTest() {
   }
 
+  void ResetCaches()
+  {
+    double_cache_.Flush();
+    cache_=double_cache_.GetBlockCache();
+    file_=double_cache_.GetFileCache();
+  }
+
   int Lookup(int key) {
     Cache::Handle* handle = cache_->Lookup(EncodeKey(key));
     const int r = (handle == NULL) ? -1 : DecodeValue(cache_->Value(handle));
@@ -224,7 +231,7 @@ TEST(CacheTest, FileCacheExpire) {
     time_t expire_default;
     size_t beginning_size;
 
-    double_cache_.Flush();
+    ResetCaches();
     expire_default=double_cache_.GetFileTimeout();
 
     // quick two second timeout
