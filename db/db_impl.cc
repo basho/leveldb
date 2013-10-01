@@ -198,8 +198,8 @@ DBImpl::~DBImpl() {
   mutex_.Unlock();
 
   // make sure flex cache knows this db is gone
-  //   but we do not know the current size ... give 0
-  gFlexCache.SetTotalMemory(0);
+  //  (must follow ReleaseDB() call ... see above)
+  gFlexCache.RecalculateAllocations();
 
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
@@ -212,9 +212,6 @@ DBImpl::~DBImpl() {
   if (owns_info_log_) {
     delete options_.info_log;
   }
-//  if (owns_cache_) {
-//    delete options_.block_cache;
-//  }
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
   }

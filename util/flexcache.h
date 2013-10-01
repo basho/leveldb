@@ -54,13 +54,13 @@ public:
 
     void SetTotalMemory(uint64_t Total);
 
-    uint64_t GetTotalMemory() const {return(m_TotalMemory);};
+    void RecalculateAllocations() {SetTotalMemory(0);};
 
+    uint64_t GetTotalMemory() const {return(m_TotalMemory);};
 
 protected:
 
     uint64_t m_TotalMemory; //!< complete memory assigned to all FlexCache clients
-
 
 };  // class FlexCache
 

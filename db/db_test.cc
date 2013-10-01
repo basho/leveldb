@@ -1589,7 +1589,7 @@ TEST(DBTest, BloomFilter) {
 
   env_->delay_sstable_sync_.Release_Store(NULL);
   Close();
-//  delete options.block_cache;
+  delete options.block_cache;
   delete options.filter_policy;
 }
 

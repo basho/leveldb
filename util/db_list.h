@@ -36,13 +36,6 @@ class DBListImpl
 protected:
    typedef std::set<DBImpl *> db_set_t;
 
-
-public:
-
-
-protected:
-   
-
    port::Spin m_Lock;      //!< thread protection for set
    db_set_t m_UserDBs;     //!< set of pointers for user db
    db_set_t m_InternalDBs; //!< Riak internal dbs
@@ -57,8 +50,6 @@ public:
    size_t GetDBCount(bool is_internal);
 
    void ScanDBs(bool is_internal, void (DBImpl::*)());
-protected:
-
 
 };  // class DBListImpl
 

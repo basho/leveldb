@@ -71,9 +71,6 @@ private:
 
 };  // class DoubleCache
 
-
-
-
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_UTIL_CACHE2_H_
