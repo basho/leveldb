@@ -249,7 +249,10 @@ class PosixMmapFile : public WritableFile {
               BGFileCloser2(ptr);
           }
           else
+          {
+              syslog(LOG_ERR, "UnmapCurrentRegion direct unmap %d", fd_);
               BGFileUnmapper2(ptr);
+          }   // else
       }   // if
 
       // called from user thread, move these operations to background
@@ -262,7 +265,10 @@ class PosixMmapFile : public WritableFile {
               Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
           }
           else
+          {
+              syslog(LOG_ERR, "UnmapCurrentRegion async unmap %d", fd_);
               Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
+          }   // else
       }   // else
 
       if (and_close)
@@ -512,6 +518,7 @@ class PosixEnv : public Env {
       }
 #endif
     } else {
+      syslog(LOG_ERR, "NewRandomAccessFile open %d (%s)", fd, fname.c_str());
       *result = new PosixRandomAccessFile(fname, fd);
     }
     return s;
@@ -525,6 +532,7 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
+      syslog(LOG_ERR, "NewWritableFile open %d (%s)", fd, fname.c_str());
       *result = new PosixMmapFile(fname, fd, page_size_, 0, false);
     }
     return s;
@@ -543,6 +551,7 @@ class PosixEnv : public Env {
       s = GetFileSize(fname, &size);
       if (s.ok())
       {
+          syslog(LOG_ERR, "NewAppendableFile open %d (%s)", fd, fname.c_str());
           *result = new PosixMmapFile(fname, fd, page_size_, size);
       }   // if
       else
@@ -562,6 +571,8 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
+        syslog(LOG_ERR, "NewWriteOnlyFile open %d (%s)", fd, fname.c_str());
+
       *result = new PosixMmapFile(fname, fd, page_size_, 0, true);
     }
     return s;
@@ -648,6 +659,7 @@ class PosixEnv : public Env {
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
       my_lock->name_ = fname;
+      syslog(LOG_ERR, "LockFile opened %d (%s)", my_lock->fd_, fname.c_str());
       *lock = my_lock;
     }
     return result;
@@ -662,6 +674,7 @@ class PosixEnv : public Env {
     gFileLocks.Remove(my_lock->name_);
     int ret_val=close(my_lock->fd_);
     syslog(LOG_ERR, "UnlockFile closed %d [%d]", my_lock->fd_, ret_val);
+    my_lock->fd_=-1;
 
     delete my_lock;
     return result;
@@ -1255,14 +1268,14 @@ void BGFileUnmapper2(void * arg)
         ret_val=fdatasync(file_ptr->fd_);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed on %d [%d, %m]", file_ptr->fd_, errno);
             err_flag=true;
         }  // if
 
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed on %d [%d]", file_ptr->fd_, ret_val);
             err_flag=true;
         }  // if
     }   // if
@@ -1271,7 +1284,7 @@ void BGFileUnmapper2(void * arg)
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed on %d [%d]", file_ptr->fd_, ret_val);
             err_flag=true;
         }  // if
     }   // else
