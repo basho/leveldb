@@ -23,6 +23,11 @@ Status BuildTable(const std::string& dbname,
                   FileMetaData* meta,
                   SequenceNumber smallest_snapshot) {
   Status s;
+  size_t keys_seen, keys_retired;
+
+  keys_seen=0;
+  keys_retired=0;
+
   meta->file_size = 0;
   iter->SeekToFirst();
 
@@ -39,6 +44,7 @@ Status BuildTable(const std::string& dbname,
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
+      ++keys_seen;
       Slice key = iter->key();
       if (!retire(key))
       {
@@ -46,6 +52,10 @@ Status BuildTable(const std::string& dbname,
           builder->Add(key, iter->value());
           ++meta->num_entries;
       }   // if
+      else
+      {
+          ++keys_retired;
+      }   // else
     }
 
     // Finish and check for builder errors
@@ -88,6 +98,13 @@ Status BuildTable(const std::string& dbname,
 
   if (s.ok() && meta->file_size > 0) {
     // Keep it
+      if (0!=keys_retired)
+      {
+          Log(options.info_log, "Level-0 table #%llu: %llu keys seen, %llu keys retired",
+              (unsigned long long) meta->number,
+              (unsigned long long) keys_seen,
+              (unsigned long long) keys_retired);
+      }   // if
   } else {
     env->DeleteFile(fname);
   }

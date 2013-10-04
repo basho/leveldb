@@ -1627,6 +1627,10 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   bool allow_delay = !force;
   Status s;
 
+  if (force)
+      Log(options_.info_log,
+          "\"force\" parameter passed to MakeRoomForWrite");
+
   // hint to background compaction.
   level0_good=(versions_->NumLevelFiles(0) < (int)config::kL0_CompactionTrigger);
 
@@ -1673,6 +1677,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "running...\n");
     } else {
       // Attempt to switch to a new memtable and trigger compaction of old
+        Log(options_.info_log, "Level-0 created at %llu with threshold of %llu",
+            (long long unsigned)mem_->ApproximateMemoryUsage(),
+            (long long unsigned)options_.write_buffer_size);
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = NULL;

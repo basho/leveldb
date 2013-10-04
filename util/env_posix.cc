@@ -131,7 +131,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
 #endif
       }   // if
 
-      close(fd_);
+     int ret_val=close(fd_);
+     syslog(LOG_ERR, "~PosixRandomAccessFile closed %d [%d]", fd_, ret_val);
+
   }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -242,7 +244,10 @@ class PosixMmapFile : public WritableFile {
       if (!is_write_only_)
       {
           if (and_close)
+          {
+              syslog(LOG_ERR, "UnmapCurrentRegion direct close %d", fd_);
               BGFileCloser2(ptr);
+          }
           else
               BGFileUnmapper2(ptr);
       }   // if
@@ -252,7 +257,10 @@ class PosixMmapFile : public WritableFile {
       else
       {
           if (and_close)
+          {
+              syslog(LOG_ERR, "UnmapCurrentRegion async close %d", fd_);
               Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
+          }
           else
               Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
       }   // else
@@ -273,7 +281,8 @@ class PosixMmapFile : public WritableFile {
     }
     else if (and_close && -1!=fd_)
     {
-        close(fd_);
+        int ret_val=close(fd_);
+        syslog(LOG_ERR, "UnmapCurrentRegion closed %d [%d, %d]", fd_, ret_val, (int)is_write_only_);
         fd_=-1;
     }   // else if
 
@@ -651,7 +660,9 @@ class PosixEnv : public Env {
       result = IOError("unlock", errno);
     }
     gFileLocks.Remove(my_lock->name_);
-    close(my_lock->fd_);
+    int ret_val=close(my_lock->fd_);
+    syslog(LOG_ERR, "UnlockFile closed %d [%d]", my_lock->fd_, ret_val);
+
     delete my_lock;
     return result;
   }
@@ -1095,7 +1106,7 @@ void BGFileCloser(void * arg)
     ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
     if (0!=ret_val)
     {
-      syslog(LOG_ERR,"BGFileCloser posix_fadvise DONTNEED failed [%d, %m]", errno);
+      syslog(LOG_ERR,"BGFileCloser posix_fadvise DONTNEED failed [%d]", ret_val);
       err_flag=true;
     }  // if
 
@@ -1112,6 +1123,8 @@ void BGFileCloser(void * arg)
     }
 
     close(file_ptr->fd_);
+    syslog(LOG_ERR, "BGFileCloser closed %d [%d]", file_ptr->fd_, ret_val);
+
     delete file_ptr;
     gPerfCounters->Inc(ePerfROFileClose);
 
@@ -1149,14 +1162,15 @@ void BGFileCloser2(void * arg)
         ret_val=fdatasync(file_ptr->fd_);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileCloser2 fdatasync failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileCloser2 fdatasync failed on %d [%d, %m]", file_ptr->fd_, errno);
             err_flag=true;
         }  // if
 
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed on %d [%d] (%llu, %llu)",
+                   file_ptr->fd_, ret_val, (long long unsigned) file_ptr->offset_, (long long unsigned) file_ptr->length_);
             err_flag=true;
         }  // if
     }   // if
@@ -1165,7 +1179,7 @@ void BGFileCloser2(void * arg)
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed on %d [%d]", file_ptr->fd_, ret_val);
             err_flag=true;
         }  // if
     }   // else
@@ -1180,7 +1194,9 @@ void BGFileCloser2(void * arg)
             err_flag=true;
         }  // if
     }
-    close(file_ptr->fd_);
+    ret_val=close(file_ptr->fd_);
+    syslog(LOG_ERR, "BGFileCloser2 closed %d [%d]", file_ptr->fd_, ret_val);
+
     delete file_ptr;
 
     gPerfCounters->Inc(ePerfRWFileClose);
