@@ -21,9 +21,13 @@
 // -------------------------------------------------------------------
 
 #include <algorithm>
+#include <syslog.h>
 
 #include "util/db_list.h"
 #include "util/mutexlock.h"
+
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 
 namespace leveldb {
 
@@ -75,10 +79,12 @@ DBListImpl::AddDB(
     if (IsInternal)
     {
         ret_flag=m_InternalDBs.insert(Dbase).second;
+        m_InternalDBCount=m_InternalDBs.size();
     }   // if
     else
     {
         ret_flag=m_UserDBs.insert(Dbase).second;
+        m_UserDBCount=m_UserDBs.size();
     }   // else
 
     return(ret_flag);
@@ -101,6 +107,7 @@ DBListImpl::ReleaseDB(
         {
             m_InternalDBs.erase(it);
         }   // if
+        m_InternalDBCount=m_InternalDBs.size();
     }   // if
     else
     {
@@ -109,6 +116,7 @@ DBListImpl::ReleaseDB(
         {
             m_UserDBs.erase(it);
         }   // if
+        m_UserDBCount=m_UserDBs.size();
     }   // else
 
     return;
@@ -120,14 +128,12 @@ size_t
 DBListImpl::GetDBCount(
     bool IsInternal)
 {
-    SpinLock lock(&m_Lock);
-
     size_t ret_val;
 
     if (IsInternal)
-        ret_val=m_InternalDBs.size();
+        ret_val=m_InternalDBCount;
     else
-        ret_val=m_UserDBs.size();
+        ret_val=m_UserDBCount;
 
     return(ret_val);
 
@@ -142,6 +148,8 @@ DBListImpl::ScanDBs(
     db_set_t::iterator it, first, last;
     SpinLock lock(&m_Lock);
 
+    size_t count;
+
     // for_each() would have been fun, but setup deadlock
     //  scenarios
     // Now we have a race condition of us using the db object
@@ -150,19 +158,32 @@ DBListImpl::ScanDBs(
     {
         first=m_InternalDBs.begin();
         last=m_InternalDBs.end();
+        count=m_InternalDBs.size();
     }   // if
     else
     {
         first=m_UserDBs.begin();
         last=m_UserDBs.end();
+        count=m_UserDBs.size();
     }   // else
+
+
+#if 0  // for debugging ... sometimes
+    m_Lock.Unlock(); /// might not be needed now
+    syslog(LOG_ERR, "count %zd, total memory %" PRIu64 ", db cache size %" PRIu64 ", internal %d",
+           count, gFlexCache.GetTotalMemory(), gFlexCache.GetDBCacheCapacity(IsInternal),
+           (int)IsInternal);
+    m_Lock.Lock();
+#endif
+
 
     // call member function of each database
     for (it=first; last!=it; ++it)
     {
-        m_Lock.Unlock();
+        // must protect list from db add/delete during scan, leave locks
+//        m_Lock.Unlock();
         ((*it)->*Function)();
-        m_Lock.Lock();
+//        m_Lock.Lock();
     }   // for
 
     return;

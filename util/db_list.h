@@ -24,11 +24,11 @@
 #include "port/port.h"
 
 
-namespace leveldb 
+namespace leveldb
 {
 
 /**
- * DBList:  class to provide management access to all 
+ * DBList:  class to provide management access to all
  *  open databases (Riak vnodes)
  */
 class DBListImpl
@@ -39,6 +39,9 @@ protected:
    port::Spin m_Lock;      //!< thread protection for set
    db_set_t m_UserDBs;     //!< set of pointers for user db
    db_set_t m_InternalDBs; //!< Riak internal dbs
+
+   volatile size_t m_UserDBCount;   //!< m_UserDBs size() for non-blocking retrieval
+   volatile size_t m_InternalDBCount;   //!< m_InternalDBs size() for non-blocking retrieval
 
 public:
    DBListImpl();
