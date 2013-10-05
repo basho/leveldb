@@ -20,7 +20,7 @@ class Env;
 
 class TableCache {
  public:
-  TableCache(const std::string& dbname, const Options* options, int entries);
+  TableCache(const std::string& dbname, const Options* options, Cache * file_cache);
   ~TableCache();
 
   // Return an iterator for the specified file number (the corresponding
@@ -59,7 +59,7 @@ class TableCache {
   Env* const env_;
   const std::string dbname_;
   const Options* options_;
-  Cache* cache_;
+  Cache * cache_;
 
   Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
 };

@@ -1407,12 +1407,13 @@ Compaction* VersionSet::PickCompaction() {
 
     // this can get into tens of thousands after a repair
     //  keep it sane
-    if ((size_t)options_->max_open_files < c->inputs_[0].size())
+    size_t max_open_files=100;  // previously an options_ member variable
+    if (max_open_files < c->inputs_[0].size())
     {
         std::nth_element(c->inputs_[0].begin(),
-                         c->inputs_[0].begin()+options_->max_open_files-1,
+                         c->inputs_[0].begin()+max_open_files-1,
                          c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
-        c->inputs_[0].erase(c->inputs_[0].begin()+options_->max_open_files,
+        c->inputs_[0].erase(c->inputs_[0].begin()+max_open_files,
                             c->inputs_[0].end());
     }   // if
 

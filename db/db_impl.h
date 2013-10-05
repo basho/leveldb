@@ -13,6 +13,7 @@
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
+#include "util/cache2.h"
 
 namespace leveldb {
 
@@ -61,6 +62,10 @@ class DBImpl : public DB {
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
+
+  void ResizeCaches() {double_cache.ResizeCaches();};
+  size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
+  void PurgeExpiredFileCache() {double_cache.PurgeExpiredFiles();};
 
  private:
   friend class DB;
@@ -113,6 +118,9 @@ class DBImpl : public DB {
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact);
 
+  // initialized before options so its block_cache is available
+  class DoubleCache double_cache;
+
   // Constant after construction
   Env* const env_;
   const InternalKeyComparator internal_comparator_;
@@ -125,6 +133,7 @@ class DBImpl : public DB {
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;
 
+
   // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
   FileLock* db_lock_;
 
@@ -132,6 +141,7 @@ class DBImpl : public DB {
   port::Mutex mutex_;
   port::Mutex throttle_mutex_;   // used by write throttle to force sequential waits on callers
   port::AtomicPointer shutting_down_;
+
   port::CondVar bg_cv_;          // Signalled when background work finishes
   MemTable* mem_;
   MemTable* imm_;                // Memtable being compacted
@@ -190,6 +200,11 @@ class DBImpl : public DB {
 
   volatile uint64_t throttle_end;
 
+
+  // accessor to new, dynamic block_cache
+  Cache * block_cache() {return(double_cache.GetBlockCache());};
+  Cache * file_cache() {return(double_cache.GetFileCache());};
+
   // No copying allowed
   DBImpl(const DBImpl&);
   void operator=(const DBImpl&);
@@ -204,7 +219,8 @@ class DBImpl : public DB {
 extern Options SanitizeOptions(const std::string& db,
                                const InternalKeyComparator* icmp,
                                const InternalFilterPolicy* ipolicy,
-                               const Options& src);
+                               const Options& src,
+                               Cache * block_cache);
 
 }  // namespace leveldb
 

@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <string>
+#include <memory>
 
 namespace leveldb {
 
@@ -98,7 +99,7 @@ struct Options {
   // Number of open files that can be used by the DB.  You may need to
   // increase this if your database has a large working set (budget
   // one open file per 2MB of working set).
-  //
+  // RIAK: NO LONGER USED
   // Default: 1000
   int max_open_files;
 
@@ -152,10 +153,21 @@ struct Options {
   // as part of a Repair operation.  Default is false
   bool is_repair;
 
+  // Riak specific flag to mark Riak internal database versus
+  //  user database.  (User database gets larger cache resources.)
+  bool is_internal_db;
+
+  // Riak replacement for max_open_files and block_cache.  This is
+  //  TOTAL memory to be used by leveldb across ALL DATABASES.
+  //  Most recent value seen upon database open, wins.  Zero for default.
+  uint64_t total_leveldb_mem;
+
   // Create an Options object with default values for all fields.
   Options();
 
   void Dump(Logger * log) const;
+
+private:
 
 };
 

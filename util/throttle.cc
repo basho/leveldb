@@ -25,6 +25,10 @@
 #include "leveldb/perf_count.h"
 #include "leveldb/env.h"
 
+#include "db/db_impl.h"
+#include "util/cache2.h"
+#include "util/db_list.h"
+#include "util/flexcache.h"
 #include "util/throttle.h"
 
 namespace leveldb {
@@ -82,10 +86,13 @@ ThrottleThread(
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
     int replace_idx, loop;
     uint64_t new_throttle;
+    time_t now_seconds, cache_expire;
     struct timespec wait_time;
 
     replace_idx=2;
     gThrottleRunning=true;
+    now_seconds=0;
+    cache_expire=0;
 
     while(gThrottleRunning)
     {
@@ -100,6 +107,8 @@ ThrottleThread(
         wait_time.tv_sec=tv.tv_sec;
         wait_time.tv_nsec=tv.tv_usec*1000;
 #endif
+
+        now_seconds=wait_time.tv_sec;
         wait_time.tv_sec+=THROTTLE_SECONDS;
         pthread_cond_timedwait(&gThrottleCond, &gThrottleMutex,
                                &wait_time);
@@ -177,6 +186,16 @@ ThrottleThread(
         if (THROTTLE_INTERVALS==replace_idx)
             replace_idx=2;
 
+        //
+        // This is code to manage / flush the flexcache's old file cache entries.
+        //  Sure there should be a better place for this code, but fits here nicely today.
+        //
+        if (cache_expire < now_seconds)
+        {
+            cache_expire = now_seconds + 60*60;  // hard coded to one hour for now
+            DBList()->ScanDBs(true,&DBImpl::PurgeExpiredFileCache);
+            DBList()->ScanDBs(false, &DBImpl::PurgeExpiredFileCache);
+        }   // if
     }   // while
 
     return(NULL);
