@@ -888,17 +888,50 @@ void DBImpl::BackgroundCall() {
   bg_cv_.SignalAll();
 }
 
+
+void 
+DBImpl::BackgroundImmCompactCall() {
+  MutexLock l(&mutex_);
+//  assert(bg_compaction_scheduled_);
+  if (!shutting_down_.Acquire_Load()) {
+    Status s = CompactMemTable();
+    if (!s.ok()) {
+      // Wait a little bit before retrying background compaction in
+      // case this is an environmental problem and we do not want to
+      // chew up resources for failed compactions for the duration of
+      // the problem.
+      bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      Log(options_.info_log, "Waiting after background compaction error: %s",
+          s.ToString().c_str());
+      mutex_.Unlock();
+      env_->SleepForMicroseconds(1000000);
+      mutex_.Lock();
+    }
+  }
+//  bg_compaction_scheduled_ = false;
+
+  // Previous compaction may have produced too many files in a level,
+  // so reschedule another compaction if needed.
+  if (!options_.is_repair)
+      MaybeScheduleCompaction();
+//  bg_cv_.SignalAll();
+}
+
+
+
 Status DBImpl::BackgroundCompaction() {
   Status status;
 
   mutex_.AssertHeld();
 
+#if 1
   if (imm_ != NULL) {
     pthread_rwlock_rdlock(&gThreadLock0);
     status=CompactMemTable();
     pthread_rwlock_unlock(&gThreadLock0);
     return status;
   }
+#endif
 
   Compaction* c;
   bool is_manual = (manual_compaction_ != NULL);
@@ -1144,9 +1177,11 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
     // Prioritize compaction work ... every 100 keys
+#if 0
     if (NULL==compact->builder
 	|| 0==(compact->builder->NumEntries() % 100))
       imm_micros+=PrioritizeWork(is_level0_compaction);
+#endif
 
     Slice key = input->key();
     if (compact->builder != NULL
