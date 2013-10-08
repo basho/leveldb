@@ -61,11 +61,11 @@ struct BGCloseInfo
     void * base_;
     size_t offset_;
     size_t length_;
-    volatile uint32_t * ref_count_;
+    volatile uint64_t * ref_count_;
     uint64_t metadata_;
 
     BGCloseInfo(int fd, void * base, size_t offset, size_t length,
-                volatile uint32_t * ref_count, uint64_t metadata)
+                volatile uint64_t * ref_count, uint64_t metadata)
         : fd_(fd), base_(base), offset_(offset), length_(length),
           ref_count_(ref_count), metadata_(metadata)
     {
@@ -183,7 +183,7 @@ class PosixMmapFile : public WritableFile {
   uint64_t metadata_offset_; // Offset where sst metadata starts, or zero
   bool pending_sync_;     // Have we done an munmap of unsynced data?
   bool is_async_;        // can this file process in background
-  volatile uint32_t * ref_count_; // alternative to std:shared_ptr that is thread safe everywhere
+  volatile uint64_t * ref_count_; // alternative to std:shared_ptr that is thread safe everywhere
 
   // Roundup x to a multiple of y
   static size_t Roundup(size_t x, size_t y) {
@@ -284,8 +284,9 @@ class PosixMmapFile : public WritableFile {
 
     if (is_async_)
     {
-        ref_count_=new volatile uint32_t;
-        *ref_count_=1;
+        ref_count_=new volatile uint64_t[2];
+        *ref_count_=1;      // one ref count for PosixMmapFile object
+        *(ref_count_+1)=0;  // filesize
     }   // if
 
     gPerfCounters->Inc(ePerfRWFileOpen);
@@ -322,6 +323,10 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Close() {
     Status s;
+    size_t file_length;
+
+    // compute actual file length before final unmap
+    file_length=file_offset_ + (dst_ - base_);
 
     if (!UnmapCurrentRegion()) {
         s = IOError(filename_, errno);
@@ -331,13 +336,23 @@ class PosixMmapFile : public WritableFile {
     if (!is_async_)
     {
         int ret_val;
+
+        ret_val=ftruncate(fd_, file_length);
+        if (0!=ret_val)
+        {
+            syslog(LOG_ERR,"Close ftruncate failed [%d, %m]", errno);
+        }  // if
+
         ret_val=close(fd_);
         syslog(LOG_ERR,"PosixMapFile closed %d [%d]", fd_, ret_val);
     }  // if
 
     // async close
     else
+    {
+        *(ref_count_ +1)=file_length;
         ReleaseRef(ref_count_, fd_);
+    }   // else
 
     fd_ = -1;
     ref_count_=NULL;
@@ -383,7 +398,7 @@ class PosixMmapFile : public WritableFile {
 
   // if std::shared_ptr was guaranteed thread safe everywhere
   //  the following function would be best written differently
-  static void ReleaseRef(volatile uint32_t * Count, int File)
+  static void ReleaseRef(volatile uint64_t * Count, int File)
   {
       if (NULL!=Count)
       {
@@ -392,9 +407,16 @@ class PosixMmapFile : public WritableFile {
           ret_val=dec_and_fetch(Count);
           if (0==ret_val)
           {
+
+              ret_val=ftruncate(File, *(Count +1));
+              if (0!=ret_val)
+              {
+                  syslog(LOG_ERR,"ReleaseRef ftruncate failed [%d, %m]", errno);
+              }  // if
+
               ret_val=close(File);
               syslog(LOG_ERR,"ReleaseRef closed %d [%d]", File, ret_val);
-              delete Count;
+              delete [] Count;
           }   // if
       }   // if
   }   // static ReleaseRef
