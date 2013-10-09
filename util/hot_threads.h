@@ -110,7 +110,7 @@ public:
 
     bool FindWaitingThread(ThreadTask * work);
 
-    bool submit(ThreadTask * item);
+    bool Submit(ThreadTask * item);
 
     size_t work_queue_size() const { return m_WorkQueue.size();}
     bool shutdown_pending() const  { return m_Shutdown; }
@@ -126,6 +126,8 @@ private:
     HotThreadPool& operator=(const HotThreadPool&);  // nocopyassign
 
 };  // class HotThreadPool
+
+extern HotThreadPool * gImmThreads;
 
 } // namespace leveldb
 

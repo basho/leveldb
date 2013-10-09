@@ -32,6 +32,10 @@
 
 namespace leveldb {
 
+HotThreadPool * gImmThreads=NULL;
+
+
+
 void *ThreadStaticEntry(void *args)
 {
     HotThread &tdata = *(HotThread *)args;
@@ -82,6 +86,7 @@ HotThread::ThreadRoutine()
         //  then loop to test queue again
         if (NULL!=submission)
         {
+           (*submission)();
 //    basho::async_nif::work_result result = work_item();
 //            HotThreadPool::notify_caller(*submission);
 
@@ -234,7 +239,7 @@ HotThreadPool::FindWaitingThread(
 
 
 bool 
-HotThreadPool::submit(
+HotThreadPool::Submit(
     ThreadTask* item)
 {
     bool ret_flag(false);
@@ -274,6 +279,6 @@ HotThreadPool::submit(
 
     return(ret_flag);
 
-}   // submit
+}   // HotThreadPool::Submit
 
 };  // namespace leveldb

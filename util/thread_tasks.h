@@ -30,6 +30,7 @@
 
 #include <stdint.h>
 
+#include "leveldb/atomics.h"
 #include "db/db_impl.h"
 
 namespace leveldb {

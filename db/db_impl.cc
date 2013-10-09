@@ -33,8 +33,10 @@
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "util/thread_tasks.h"
 #include "util/throttle.h"
 #include "leveldb/perf_count.h"
 
@@ -177,7 +179,7 @@ DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
-  while (bg_compaction_scheduled_) {
+  while (IsCompactionScheduled()) {
     bg_cv_.Wait();
   }
   mutex_.Unlock();
@@ -480,7 +482,7 @@ void DBImpl::CheckCompactionState()
         int level;
 
         // wait out executing compaction (Wait gives mutex to compactions)
-        if (bg_compaction_scheduled_)
+        if (IsCompactionScheduled())
             bg_cv_.Wait();
 
         for (level=0, need_compaction=false;
@@ -500,7 +502,7 @@ void DBImpl::CheckCompactionState()
             }   //if
         }   // for
 
-    } while(bg_compaction_scheduled_ && need_compaction);
+    } while(IsCompactionScheduled() && need_compaction);
 
     if (log_flag)
         Log(options_.info_log, "Cleanup compactions completed ... DB::Open continuing");
@@ -610,7 +612,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number,
   return status;
 }
 
-Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
+Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
@@ -618,7 +620,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   meta.number = versions_->NewFileNumber();
   meta.level = 0;
   pending_outputs_.insert(meta.number);
-  Iterator* iter = mem->NewIterator();
+  Iterator* iter = ((MemTable *)mem)->NewIterator();
   SequenceNumber smallest_snapshot;
   Log(options_.info_log, "Level-0 table #%llu: started",
       (unsigned long long) meta.number);
@@ -769,7 +771,7 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
 
   MutexLock l(&mutex_);
   while (!manual.done) {
-    while (manual_compaction_ != NULL || bg_compaction_scheduled_) {
+    while (manual_compaction_ != NULL || IsCompactionScheduled()) {
       bg_cv_.Wait();
     }
     manual_compaction_ = &manual;
@@ -836,18 +838,18 @@ void DBImpl::MaybeScheduleCompaction() {
   if (push)
   {
       // is something else already on background work queue
-      if (bg_compaction_scheduled_)
+      if (IsCompactionScheduled())
           state=2;
       else
           state=1;
   }   // if
 
 
-  if (bg_compaction_scheduled_ && !push) {
+  if (IsCompactionScheduled() && !push) {
     // Already scheduled
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
-  } else if (imm_ == NULL &&
+  } else if (//imm_ == NULL &&
              manual_compaction_ == NULL &&
              !versions_->NeedsCompaction()) {
     // No work to be done
@@ -863,7 +865,7 @@ void DBImpl::BGWork(void* db) {
 
 void DBImpl::BackgroundCall() {
   MutexLock l(&mutex_);
-  assert(bg_compaction_scheduled_);
+  assert(IsCompactionScheduled());
   if (!shutting_down_.Acquire_Load()) {
     Status s = BackgroundCompaction();
     if (!s.ok()) {
@@ -892,7 +894,7 @@ void DBImpl::BackgroundCall() {
 void 
 DBImpl::BackgroundImmCompactCall() {
   MutexLock l(&mutex_);
-//  assert(bg_compaction_scheduled_);
+//  assert(IsCompactionScheduled());
   if (!shutting_down_.Acquire_Load()) {
     Status s = CompactMemTable();
     if (!s.ok()) {
@@ -908,13 +910,13 @@ DBImpl::BackgroundImmCompactCall() {
       mutex_.Lock();
     }
   }
-//  bg_compaction_scheduled_ = false;
+//  IsCompactionScheduled() = false;
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   if (!options_.is_repair)
       MaybeScheduleCompaction();
-//  bg_cv_.SignalAll();
+  bg_cv_.SignalAll();
 }
 
 
@@ -924,7 +926,7 @@ Status DBImpl::BackgroundCompaction() {
 
   mutex_.AssertHeld();
 
-#if 1
+#if 0
   if (imm_ != NULL) {
     pthread_rwlock_rdlock(&gThreadLock0);
     status=CompactMemTable();
@@ -937,7 +939,7 @@ Status DBImpl::BackgroundCompaction() {
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
   if (is_manual) {
-    ManualCompaction* m = manual_compaction_;
+    ManualCompaction* m = (ManualCompaction *) manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == NULL);
     if (c != NULL) {
@@ -1004,7 +1006,7 @@ Status DBImpl::BackgroundCompaction() {
   }
 
   if (is_manual) {
-    ManualCompaction* m = manual_compaction_;
+    ManualCompaction* m = (ManualCompaction *)manual_compaction_;
     if (!status.ok()) {
       m->done = true;
     }
@@ -1374,7 +1376,7 @@ struct IterState {
   port::Mutex* mu;
   Version* version;
   MemTable* mem;
-  MemTable* imm;
+  volatile MemTable* imm;
 };
 
 static void CleanupIteratorState(void* arg1, void* arg2) {
@@ -1399,7 +1401,7 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
   list.push_back(mem_->NewIterator());
   mem_->Ref();
   if (imm_ != NULL) {
-    list.push_back(imm_->NewIterator());
+     list.push_back(((MemTable *)imm_)->NewIterator());
     imm_->Ref();
   }
   versions_->current()->AddIterators(options, &list);
@@ -1447,7 +1449,7 @@ Status DBImpl::Get(const ReadOptions& options,
   }
 
   MemTable* mem = mem_;
-  MemTable* imm = imm_;
+  volatile MemTable* imm = imm_;
   Version* current = versions_->current();
   mem->Ref();
   if (imm != NULL) imm->Ref();
@@ -1464,7 +1466,7 @@ Status DBImpl::Get(const ReadOptions& options,
     if (mem->Get(lkey, value, &s)) {
       // Done
         gPerfCounters->Inc(ePerfGetMem);
-    } else if (imm != NULL && imm->Get(lkey, value, &s)) {
+    } else if (imm != NULL && ((MemTable *)imm)->Get(lkey, value, &s)) {
       // Done
         gPerfCounters->Inc(ePerfGetImm);
     } else {
@@ -1586,7 +1588,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   gPerfCounters->Inc(ePerfApiWrite);
 
   // protect use of versions_ ... still within scope of mutex_ lock
-  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
+  throttle=versions_->WriteThrottleUsec(IsCompactionScheduled());
   }  // release  MutexLock l(&mutex_)
 
   // throttle on exit to reduce possible reordering
@@ -1731,7 +1733,12 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       logfile_number_ = new_log_number;
       log_ = new log::Writer(lfile);
       imm_ = mem_;
-      has_imm_.Release_Store(imm_);
+      has_imm_.Release_Store((MemTable*)imm_);
+      if (NULL!=imm_)
+      {
+         ThreadTask * task=new ImmWriteTask(this);
+         gImmThreads->Submit(task);
+      }
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
       force = false;   // Do not force another compaction if have room
