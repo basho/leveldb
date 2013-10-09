@@ -23,12 +23,13 @@
 // -------------------------------------------------------------------
 // HotThread is a subtle variation on the eleveldb_thread_pool.  Both
 //  represent a design pattern that is tested to perform better under
-//  the Erlang VM than other traditional designs.  
+//  the Erlang VM than other traditional designs.
 // -------------------------------------------------------------------
 
 #ifndef STORAGE_LEVELDB_INCLUDE_HOT_THREADS_H_
 #define STORAGE_LEVELDB_INCLUDE_HOT_THREADS_H_
 
+#include <pthread.h>
 #include <deque>
 #include <vector>
 
@@ -59,7 +60,7 @@ public:
 
 public:
     HotThread(class HotThreadPool & Pool)
-    : m_ThreadId(NULL), m_Available(0), m_Pool(Pool), m_DirectWork(NULL),
+    : m_Available(0), m_Pool(Pool), m_DirectWork(NULL),
         m_Condition(&m_Mutex)
     {}   // HotThread
 
@@ -72,7 +73,7 @@ private:
     HotThread();                              // no default
     HotThread(const HotThread &);             // no copy
     HotThread & operator=(const HotThread&);  // no assign
-    
+
 };  // class HotThread
 
 
@@ -84,19 +85,17 @@ public:
     typedef std::deque<ThreadTask*> WorkQueue_t;
     typedef std::vector<HotThread *>   ThreadPool_t;
 
-    ThreadPool_t  m_Threads;
+    volatile bool m_Shutdown;            //!< should we stop threads and shut down?
 
+    ThreadPool_t  m_Threads;
     WorkQueue_t   m_WorkQueue;
     port::Spin m_QueueLock;                    //!< protects access to work_queue
     volatile size_t m_WorkQueueAtomic;   //!< atomic size to parallel work_queue.size().
-
-    volatile bool m_Shutdown;            //!< should we stop threads and shut down?
 
     enum PerformanceCountersEnum m_DirectCounter;
     enum PerformanceCountersEnum m_QueuedCounter;
     enum PerformanceCountersEnum m_DequeuedCounter;
     enum PerformanceCountersEnum m_WeightedCounter;
-
 
 public:
     HotThreadPool(const size_t thread_pool_size,
@@ -104,6 +103,7 @@ public:
                   enum PerformanceCountersEnum Queued,
                   enum PerformanceCountersEnum Dequeued,
                   enum PerformanceCountersEnum Weighted);
+
     virtual ~HotThreadPool();
 
     static void *ThreadStart(void *args);

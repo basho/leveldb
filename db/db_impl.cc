@@ -160,7 +160,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
       manual_compaction_(NULL),
-      level0_good(true)
+      level0_good(true),
+      running_compactions_(0)
 {
   mem_->Ref();
   has_imm_.Release_Store(NULL);
@@ -245,30 +246,36 @@ void DBImpl::MaybeIgnoreError(Status* s) const {
   }
 }
 
-void DBImpl::DeleteObsoleteFiles() {
-  // Make a set of all of the live files
-  std::set<uint64_t> live = pending_outputs_;
-  versions_->AddLiveFiles(&live);
-
-  // prune the database root directory
-  std::vector<std::string> filenames;
-  env_->GetChildren(dbname_, &filenames); // Ignoring errors on purpose
-  for (size_t i = 0; i < filenames.size(); i++) {
-      KeepOrDelete(filenames[i], -1, live);
-  }   // for
-
-  // prune the table file directories
-  for (int level=0; level<config::kNumLevels; ++level)
+void DBImpl::DeleteObsoleteFiles()
+{
+  // Only run this routine when down to one
+  //  simultaneous compaction
+  if (RunningCompactionCount()<2)
   {
-      std::string dirname;
+      // Make a set of all of the live files
+      std::set<uint64_t> live = pending_outputs_;
+      versions_->AddLiveFiles(&live);
 
-      filenames.clear();
-      dirname=MakeDirName2(dbname_, level, "sst");
-      env_->GetChildren(dirname, &filenames); // Ignoring errors on purpose
+      // prune the database root directory
+      std::vector<std::string> filenames;
+      env_->GetChildren(dbname_, &filenames); // Ignoring errors on purpose
       for (size_t i = 0; i < filenames.size(); i++) {
-          KeepOrDelete(filenames[i], level, live);
+          KeepOrDelete(filenames[i], -1, live);
       }   // for
-  }   // for
+
+      // prune the table file directories
+      for (int level=0; level<config::kNumLevels; ++level)
+      {
+          std::string dirname;
+
+          filenames.clear();
+          dirname=MakeDirName2(dbname_, level, "sst");
+          env_->GetChildren(dirname, &filenames); // Ignoring errors on purpose
+          for (size_t i = 0; i < filenames.size(); i++) {
+              KeepOrDelete(filenames[i], level, live);
+          }   // for
+      }   // for
+  }   // if
 }
 
 void
@@ -812,7 +819,7 @@ void DBImpl::MaybeScheduleCompaction() {
   // writing of memory to disk: high priority
   if (NULL!=imm_)
   {
-      push=true;
+//      push=true;
   }   // if
 
   // merge level 0s to level 1
@@ -838,14 +845,14 @@ void DBImpl::MaybeScheduleCompaction() {
   if (push)
   {
       // is something else already on background work queue
-      if (IsCompactionScheduled())
+      if (bg_compaction_scheduled_)
           state=2;
       else
           state=1;
   }   // if
 
 
-  if (IsCompactionScheduled() && !push) {
+  if (bg_compaction_scheduled_ && !push) {
     // Already scheduled
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
@@ -865,6 +872,9 @@ void DBImpl::BGWork(void* db) {
 
 void DBImpl::BackgroundCall() {
   MutexLock l(&mutex_);
+  ++running_compactions_;
+  Log(options_.info_log, "Background compact start: %u", running_compactions_);
+
   assert(IsCompactionScheduled());
   if (!shutting_down_.Acquire_Load()) {
     Status s = BackgroundCompaction();
@@ -882,19 +892,24 @@ void DBImpl::BackgroundCall() {
     }
   }
   bg_compaction_scheduled_ = false;
+  --running_compactions_;
+  Log(options_.info_log, "Background compact done: %u", running_compactions_);
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   if (!options_.is_repair)
       MaybeScheduleCompaction();
   bg_cv_.SignalAll();
+
 }
 
 
-void 
+void
 DBImpl::BackgroundImmCompactCall() {
   MutexLock l(&mutex_);
-//  assert(IsCompactionScheduled());
+  ++running_compactions_;
+  Log(options_.info_log, "Background imm start: %u", running_compactions_);
+  assert(NULL != imm_);
   if (!shutting_down_.Acquire_Load()) {
     Status s = CompactMemTable();
     if (!s.ok()) {
@@ -903,7 +918,7 @@ DBImpl::BackgroundImmCompactCall() {
       // chew up resources for failed compactions for the duration of
       // the problem.
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
-      Log(options_.info_log, "Waiting after background compaction error: %s",
+      Log(options_.info_log, "Waiting after background imm compaction error: %s",
           s.ToString().c_str());
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
@@ -911,11 +926,23 @@ DBImpl::BackgroundImmCompactCall() {
     }
   }
 //  IsCompactionScheduled() = false;
+  --running_compactions_;
+  Log(options_.info_log, "Background imm done: %u", running_compactions_);
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   if (!options_.is_repair)
       MaybeScheduleCompaction();
+
+  // shutdown is waiting for this imm_ to clear
+  if (shutting_down_.Acquire_Load()) {
+
+    // must abandon data in memory ... hope recovery log works
+    imm_->Unref();
+    imm_ = NULL;
+    has_imm_.Release_Store(NULL);
+  } // if
+
   bg_cv_.SignalAll();
 }
 

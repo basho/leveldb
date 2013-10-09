@@ -64,6 +64,7 @@ class DBImpl : public DB {
 
   void BackgroundImmCompactCall();
   bool IsCompactionScheduled() {return(bg_compaction_scheduled_ || NULL!=imm_);};
+  uint32_t RunningCompactionCount() {return(running_compactions_);};
 
  private:
   friend class DB;
@@ -190,6 +191,7 @@ class DBImpl : public DB {
 
   // hint to background thread when level0 is backing up
   volatile bool level0_good;
+  volatile uint32_t running_compactions_;
 
   // No copying allowed
   DBImpl(const DBImpl&);

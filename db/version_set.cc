@@ -17,6 +17,7 @@
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/logging.h"
+#include "util/mutexlock.h"
 #include "leveldb/perf_count.h"
 
 namespace leveldb {
@@ -876,35 +877,47 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     }
   }
 
-  // Unlock during expensive MANIFEST log write
-  {
-    mu->Unlock();
-
-    // Write new record to MANIFEST log
-    if (s.ok()) {
-      std::string record;
-      edit->EncodeTo(&record);
-      s = descriptor_log_->AddRecord(record);
-      if (s.ok()) {
-        s = descriptor_file_->Sync();
-      }
-    }
-
-    // If we just created a new descriptor file, install it by writing a
-    // new CURRENT file that points to it.
-    if (s.ok() && !new_manifest_file.empty()) {
-      s = SetCurrentFile(env_, dbname_, manifest_file_number_);
-    }
-
-    mu->Lock();
-  }
-
   // Install the new version
+  //  matthewv Oct 2013 - this used to be after the MANIFEST write
+  //  but overlapping compactions allow for a file to get lost
+  //  if first does not post to version completely.
   if (s.ok()) {
     AppendVersion(v);
     log_number_ = edit->log_number_;
     prev_log_number_ = edit->prev_log_number_;
-  } else {
+  }
+
+  // Unlock during expensive MANIFEST log write
+  {
+    mu->Unlock();
+
+    // but only one writer at a time
+    {
+        MutexLock lock(&manifest_mutex_);
+        // Write new record to MANIFEST log
+        if (s.ok()) {
+            std::string record;
+            edit->EncodeTo(&record);
+            s = descriptor_log_->AddRecord(record);
+            if (s.ok()) {
+                s = descriptor_file_->Sync();
+            }
+        }
+
+        // If we just created a new descriptor file, install it by writing a
+        // new CURRENT file that points to it.
+        if (s.ok() && !new_manifest_file.empty()) {
+            s = SetCurrentFile(env_, dbname_, manifest_file_number_);
+        }
+    }   // manifest_lock_
+
+    mu->Lock();
+  }
+
+  // this used to be "else" clause to if(s.ok)
+  //  moved on Oct 2013
+  if (!s.ok())
+  {
     delete v;
     if (!new_manifest_file.empty()) {
       delete descriptor_log_;

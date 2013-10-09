@@ -320,6 +320,10 @@ class VersionSet {
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
 
+  // Riak allows multiple compaction threads, this mutex allows
+  //  only one to write to manifest at a time.  Only used in LogAndApply
+  port::Mutex manifest_mutex_;
+
   // No copying allowed
   VersionSet(const VersionSet&);
   void operator=(const VersionSet&);
