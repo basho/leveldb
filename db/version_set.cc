@@ -430,6 +430,7 @@ Status Version::Get(const ReadOptions& options,
 
 bool Version::UpdateStats(const GetStats& stats) {
   FileMetaData* f = stats.seek_file;
+#if 0
   if (f != NULL) {
     f->allowed_seeks--;
     if (f->allowed_seeks <= 0 && file_to_compact_ == NULL) {
@@ -438,6 +439,7 @@ bool Version::UpdateStats(const GetStats& stats) {
       return true;
     }
   }
+#endif
   return false;
 }
 
@@ -1488,13 +1490,13 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   {
       // if this is NOT a repair (or panic) situation, take all files
       //  to reduce write amplification
-      if (c->inputs_[0].size()<=config::kL0_StopWritesTrigger 
+      if (c->inputs_[0].size()<=config::kL0_StopWritesTrigger
           && c->inputs_[0].size()!=current_->files_[level].size())
       {
           c->inputs_[0].clear();
           c->inputs_[0].reserve(current_->files_[level].size());
 
-          for (size_t i = 0; i < current_->files_[level].size(); ++i ) 
+          for (size_t i = 0; i < current_->files_[level].size(); ++i )
           {
               FileMetaData* f = current_->files_[level][i];
               c->inputs_[0].push_back(f);
