@@ -72,6 +72,24 @@ public:
         return(-1!=ret_val);
     }
 
+
+    void *
+    MapShm(key_t Key)
+    {
+        int id;
+        void * ret_ptr;
+
+        id=shmget(Key, 0, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if (-1!=id)
+            ret_ptr=shmat(id, NULL, 0);
+        else
+            ret_ptr=NULL;
+
+        return(ret_ptr);
+    }
+
+
+
     size_t
     GetShmSize(key_t Key)
     {
@@ -146,6 +164,31 @@ TEST(PerfTest, SizeUpgrade)
 
     return;
 }   // SizeUpgrade
+
+TEST(PerfTest, ReadLarger)
+{
+    PerformanceCounters * perf_ptr;
+
+    // clear any existing shm
+    DeleteShm(ePerfKey);
+
+    // create a new larger than today segment
+    ASSERT_EQ(true, CreateShm(ePerfKey, sizeof(PerformanceCounters)+64));
+    perf_ptr=(PerformanceCounters *)MapShm(ePerfKey);
+    ASSERT_NE(perf_ptr, (void*)NULL);
+    memset(perf_ptr, 0, sizeof(PerformanceCounters)+64);
+    perf_ptr->SetVersion(ePerfVersion, ePerfCountEnumSize+8);
+    shmdt(perf_ptr);
+
+    // open for read
+    perf_ptr=PerformanceCounters::Init(false);
+    ASSERT_NE(perf_ptr, (void*)NULL);
+
+    // cleanup
+    ASSERT_EQ(true, DeleteShm(ePerfKey));
+
+    return;
+}   // ReadLarger
 
 }  // namespace leveldb
 
