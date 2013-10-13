@@ -45,6 +45,7 @@ TESTS = \
 	filter_block_test \
 	log_test \
 	memenv_test \
+	perf_count_test \
 	skiplist_test \
 	table_test \
 	version_edit_test \
@@ -161,6 +162,9 @@ table_test: table/table_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+perf_count_test: util/perf_count_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) util/perf_count_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
 perf_dump: tools/perf_dump.o $(LIBOBJECTS)
 	$(CXX) tools/perf_dump.o $(LIBOBJECTS) -o $@ $(LDFLAGS)

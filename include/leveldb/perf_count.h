@@ -227,6 +227,7 @@ public:
         {return(ePerfCountEnumSize<=m_CounterSize && ePerfVersion==m_Version);};
 
     static PerformanceCounters * Init(bool IsReadOnly);
+    static int Close(PerformanceCounters * Counts);
 
     uint64_t Inc(unsigned Index);
     uint64_t Dec(unsigned Index);
