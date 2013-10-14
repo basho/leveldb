@@ -132,9 +132,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
 #endif
       }   // if
 
-     int ret_val=close(fd_);
-     syslog(LOG_ERR, "~PosixRandomAccessFile closed %d [%d]", fd_, ret_val);
-
+     close(fd_);
   }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -336,12 +334,9 @@ class PosixMmapFile : public WritableFile {
 
         ret_val=ftruncate(fd_, file_length);
         if (0!=ret_val)
-        {
             syslog(LOG_ERR,"Close ftruncate failed [%d, %m]", errno);
-        }  // if
 
         ret_val=close(fd_);
-        syslog(LOG_ERR,"PosixMapFile closed %d [%d]", fd_, ret_val);
     }  // if
 
     // async close
@@ -404,15 +399,12 @@ class PosixMmapFile : public WritableFile {
           ret_val=dec_and_fetch(Count);
           if (0==ret_val)
           {
-
               ret_val=ftruncate(File, *(Count +1));
               if (0!=ret_val)
-              {
                   syslog(LOG_ERR,"ReleaseRef ftruncate failed [%d, %m]", errno);
-              }  // if
 
               ret_val=close(File);
-              syslog(LOG_ERR,"ReleaseRef closed %d [%d]", File, ret_val);
+
               delete [] Count;
           }   // if
       }   // if
@@ -518,7 +510,6 @@ class PosixEnv : public Env {
       }
 #endif
     } else {
-      syslog(LOG_ERR, "NewRandomAccessFile open %d (%s)", fd, fname.c_str());
       *result = new PosixRandomAccessFile(fname, fd);
     }
     return s;
@@ -532,7 +523,6 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
-      syslog(LOG_ERR, "NewWritableFile open %d (%s)", fd, fname.c_str());
       *result = new PosixMmapFile(fname, fd, page_size_, 0, false);
     }
     return s;
@@ -551,7 +541,6 @@ class PosixEnv : public Env {
       s = GetFileSize(fname, &size);
       if (s.ok())
       {
-          syslog(LOG_ERR, "NewAppendableFile open %d (%s)", fd, fname.c_str());
           *result = new PosixMmapFile(fname, fd, page_size_, size);
       }   // if
       else
@@ -571,8 +560,6 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
-        syslog(LOG_ERR, "NewWriteOnlyFile open %d (%s)", fd, fname.c_str());
-
       *result = new PosixMmapFile(fname, fd, page_size_, 0, true);
     }
     return s;
@@ -659,7 +646,7 @@ class PosixEnv : public Env {
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
       my_lock->name_ = fname;
-      syslog(LOG_ERR, "LockFile opened %d (%s)", my_lock->fd_, fname.c_str());
+
       *lock = my_lock;
     }
     return result;
@@ -672,8 +659,8 @@ class PosixEnv : public Env {
       result = IOError("unlock", errno);
     }
     gFileLocks.Remove(my_lock->name_);
-    int ret_val=close(my_lock->fd_);
-    syslog(LOG_ERR, "UnlockFile closed %d [%d]", my_lock->fd_, ret_val);
+    close(my_lock->fd_);
+
     my_lock->fd_=-1;
 
     delete my_lock;
