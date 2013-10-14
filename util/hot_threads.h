@@ -103,7 +103,6 @@ private:
 };  // class QueueThread
 
 
-
 class HotThreadPool
 {
 public:
@@ -118,6 +117,7 @@ public:
     QueueThread m_QueueThread;           //!< one slow response worker to cover edge case
     WorkQueue_t   m_WorkQueue;
     port::Spin m_QueueLock;              //!< protects access to work_queue
+
     volatile size_t m_WorkQueueAtomic;   //!< atomic size to parallel work_queue.size().
 
     enum PerformanceCountersEnum m_DirectCounter;
