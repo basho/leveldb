@@ -29,9 +29,11 @@
 #include "port/port.h"
 #include "util/crc32c.h"
 #include "util/db_list.h"
+#include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"
+#include "util/thread_tasks.h"
 #include "util/throttle.h"
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
@@ -1239,6 +1241,9 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
+    gImmThreads=new HotThreadPool(7, ePerfDebug1, ePerfDebug2,
+                                  ePerfDebug3, ePerfDebug4);
+
     started=true;
 }
 
@@ -1267,6 +1272,9 @@ void Env::Shutdown()
 
     ComparatorShutdown();
     DBListShutdown();
+
+    delete gImmThreads;
+    gImmThreads=NULL;
 
 }   // Env::Shutdown
 
