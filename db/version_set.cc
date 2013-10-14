@@ -17,6 +17,7 @@
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/logging.h"
+#include "util/mutexlock.h"
 #include "leveldb/perf_count.h"
 
 namespace leveldb {
@@ -53,16 +54,16 @@ static struct
 
 // WARNING: m_OverlappedFiles flags need to match config::kNumOverlapFiles ... until unified
 {
-    {10485760,  262144000,  57671680,      209715200,             0,  300000000, true},
-    {10485760,   82914560,  57671680,      419430400,             0,  209715200, true},
-    {10485760,  104371840,  57671680,     1006632960,     200000000,  314572800, false},
-    {10485760,  125829120,  57671680,     4094304000,    3355443200,  419430400, false},
-    {10485760,  147286400,  57671680,    41943040000,   33554432000,  524288000, false},
-    {10485760,  188743680,  57671680,   419430400000,  335544320000,  629145600, false},
-    {10485760,  220200960,  57671680,  4194304000000, 3355443200000,  734003200, false}
+    {10485760,  262144000,  57671680,      209715200,                0,     300000000, true},
+    {10485760,   82914560,  57671680,      419430400,                0,     209715200, true},
+    {10485760,  104371840,  57671680,     1006632960,        200000000,     314572800, false},
+    {10485760,  125829120,  57671680,     4094304000ULL,    3355443200ULL,  419430400, false},
+    {10485760,  147286400,  57671680,    41943040000ULL,   33554432000ULL,  524288000, false},
+    {10485760,  188743680,  57671680,   419430400000ULL,  335544320000ULL,  629145600, false},
+    {10485760,  220200960,  57671680,  4194304000000ULL, 3355443200000ULL,  734003200, false}
 };
 
-
+/// ULL above needed to compile on OSX 10.7.3
 
 static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
   int64_t sum = 0;
@@ -434,6 +435,7 @@ Status Version::Get(const ReadOptions& options,
 
 bool Version::UpdateStats(const GetStats& stats) {
   FileMetaData* f = stats.seek_file;
+#if 0
   if (f != NULL) {
     f->allowed_seeks--;
     if (f->allowed_seeks <= 0 && file_to_compact_ == NULL) {
@@ -442,6 +444,7 @@ bool Version::UpdateStats(const GetStats& stats) {
       return true;
     }
   }
+#endif
   return false;
 }
 
@@ -884,35 +887,47 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     }
   }
 
-  // Unlock during expensive MANIFEST log write
-  {
-    mu->Unlock();
-
-    // Write new record to MANIFEST log
-    if (s.ok()) {
-      std::string record;
-      edit->EncodeTo(&record);
-      s = descriptor_log_->AddRecord(record);
-      if (s.ok()) {
-        s = descriptor_file_->Sync();
-      }
-    }
-
-    // If we just created a new descriptor file, install it by writing a
-    // new CURRENT file that points to it.
-    if (s.ok() && !new_manifest_file.empty()) {
-      s = SetCurrentFile(env_, dbname_, manifest_file_number_);
-    }
-
-    mu->Lock();
-  }
-
   // Install the new version
+  //  matthewv Oct 2013 - this used to be after the MANIFEST write
+  //  but overlapping compactions allow for a file to get lost
+  //  if first does not post to version completely.
   if (s.ok()) {
     AppendVersion(v);
     log_number_ = edit->log_number_;
     prev_log_number_ = edit->prev_log_number_;
-  } else {
+  }
+
+  // Unlock during expensive MANIFEST log write
+  {
+    mu->Unlock();
+
+    // but only one writer at a time
+    {
+        MutexLock lock(&manifest_mutex_);
+        // Write new record to MANIFEST log
+        if (s.ok()) {
+            std::string record;
+            edit->EncodeTo(&record);
+            s = descriptor_log_->AddRecord(record);
+            if (s.ok()) {
+                s = descriptor_file_->Sync();
+            }
+        }
+
+        // If we just created a new descriptor file, install it by writing a
+        // new CURRENT file that points to it.
+        if (s.ok() && !new_manifest_file.empty()) {
+            s = SetCurrentFile(env_, dbname_, manifest_file_number_);
+        }
+    }   // manifest_lock_
+
+    mu->Lock();
+  }
+
+  // this used to be "else" clause to if(s.ok)
+  //  moved on Oct 2013
+  if (!s.ok())
+  {
     delete v;
     if (!new_manifest_file.empty()) {
       delete descriptor_log_;
@@ -1477,6 +1492,28 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
                                          &c->grandparents_);
       }
   }   // if
+#if 1
+  // compacting into an overlapped layer
+  else
+  {
+      // if this is NOT a repair (or panic) situation, take all files
+      //  to reduce write amplification
+      if (c->inputs_[0].size()<=config::kL0_StopWritesTrigger
+          && c->inputs_[0].size()!=current_->files_[level].size())
+      {
+          c->inputs_[0].clear();
+          c->inputs_[0].reserve(current_->files_[level].size());
+
+          for (size_t i = 0; i < current_->files_[level].size(); ++i )
+          {
+              FileMetaData* f = current_->files_[level][i];
+              c->inputs_[0].push_back(f);
+          }   // for
+
+          GetRange(c->inputs_[0], &smallest, &largest);
+      }   // if
+  }   // else
+#endif
 
   if (false) {
     Log(options_->info_log, "Compacting %d '%s' .. '%s'",

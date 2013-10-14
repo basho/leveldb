@@ -27,9 +27,11 @@
 #include "leveldb/slice.h"
 #include "port/port.h"
 #include "util/crc32c.h"
+#include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"
+#include "util/thread_tasks.h"
 #include "util/throttle.h"
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
@@ -1130,6 +1132,7 @@ pthread_t PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
   return(t);
 }
 
+
 // this was a reference file:  unmap, purge page cache, close
 void BGFileCloser(void * arg)
 {
@@ -1362,6 +1365,9 @@ static void InitDefaultEnv()
         crc32c::SwitchToHardwareCRC();
 
     PerformanceCounters::Init(false);
+
+    gImmThreads=new HotThreadPool(7, ePerfDebug1, ePerfDebug2,
+                                  ePerfDebug3, ePerfDebug4);
     started=true;
 }
 
@@ -1389,6 +1395,9 @@ void Env::Shutdown()
     }   // if
 
     ComparatorShutdown();
+
+    delete gImmThreads;
+    gImmThreads=NULL;
 
 }   // Env::Shutdown
 

@@ -7,6 +7,9 @@
 #ifndef STORAGE_LEVELDB_PORT_PORT_POSIX_H_
 #define STORAGE_LEVELDB_PORT_PORT_POSIX_H_
 
+// to properly pull in bits/posix_opt.h on Linux
+#include <unistd.h>
+
 #undef PLATFORM_IS_LITTLE_ENDIAN
 #if defined(OS_MACOSX)
   #include <machine/endian.h>
