@@ -1,8 +1,8 @@
 // -------------------------------------------------------------------
 //
-// perf_count.h:  performance counters LevelDB (http://code.google.com/p/leveldb/)
+// perf_count.h:  performance counters LevelDB
 //
-// Copyright (c) 2012 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2012-2013 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file

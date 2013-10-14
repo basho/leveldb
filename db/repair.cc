@@ -45,11 +45,12 @@ namespace {
 class Repairer {
  public:
   Repairer(const std::string& dbname, const Options& options)
-      : dbname_(dbname),
+      : double_cache_(options),
+        dbname_(dbname),
         env_(options.env),
         icmp_(options.comparator),
         ipolicy_(options.filter_policy),
-        options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
+        options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options, double_cache_.GetBlockCache())),
         org_options_(options),
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
@@ -57,16 +58,17 @@ class Repairer {
         db_lock_(NULL),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, &options_, 10);
+    table_cache_ = new TableCache(dbname_, &options_, double_cache_.GetFileCache());
+
   }
 
   ~Repairer() {
     if (owns_info_log_) {
       delete options_.info_log;
     }
-    if (owns_cache_) {
-      delete options_.block_cache;
-    }
+//    if (owns_cache_) {
+//      delete options_.block_cache;
+//    }
 
     // must remove second ref counter that keeps overlapped files locked
     //  table cache
@@ -139,7 +141,7 @@ class Repairer {
 
         db_ptr=NULL;
         options=org_options_;
-        options.block_cache=NULL;  // not reusing for fear of edge cases
+//        options.block_cache=NULL;  // not reusing for fear of edge cases
         options.is_repair=true;
         options.error_if_exists=false;
         status=leveldb::DB::Open(options, dbname_, &db_ptr);
@@ -159,6 +161,7 @@ class Repairer {
     SequenceNumber max_sequence;
   };
 
+  DoubleCache double_cache_;
   std::string const dbname_;
   Env* const env_;
   InternalKeyComparator const icmp_;

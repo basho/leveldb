@@ -5,6 +5,9 @@
 #include "leveldb/env.h"
 #include "leveldb/perf_count.h"
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 void command_help();
 
 int
@@ -106,7 +109,7 @@ main(
                     {
                         for (loop=0; loop<leveldb::ePerfCountEnumSize; ++loop)
                         {
-                            printf("%llu, %llu, %s, %llu\n",
+                            printf("%llu, %llu, %s, %" PRIu64 "\n",
                                    cur_time, cur_time-first_time,
                                    leveldb::PerformanceCounters::GetNamePtr(loop),
                                    cur_counters[loop]-prev_counters[loop]);
@@ -132,7 +135,7 @@ main(
             {
                 for (loop=0; loop<leveldb::ePerfCountEnumSize; ++loop)
                 {
-                    printf("%llu, %llu, %s, %llu\n",
+                    printf("%llu, %u, %s, %" PRIu64 "\n",
                            first_time, 0,
                            leveldb::PerformanceCounters::GetNamePtr(loop),
                            perf_ptr->Value(loop));

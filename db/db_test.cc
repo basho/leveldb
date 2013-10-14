@@ -166,7 +166,7 @@ class DBTest {
 
   DBTest() : option_config_(kDefault),
              env_(new SpecialEnv(Env::Default())) {
-    filter_policy_ = NewBloomFilterPolicy(10);
+    filter_policy_ = NewBloomFilterPolicy2(16);
     dbname_ = test::TmpDir() + "/db_test";
     DestroyDB(dbname_, Options());
     db_ = NULL;
@@ -1551,7 +1551,7 @@ TEST(DBTest, BloomFilter) {
   Options options = CurrentOptions();
   options.env = env_;
   options.block_cache = NewLRUCache(0);  // Prevent cache hits
-  options.filter_policy = NewBloomFilterPolicy(10);
+  options.filter_policy = NewBloomFilterPolicy2(16);
   Reopen(&options);
 
   // Populate multiple layers

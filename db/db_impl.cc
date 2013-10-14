@@ -32,7 +32,9 @@
 #include "table/block.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
+#include "util/db_list.h"
 #include "util/coding.h"
+#include "util/flexcache.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/throttle.h"
@@ -115,7 +117,8 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
 Options SanitizeOptions(const std::string& dbname,
                         const InternalKeyComparator* icmp,
                         const InternalFilterPolicy* ipolicy,
-                        const Options& src) {
+                        const Options& src,
+                        Cache * block_cache) {
   Options result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
@@ -132,18 +135,22 @@ Options SanitizeOptions(const std::string& dbname,
       result.info_log = NULL;
     }
   }
+
   if (result.block_cache == NULL) {
-    result.block_cache = NewLRUCache(8 << 20);
+//    result.block_cache = NewLRUCache(8 << 20);
+      result.block_cache = block_cache;
   }
   return result;
 }
 
 DBImpl::DBImpl(const Options& options, const std::string& dbname)
-    : env_(options.env),
+    : double_cache(options),
+      env_(options.env),
       internal_comparator_(options.comparator),
       internal_filter_policy_(options.filter_policy),
       options_(SanitizeOptions(
-          dbname, &internal_comparator_, &internal_filter_policy_, options)),
+          dbname, &internal_comparator_, &internal_filter_policy_,
+          options, block_cache())),
       owns_info_log_(options_.info_log != options.info_log),
       owns_cache_(options_.block_cache != options.block_cache),
       dbname_(dbname),
@@ -161,20 +168,27 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       level0_good(true),
       throttle_end(0)
 {
+  DBList()->AddDB(this, options_.is_internal_db);
+
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
-  // Reserve ten files or so for other uses and give the rest to TableCache.
-  const int table_cache_size = options_.max_open_files - 10;
-  table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
+  table_cache_ = new TableCache(dbname_, &options_, file_cache());
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 
+  gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
+
   options_.Dump(options_.info_log);
+  Log(options_.info_log,"               File cache size: %zd", double_cache.GetCapacity(true));
+  Log(options_.info_log,"              Block cache size: %zd", double_cache.GetCapacity(false));
+
 }
 
 DBImpl::~DBImpl() {
+  DBList()->ReleaseDB(this, options_.is_internal_db);
+
   // Wait for background work to finish
   mutex_.Lock();
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
@@ -182,6 +196,10 @@ DBImpl::~DBImpl() {
     bg_cv_.Wait();
   }
   mutex_.Unlock();
+
+  // make sure flex cache knows this db is gone
+  //  (must follow ReleaseDB() call ... see above)
+  gFlexCache.RecalculateAllocations();
 
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
@@ -193,9 +211,6 @@ DBImpl::~DBImpl() {
 
   if (owns_info_log_) {
     delete options_.info_log;
-  }
-  if (owns_cache_) {
-    delete options_.block_cache;
   }
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
@@ -1581,7 +1596,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
-      // server may have been busy since previous write, 
+      // server may have been busy since previous write,
       //  use only the remaining time as throttle
       now=env_->NowMicros();
 
@@ -1815,6 +1830,16 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     snprintf(buf, sizeof(buf), "%" PRIu64, total);
     value->append(buf);
     return true;
+  } else if (in == "file-cache") {
+    char buf[50];
+    snprintf(buf, sizeof(buf), "%zd", double_cache.GetCapacity(true));
+    value->append(buf);
+    return true;
+  } else if (in == "block-cache") {
+    char buf[50];
+    snprintf(buf, sizeof(buf), "%zd", double_cache.GetCapacity(false));
+    value->append(buf);
+    return true;
   } else if (-1!=gPerfCounters->LookupCounter(in.ToString().c_str())) {
 
       char buf[66];
@@ -1878,7 +1903,17 @@ Status DB::Open(const Options& options, const std::string& dbname,
   DBImpl* impl = new DBImpl(options, dbname);
   impl->mutex_.Lock();
   VersionEdit edit;
-  Status s = impl->Recover(&edit); // Handles create_if_missing, error_if_exists
+  Status s;
+
+  // 4 level0 files at 2Mbytes and 2Mbytes of block cache
+  //  (but first level1 file is likely to thrash)
+  //  ... this value is AFTER write_buffer and 40M for recovery log and LOG
+  if (impl->GetCacheCapacity() < flex::kMinimumDBMemory)
+      s=Status::InvalidArgument("Less than 10Mbytes per database/vnode");
+
+  if (s.ok())
+      s = impl->Recover(&edit); // Handles create_if_missing, error_if_exists
+
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
