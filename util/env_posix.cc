@@ -22,6 +22,7 @@
 #if defined(LEVELDB_PLATFORM_ANDROID)
 #include <sys/stat.h>
 #endif
+#include "leveldb/atomics.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/slice.h"
@@ -48,9 +49,6 @@ static Status IOError(const std::string& context, int err_number) {
 }
 
 // background routines to close and/or unmap files
-static void BGFileCloser(void* file_info);
-static void BGFileCloser2(void* file_info);
-// currently unused static void BGFileUnmapper(void* file_info);
 static void BGFileUnmapper2(void* file_info);
 
 // data needed by background routines for close/unmap
@@ -60,14 +58,17 @@ struct BGCloseInfo
     void * base_;
     size_t offset_;
     size_t length_;
-    size_t unused_;
+    volatile uint64_t * ref_count_;
     uint64_t metadata_;
 
     BGCloseInfo(int fd, void * base, size_t offset, size_t length,
-                size_t unused, uint64_t metadata)
+                volatile uint64_t * ref_count, uint64_t metadata)
         : fd_(fd), base_(base), offset_(offset), length_(length),
-          unused_(unused), metadata_(metadata)
-    {};
+          ref_count_(ref_count), metadata_(metadata)
+    {
+        if (NULL!=ref_count_)
+            inc_and_fetch(ref_count_);
+    };
 };
 
 class PosixSequentialFile: public SequentialFile {
@@ -131,7 +132,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
 #endif
       }   // if
 
-      close(fd_);
+     int ret_val=close(fd_);
+     syslog(LOG_ERR, "~PosixRandomAccessFile closed %d [%d]", fd_, ret_val);
+
   }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -158,43 +161,6 @@ class PosixRandomAccessFile: public RandomAccessFile {
 
 };
 
-// mmap() based random-access
-class PosixMmapReadableFile: public RandomAccessFile {
- private:
-  std::string filename_;
-  void* mmapped_region_;
-  size_t length_;
-  int fd_;
-
- public:
-  // base[0,length-1] contains the mmapped contents of the file.
-  PosixMmapReadableFile(const std::string& fname, void* base, size_t length, int fd)
-      : filename_(fname), mmapped_region_(base), length_(length), fd_(fd)
-  {
-      gPerfCounters->Inc(ePerfROFileOpen);
-
-#if defined(HAVE_FADVISE)
-    posix_fadvise(fd_, 0, length_, POSIX_FADV_RANDOM);
-#endif
-  }
-  virtual ~PosixMmapReadableFile()
-  {
-    BGCloseInfo * ptr=new BGCloseInfo(fd_, mmapped_region_, 0, length_, 0, 0);
-    Env::Default()->Schedule(&BGFileCloser, ptr, 4);
-  };
-
-  virtual Status Read(uint64_t offset, size_t n, Slice* result,
-                      char* scratch) const {
-    Status s;
-    if (offset + n > length_) {
-      *result = Slice();
-      s = IOError(filename_, EINVAL);
-    } else {
-      *result = Slice(reinterpret_cast<char*>(mmapped_region_) + offset, n);
-    }
-    return s;
-  }
-};
 
 // We preallocate up to an extra megabyte and use memcpy to append new
 // data to the file.  This is safe since we either properly close the
@@ -213,7 +179,8 @@ class PosixMmapFile : public WritableFile {
   uint64_t file_offset_;  // Offset of base_ in file
   uint64_t metadata_offset_; // Offset where sst metadata starts, or zero
   bool pending_sync_;     // Have we done an munmap of unsynced data?
-  bool is_write_only_;    // can this file process in background
+  bool is_async_;        // can this file process in background
+  volatile uint64_t * ref_count_; // alternative to std:shared_ptr that is thread safe everywhere
 
   // Roundup x to a multiple of y
   static size_t Roundup(size_t x, size_t y) {
@@ -226,7 +193,7 @@ class PosixMmapFile : public WritableFile {
     return s;
   }
 
-  bool UnmapCurrentRegion(bool and_close=false) {
+  bool UnmapCurrentRegion() {
     bool result = true;
     if (base_ != NULL) {
       if (last_sync_ < limit_) {
@@ -234,31 +201,24 @@ class PosixMmapFile : public WritableFile {
         pending_sync_ = true;
       }
 
-      BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_,
-                                        limit_-dst_, metadata_offset_);
 
       // write only files can perform operations async, but not
       //  files that might re-open and read again soon
-      if (!is_write_only_)
+      if (!is_async_)
       {
-          if (and_close)
-              BGFileCloser2(ptr);
-          else
-              BGFileUnmapper2(ptr);
+          BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_,
+                                            NULL, metadata_offset_);
+          BGFileUnmapper2(ptr);
       }   // if
 
       // called from user thread, move these operations to background
       //  queue
       else
       {
-          if (and_close)
-              Env::Default()->Schedule(&BGFileCloser2, ptr, 4);
-          else
-              Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
+          BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_,
+                                            ref_count_, metadata_offset_);
+          Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
       }   // else
-
-      if (and_close)
-          fd_=-1;
 
       file_offset_ += limit_ - base_;
       base_ = NULL;
@@ -271,11 +231,6 @@ class PosixMmapFile : public WritableFile {
         map_size_ *= 2;
       }
     }
-    else if (and_close && -1!=fd_)
-    {
-        close(fd_);
-        fd_=-1;
-    }   // else if
 
     return result;
   }
@@ -307,7 +262,7 @@ class PosixMmapFile : public WritableFile {
  public:
   PosixMmapFile(const std::string& fname, int fd,
                 size_t page_size, size_t file_offset=0L,
-                bool is_write_only=false)
+                bool is_async=false)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
@@ -319,8 +274,17 @@ class PosixMmapFile : public WritableFile {
         file_offset_(file_offset),
         metadata_offset_(0),
         pending_sync_(false),
-        is_write_only_(is_write_only) {
+        is_async_(is_async),
+        ref_count_(NULL)
+    {
     assert((page_size & (page_size - 1)) == 0);
+
+    if (is_async_)
+    {
+        ref_count_=new volatile uint64_t[2];
+        *ref_count_=1;      // one ref count for PosixMmapFile object
+        *(ref_count_+1)=0;  // filesize
+    }   // if
 
     gPerfCounters->Inc(ePerfRWFileOpen);
   }
@@ -356,12 +320,39 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Close() {
     Status s;
+    size_t file_length;
 
-    if (!UnmapCurrentRegion(true)) {
+    // compute actual file length before final unmap
+    file_length=file_offset_ + (dst_ - base_);
+
+    if (!UnmapCurrentRegion()) {
         s = IOError(filename_, errno);
     }
 
+    // hard code
+    if (!is_async_)
+    {
+        int ret_val;
+
+        ret_val=ftruncate(fd_, file_length);
+        if (0!=ret_val)
+        {
+            syslog(LOG_ERR,"Close ftruncate failed [%d, %m]", errno);
+        }  // if
+
+        ret_val=close(fd_);
+        syslog(LOG_ERR,"PosixMapFile closed %d [%d]", fd_, ret_val);
+    }  // if
+
+    // async close
+    else
+    {
+        *(ref_count_ +1)=file_length;
+        ReleaseRef(ref_count_, fd_);
+    }   // else
+
     fd_ = -1;
+    ref_count_=NULL;
     base_ = NULL;
     limit_ = NULL;
     return s;
@@ -400,6 +391,33 @@ class PosixMmapFile : public WritableFile {
   {
       metadata_offset_=Metadata;
   }   // SetMetadataOffset
+
+
+  // if std::shared_ptr was guaranteed thread safe everywhere
+  //  the following function would be best written differently
+  static void ReleaseRef(volatile uint64_t * Count, int File)
+  {
+      if (NULL!=Count)
+      {
+          int ret_val;
+
+          ret_val=dec_and_fetch(Count);
+          if (0==ret_val)
+          {
+
+              ret_val=ftruncate(File, *(Count +1));
+              if (0!=ret_val)
+              {
+                  syslog(LOG_ERR,"ReleaseRef ftruncate failed [%d, %m]", errno);
+              }  // if
+
+              ret_val=close(File);
+              syslog(LOG_ERR,"ReleaseRef closed %d [%d]", File, ret_val);
+              delete [] Count;
+          }   // if
+      }   // if
+  }   // static ReleaseRef
+
 };
 
 
@@ -500,6 +518,7 @@ class PosixEnv : public Env {
       }
 #endif
     } else {
+      syslog(LOG_ERR, "NewRandomAccessFile open %d (%s)", fd, fname.c_str());
       *result = new PosixRandomAccessFile(fname, fd);
     }
     return s;
@@ -513,6 +532,7 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
+      syslog(LOG_ERR, "NewWritableFile open %d (%s)", fd, fname.c_str());
       *result = new PosixMmapFile(fname, fd, page_size_, 0, false);
     }
     return s;
@@ -531,6 +551,7 @@ class PosixEnv : public Env {
       s = GetFileSize(fname, &size);
       if (s.ok())
       {
+          syslog(LOG_ERR, "NewAppendableFile open %d (%s)", fd, fname.c_str());
           *result = new PosixMmapFile(fname, fd, page_size_, size);
       }   // if
       else
@@ -550,6 +571,8 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
+        syslog(LOG_ERR, "NewWriteOnlyFile open %d (%s)", fd, fname.c_str());
+
       *result = new PosixMmapFile(fname, fd, page_size_, 0, true);
     }
     return s;
@@ -636,6 +659,7 @@ class PosixEnv : public Env {
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
       my_lock->name_ = fname;
+      syslog(LOG_ERR, "LockFile opened %d (%s)", my_lock->fd_, fname.c_str());
       *lock = my_lock;
     }
     return result;
@@ -648,7 +672,10 @@ class PosixEnv : public Env {
       result = IOError("unlock", errno);
     }
     gFileLocks.Remove(my_lock->name_);
-    close(my_lock->fd_);
+    int ret_val=close(my_lock->fd_);
+    syslog(LOG_ERR, "UnlockFile closed %d [%d]", my_lock->fd_, ret_val);
+    my_lock->fd_=-1;
+
     delete my_lock;
     return result;
   }
@@ -1130,145 +1157,6 @@ pthread_t PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
   return(t);
 }
 
-// this was a reference file:  unmap, purge page cache, close
-void BGFileCloser(void * arg)
-{
-    BGCloseInfo * file_ptr;
-    bool err_flag;
-    int ret_val;
-
-    err_flag=false;
-    file_ptr=(BGCloseInfo *)arg;
-
-    ret_val=munmap(file_ptr->base_, file_ptr->length_);
-    if (0!=ret_val)
-    {
-      syslog(LOG_ERR,"BGFileCloser munmap failed [%d, %m]", errno);
-      err_flag=true;
-    }  // if
-
-#if defined(HAVE_FADVISE)
-    ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
-    if (0!=ret_val)
-    {
-      syslog(LOG_ERR,"BGFileCloser posix_fadvise DONTNEED failed [%d, %m]", errno);
-      err_flag=true;
-    }  // if
-
-#endif
-
-    if (0 != file_ptr->unused_)
-    {
-        ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
-        if (0!=ret_val)
-        {
-            syslog(LOG_ERR,"BGFileCloser ftruncate failed [%d, %m]", errno);
-            err_flag=true;
-        }  // if
-    }
-
-    close(file_ptr->fd_);
-    delete file_ptr;
-    gPerfCounters->Inc(ePerfROFileClose);
-
-    if (err_flag)
-        gPerfCounters->Inc(ePerfBGWriteError);
-
-    return;
-
-}   // BGFileCloser
-
-// this was a new file:  unmap, hold in page cache, close
-void BGFileCloser2(void * arg)
-{
-    BGCloseInfo * file_ptr;
-    bool err_flag;
-    int ret_val;
-
-    err_flag=false;
-    file_ptr=(BGCloseInfo *)arg;
-
-    ret_val=munmap(file_ptr->base_, file_ptr->length_);
-    if (0!=ret_val)
-    {
-        syslog(LOG_ERR,"BGFileCloser2 munmap failed [%d, %m]", errno);
-        err_flag=true;
-    }  // if
-
-
-#if defined(HAVE_FADVISE)
-    // release newly written data from Linux page cache if possible
-    if (0==file_ptr->metadata_
-        || (file_ptr->offset_ + file_ptr->length_ < file_ptr->metadata_))
-    {
-        // must fdatasync for DONTNEED to work
-        ret_val=fdatasync(file_ptr->fd_);
-        if (0!=ret_val)
-        {
-            syslog(LOG_ERR,"BGFileCloser2 fdatasync failed [%d, %m]", errno);
-            err_flag=true;
-        }  // if
-
-        ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
-        if (0!=ret_val)
-        {
-            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise DONTNEED failed [%d, %m]", errno);
-            err_flag=true;
-        }  // if
-    }   // if
-    else
-    {
-        ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
-        if (0!=ret_val)
-        {
-            syslog(LOG_ERR,"BGFileCloser2 posix_fadvise WILLNEED failed [%d, %m]", errno);
-            err_flag=true;
-        }  // if
-    }   // else
-#endif
-
-    if (0 != file_ptr->unused_)
-    {
-        ret_val=ftruncate(file_ptr->fd_, file_ptr->offset_ + file_ptr->length_ - file_ptr->unused_);
-        if (0!=ret_val)
-        {
-            syslog(LOG_ERR,"BGFileCloser2 ftruncate failed [%d, %m]", errno);
-            err_flag=true;
-        }  // if
-    }
-    close(file_ptr->fd_);
-    delete file_ptr;
-
-    gPerfCounters->Inc(ePerfRWFileClose);
-
-    if (err_flag)
-        gPerfCounters->Inc(ePerfBGWriteError);
-
-    return;
-
-}   // BGFileCloser2
-
-#if 0  // currently unused, remove due to compiler warning
-// this was a reference file:  unmap, purge page cache
-void BGFileUnmapper(void * arg)
-{
-    BGCloseInfo * file_ptr;
-
-    file_ptr=(BGCloseInfo *)arg;
-
-    munmap(file_ptr->base_, file_ptr->length_);
-
-#if defined(HAVE_FADVISE)
-    posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
-#endif
-
-    delete file_ptr;
-    gPerfCounters->Inc(ePerfROFileUnmap);
-
-    return;
-
-}   // BGFileUnmapper
-#endif
 
 // this was a new file:  unmap, hold in page cache
 void BGFileUnmapper2(void * arg)
@@ -1295,14 +1183,14 @@ void BGFileUnmapper2(void * arg)
         ret_val=fdatasync(file_ptr->fd_);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 fdatasync failed on %d [%d, %m]", file_ptr->fd_, errno);
             err_flag=true;
         }  // if
 
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_DONTNEED);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise DONTNEED failed on %d [%d]", file_ptr->fd_, ret_val);
             err_flag=true;
         }  // if
     }   // if
@@ -1311,11 +1199,13 @@ void BGFileUnmapper2(void * arg)
         ret_val=posix_fadvise(file_ptr->fd_, file_ptr->offset_, file_ptr->length_, POSIX_FADV_WILLNEED);
         if (0!=ret_val)
         {
-            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed [%d, %m]", errno);
+            syslog(LOG_ERR,"BGFileUnmapper2 posix_fadvise WILLNEED failed on %d [%d]", file_ptr->fd_, ret_val);
             err_flag=true;
         }  // if
     }   // else
 #endif
+
+    PosixMmapFile::ReleaseRef(file_ptr->ref_count_, file_ptr->fd_);
 
     delete file_ptr;
     gPerfCounters->Inc(ePerfRWFileUnmap);
@@ -1362,6 +1252,7 @@ static void InitDefaultEnv()
         crc32c::SwitchToHardwareCRC();
 
     PerformanceCounters::Init(false);
+
     started=true;
 }
 
