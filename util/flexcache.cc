@@ -66,8 +66,6 @@ FlexCache::FlexCache()
 }   // FlexCache::FlexCache
 
 
-
-
 /**
  * Return current capacity limit for cache flavor indicated,
  *  default is zero if unknown flavor.
@@ -77,24 +75,22 @@ FlexCache::GetDBCacheCapacity(
     bool IsInternal)   //!< value describing cache attributes of caller
 {
     uint64_t ret_val, shared_total;
-    size_t count, internal_count;
+    size_t user_count, internal_count, count;
 
     // get count of database by type
-    count=DBList()->GetDBCount(IsInternal);
-    if (IsInternal)
-        internal_count=count;
-    else
-        internal_count=DBList()->GetDBCount(true);
+    user_count=DBList()->GetDBCount(false);
+    internal_count=DBList()->GetDBCount(true);
 
     // what is total memory assigned to a type
-    if (IsInternal)
+    if (IsInternal && 0!=user_count)
         shared_total=(m_TotalMemory*2)/10;  // integer *.2
-    else if (0!=internal_count)
+    else if (!IsInternal && 0!=internal_count)
         shared_total=(m_TotalMemory*8)/10;
-    else // no internal database
+    else // no databases in "other" category
         shared_total=m_TotalMemory;
 
     // split up type specific aggregate to "per database" value
+    count = (IsInternal ? internal_count : user_count);
     if (0!=count)
         ret_val=shared_total / count;
     else

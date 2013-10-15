@@ -179,10 +179,10 @@ TEST(FlexCacheTest, MixedSizing) {
     ASSERT_EQ(0, DBList()->GetDBCount(false));
     ASSERT_EQ(1, DBList()->GetDBCount(true));
     db[1]->GetProperty("leveldb.block-cache", &value);
-    ASSERT_EQ(72*1024*1024l, atoi(value.c_str()));
+    ASSERT_EQ(552*1024*1024L, atoi(value.c_str()));
 
     db[1]->GetProperty("leveldb.file-cache", &value);
-    ASSERT_EQ(70*1024*1024L, atoi(value.c_str()));
+    ASSERT_EQ(550*1024*1024L, atoi(value.c_str()));
 
     delete db[1];
 
