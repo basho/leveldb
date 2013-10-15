@@ -162,7 +162,13 @@ struct Options {
   //  Most recent value seen upon database open, wins.  Zero for default.
   uint64_t total_leveldb_mem;
 
-  // Create an Options object with default values for all fields.
+  // Riak option to override most memory modeling and create
+  //  smaller memory footprint for developers.  Helps when
+  //  running large number of databases and multiple VMs.
+  //
+  // Default: false
+  bool limited_developer_mem;
+
   Options();
 
   void Dump(Logger * log) const;

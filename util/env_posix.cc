@@ -42,13 +42,13 @@
 
 namespace leveldb {
 
+volatile size_t gMapSize=20*1024*1024L;
+
 namespace {
 
 static Status IOError(const std::string& context, int err_number) {
   return Status::IOError(context, strerror(err_number));
 }
-
-volatile size_t gMapSize=20*1024*1024L;
 
 // background routines to close and/or unmap files
 static void BGFileCloser(void* file_info);

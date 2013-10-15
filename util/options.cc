@@ -33,7 +33,8 @@ Options::Options()
       filter_policy(NULL),
       is_repair(false),
       is_internal_db(false),
-      total_leveldb_mem(0)
+      total_leveldb_mem(0),
+      limited_developer_mem(false)
 {
 }
 
@@ -59,6 +60,7 @@ Options::Dump(
     Log(log,"             Options.is_repair: %s", is_repair ? "true" : "false");
     Log(log,"        Options.is_internal_db: %s", is_internal_db ? "true" : "false");
     Log(log,"     Options.total_leveldb_mem: %" PRIu64, total_leveldb_mem);
+    Log(log," Options.limited_developer_mem: %s", limited_developer_mem ? "true" : "false");
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
 }   // Options::Dump
 

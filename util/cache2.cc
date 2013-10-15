@@ -426,7 +426,7 @@ DoubleCache::DoubleCache(
     // fixed allocation for recovery log and info LOG: 20M each
     //  (with 64 or open databases, this is a serious number)
     // and fixed allocation for two write buffers
-    m_Overhead=options.write_buffer_size*2 + 40*1024*1024L;
+    m_Overhead=options.write_buffer_size*2 + gMapSize*2;
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
 
     if (m_Overhead < m_TotalAllocation)
