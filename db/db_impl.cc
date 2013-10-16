@@ -1947,11 +1947,6 @@ Status DB::Open(const Options& options, const std::string& dbname,
 
   gPerfCounters->Inc(ePerfApiOpen);
 
-  if (s.ok())
-      syslog(LOG_ERR, "DB::Open success for %s", dbname.c_str());
-  else
-      syslog(LOG_ERR, "DB::Open failed for %s", dbname.c_str());
-
   return s;
 }
 
