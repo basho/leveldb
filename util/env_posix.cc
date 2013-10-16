@@ -42,6 +42,8 @@
 
 namespace leveldb {
 
+volatile size_t gMapSize=20*1024*1024L;
+
 namespace {
 
 static Status IOError(const std::string& context, int err_number) {
@@ -267,10 +269,6 @@ class PosixMmapFile : public WritableFile {
       last_sync_ = NULL;
       dst_ = NULL;
 
-      // Increase the amount we map the next time, but capped at 1MB
-      if (map_size_ < (1<<20)) {
-        map_size_ *= 2;
-      }
     }
     else if (and_close && -1!=fd_)
     {
@@ -312,7 +310,7 @@ class PosixMmapFile : public WritableFile {
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
-        map_size_(Roundup(20 * 1048576, page_size)),
+        map_size_(Roundup(gMapSize, page_size)),
         base_(NULL),
         limit_(NULL),
         dst_(NULL),

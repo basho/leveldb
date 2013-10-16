@@ -125,6 +125,14 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.max_open_files,            20,     50000);
   ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
+
+  if (src.limited_developer_mem)
+  {
+      gMapSize=2*1024*1024L;
+      if (2*1024*1024L < result.write_buffer_size) // let unit tests be smaller
+          result.write_buffer_size=2*1024*1024L;
+  }   // if
+
   if (result.info_log == NULL) {
     // Open a log file in the same directory as the db
     src.env->CreateDir(dbname);  // In case it does not exist
@@ -137,7 +145,6 @@ Options SanitizeOptions(const std::string& dbname,
   }
 
   if (result.block_cache == NULL) {
-//    result.block_cache = NewLRUCache(8 << 20);
       result.block_cache = block_cache;
   }
   return result;
@@ -1908,8 +1915,8 @@ Status DB::Open(const Options& options, const std::string& dbname,
   // 4 level0 files at 2Mbytes and 2Mbytes of block cache
   //  (but first level1 file is likely to thrash)
   //  ... this value is AFTER write_buffer and 40M for recovery log and LOG
-  if (impl->GetCacheCapacity() < flex::kMinimumDBMemory)
-      s=Status::InvalidArgument("Less than 10Mbytes per database/vnode");
+  //if (!options.limited_developer_mem && impl->GetCacheCapacity() < flex::kMinimumDBMemory)
+  //    s=Status::InvalidArgument("Less than 10Mbytes per database/vnode");
 
   if (s.ok())
       s = impl->Recover(&edit); // Handles create_if_missing, error_if_exists
