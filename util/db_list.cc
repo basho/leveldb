@@ -167,23 +167,21 @@ DBListImpl::ScanDBs(
         count=m_UserDBs.size();
     }   // else
 
-
 #if 0  // for debugging ... sometimes
     m_Lock.Unlock(); /// might not be needed now
     syslog(LOG_ERR, "count %zd, total memory %" PRIu64 ", db cache size %" PRIu64 ", internal %d",
            count, gFlexCache.GetTotalMemory(), gFlexCache.GetDBCacheCapacity(IsInternal),
            (int)IsInternal);
     m_Lock.Lock();
+#else
+    count=count*2;  // kill off compiler warning
 #endif
-
 
     // call member function of each database
     for (it=first; last!=it; ++it)
     {
         // must protect list from db add/delete during scan, leave locks
-//        m_Lock.Unlock();
         ((*it)->*Function)();
-//        m_Lock.Lock();
     }   // for
 
     return;
