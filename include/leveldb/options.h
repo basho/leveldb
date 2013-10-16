@@ -164,8 +164,8 @@ struct Options {
 
   // Riak option to override most memory modeling and create
   //  smaller memory footprint for developers.  Helps when
-  //  running large number of databases and multiple VMs.
-  //
+  //  running large number of databases and multiple VMs. Do
+  //  NOT use this option if making performance measurements.
   // Default: false
   bool limited_developer_mem;
 
