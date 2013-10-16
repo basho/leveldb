@@ -30,6 +30,7 @@
 #define STORAGE_LEVELDB_INCLUDE_HOT_THREADS_H_
 
 #include <pthread.h>
+#include <semaphore.h>
 #include <deque>
 #include <vector>
 
@@ -77,6 +78,31 @@ private:
 };  // class HotThread
 
 
+struct QueueThread
+{
+public:
+    pthread_t m_ThreadId;                //!< handle for this thread
+
+    class HotThreadPool & m_Pool;        //!< parent pool object
+
+    sem_t m_Semaphore;                   //!< counts items inserted to queue
+
+public:
+    QueueThread(class HotThreadPool & Pool);
+
+    virtual ~QueueThread() {sem_destroy(&m_Semaphore);};
+
+    // actual work loop
+    void * QueueThreadRoutine();
+
+private:
+    QueueThread();                              // no default
+    QueueThread(const QueueThread &);             // no copy
+    QueueThread & operator=(const QueueThread&);  // no assign
+
+};  // class QueueThread
+
+
 
 class HotThreadPool
 {
@@ -87,9 +113,11 @@ public:
 
     volatile bool m_Shutdown;            //!< should we stop threads and shut down?
 
-    ThreadPool_t  m_Threads;
+    ThreadPool_t  m_Threads;             //!< pool of fast response workers
+
+    QueueThread m_QueueThread;           //!< one slow response worker to cover edge case
     WorkQueue_t   m_WorkQueue;
-    port::Spin m_QueueLock;                    //!< protects access to work_queue
+    port::Spin m_QueueLock;              //!< protects access to work_queue
     volatile size_t m_WorkQueueAtomic;   //!< atomic size to parallel work_queue.size().
 
     enum PerformanceCountersEnum m_DirectCounter;
