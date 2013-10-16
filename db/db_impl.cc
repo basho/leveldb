@@ -1915,8 +1915,8 @@ Status DB::Open(const Options& options, const std::string& dbname,
   // 4 level0 files at 2Mbytes and 2Mbytes of block cache
   //  (but first level1 file is likely to thrash)
   //  ... this value is AFTER write_buffer and 40M for recovery log and LOG
-  if (!options.limited_developer_mem && impl->GetCacheCapacity() < flex::kMinimumDBMemory)
-      s=Status::InvalidArgument("Less than 10Mbytes per database/vnode");
+  //if (!options.limited_developer_mem && impl->GetCacheCapacity() < flex::kMinimumDBMemory)
+  //    s=Status::InvalidArgument("Less than 10Mbytes per database/vnode");
 
   if (s.ok())
       s = impl->Recover(&edit); // Handles create_if_missing, error_if_exists
