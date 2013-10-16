@@ -205,7 +205,6 @@ class DBImpl : public DB {
   volatile uint64_t throttle_end;
   volatile uint32_t running_compactions_;
 
-
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};
   Cache * file_cache() {return(double_cache.GetFileCache());};

@@ -1399,6 +1399,9 @@ void Env::Shutdown()
     delete gImmThreads;
     gImmThreads=NULL;
 
+    delete gImmThreads;
+    gImmThreads=NULL;
+
 }   // Env::Shutdown
 
 
