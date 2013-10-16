@@ -129,7 +129,8 @@ Options SanitizeOptions(const std::string& dbname,
   if (src.limited_developer_mem)
   {
       gMapSize=2*1024*1024L;
-      result.write_buffer_size=2*1024*1024L;
+      if (2*1024*1024L < result.write_buffer_size) // let unit tests be smaller
+          result.write_buffer_size=2*1024*1024L;
   }   // if
 
   if (result.info_log == NULL) {
