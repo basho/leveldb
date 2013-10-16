@@ -23,7 +23,7 @@
 // -------------------------------------------------------------------
 // HotThread is a subtle variation on the eleveldb_thread_pool.  Both
 //  represent a design pattern that is tested to perform better under
-//  the Erlang VM than other traditional designs.  
+//  the Erlang VM than other traditional designs.
 // -------------------------------------------------------------------
 
 #include "leveldb/atomics.h"
@@ -33,7 +33,6 @@
 namespace leveldb {
 
 HotThreadPool * gImmThreads=NULL;
-
 
 
 void *ThreadStaticEntry(void *args)
@@ -121,6 +120,80 @@ HotThread::ThreadRoutine()
 }   // HotThread::ThreadRoutine
 
 
+void *QueueThreadStaticEntry(void *args)
+{
+    QueueThread &tdata = *(QueueThread *)args;
+
+    return(tdata.QueueThreadRoutine());
+
+}   // QueueThreadStaticEntry
+
+
+QueueThread::QueueThread(
+    class HotThreadPool & Pool)
+    : m_Pool(Pool)
+{
+    memset(&m_Semaphore, 0, sizeof(m_Semaphore));
+    sem_init(&m_Semaphore, 0, 0);
+
+    return;
+
+}   // QueueThread::QueueThread
+
+
+/**
+ * Cover highly inprobable race condition with adding a queue
+ *  and no hot thread sees it.
+ */
+void *
+QueueThread::QueueThreadRoutine()
+{
+    ThreadTask * submission;
+
+    submission=NULL;
+
+    while(!m_Pool.m_Shutdown)
+    {
+        // test non-blocking size for hint (much faster)
+        if (0!=m_Pool.m_WorkQueueAtomic)
+        {
+            // retest with locking
+            SpinLock lock(&m_Pool.m_QueueLock);
+
+            if (!m_Pool.m_WorkQueue.empty())
+            {
+                submission=m_Pool.m_WorkQueue.front();
+                m_Pool.m_WorkQueue.pop_front();
+                dec_and_fetch(&m_Pool.m_WorkQueueAtomic);
+                m_Pool.IncWorkDequeued();
+                m_Pool.IncWorkWeighted(Env::Default()->NowMicros()
+                                       - submission->m_QueueStart);
+            }   // if
+        }   // if
+
+
+        // a work item identified (direct or queue), work it!
+        //  then loop to test queue again
+        if (NULL!=submission)
+        {
+            // execute the job
+            (*submission)();
+
+            submission->RefDec();
+
+            submission=NULL;
+        }   // if
+
+        // loop until semaphore hits zero
+        sem_wait(&m_Semaphore);
+
+    }   // while
+
+    return 0;
+
+}   // QueueThread::QueueThreadRoutine
+
+
 HotThreadPool::HotThreadPool(
     const size_t PoolSize,
     enum PerformanceCountersEnum Direct,
@@ -128,7 +201,7 @@ HotThreadPool::HotThreadPool(
     enum PerformanceCountersEnum Dequeued,
     enum PerformanceCountersEnum Weighted)
     : m_WorkQueueAtomic(0),
-          m_Shutdown(false),
+          m_Shutdown(false), m_QueueThread(*this),
           m_DirectCounter(Direct), m_QueuedCounter(Queued),
           m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
 {
@@ -147,6 +220,9 @@ HotThreadPool::HotThreadPool(
         else
             delete hot_ptr;
     }   // for
+
+    if (0==ret_val)
+        ret_val=pthread_create(&m_QueueThread.m_ThreadId, NULL,  &QueueThreadStaticEntry, &m_QueueThread);
 
     m_Shutdown=(0!=ret_val);
 
@@ -173,7 +249,11 @@ HotThreadPool::~HotThreadPool()
         pthread_join((*thread_it)->m_ThreadId, NULL);
         delete *thread_it;
     }   // for
-    
+
+    // release the m_QueueThread to exit
+    sem_post(&m_QueueThread.m_Semaphore);
+    pthread_join(m_QueueThread.m_ThreadId, NULL);
+
     // release any objects hanging in work queue
     for (work_it=m_WorkQueue.begin(); m_WorkQueue.end()!=work_it; ++work_it)
     {
@@ -235,7 +315,7 @@ HotThreadPool::FindWaitingThread(
 }   // FindWaitingThread
 
 
-bool 
+bool
 HotThreadPool::Submit(
     ThreadTask* item)
 {
@@ -254,6 +334,8 @@ HotThreadPool::Submit(
         // try to give work to a waiting thread first
         else if (!FindWaitingThread(item))
         {
+            item->m_QueueStart=Env::Default()->NowMicros();
+
             // no waiting threads, put on backlog queue
             {
                 SpinLock lock(&m_QueueLock);
@@ -264,7 +346,11 @@ HotThreadPool::Submit(
             // to address race condition, thread might be waiting now
             FindWaitingThread(NULL);
 
+            // to address second race condition, send in QueueThread
+            sem_post(&m_QueueThread.m_Semaphore);
+
             IncWorkQueued();
+
             ret_flag=true;
         }   // if
         else

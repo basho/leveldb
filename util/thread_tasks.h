@@ -42,13 +42,14 @@ namespace leveldb {
 class ThreadTask
 {
 public:
+    uint64_t m_QueueStart;        //!< NowMicros() time placed on work queue
 
 protected:
     volatile uint32_t m_RefCount;
 
  public:
-    ThreadTask() 
-        : m_RefCount(0) {};
+    ThreadTask()
+        : m_QueueStart(0), m_RefCount(0) {};
 
     virtual ~ThreadTask() {};
 
@@ -61,7 +62,7 @@ protected:
         current_refs=dec_and_fetch(&m_RefCount);
         if (0==current_refs)
             delete this;
-        
+
         return(current_refs);
 
     }   // RefObject::RefDec
