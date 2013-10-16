@@ -381,6 +381,11 @@ class EnvWrapper : public Env {
   Env* target_;
 };
 
+// Riak specific hack to allow runtime change
+//  of mapping size
+extern volatile size_t gMapSize;
+
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_ENV_H_
