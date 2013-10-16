@@ -1239,11 +1239,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       compact->current_output()->largest.DecodeFrom(key);
       compact->builder->Add(key, input->value());
 
-      // update throttle ... now, end of compaction may be too late
-      //   but not too often since NowMicros can be costly
-      size_t entry_count;
-      entry_count=compact->num_entries + compact->builder->NumEntries();
-
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
           compact->compaction->MaxOutputFileSize()) {
