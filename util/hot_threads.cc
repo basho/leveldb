@@ -200,10 +200,10 @@ HotThreadPool::HotThreadPool(
     enum PerformanceCountersEnum Queued,
     enum PerformanceCountersEnum Dequeued,
     enum PerformanceCountersEnum Weighted)
-    : m_WorkQueueAtomic(0),
-          m_Shutdown(false), m_QueueThread(*this),
-          m_DirectCounter(Direct), m_QueuedCounter(Queued),
-          m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
+    : m_Shutdown(false), m_QueueThread(*this),
+      m_WorkQueueAtomic(0),
+      m_DirectCounter(Direct), m_QueuedCounter(Queued),
+      m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
 {
     int ret_val;
     size_t loop;

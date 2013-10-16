@@ -434,8 +434,8 @@ Status Version::Get(const ReadOptions& options,
 }
 
 bool Version::UpdateStats(const GetStats& stats) {
-  FileMetaData* f = stats.seek_file;
 #if 0
+  FileMetaData* f = stats.seek_file;
   if (f != NULL) {
     f->allowed_seeks--;
     if (f->allowed_seeks <= 0 && file_to_compact_ == NULL) {
