@@ -57,8 +57,9 @@ static Status IOError(const std::string& context, int err_number) {
 static void BGFileUnmapper2(void* file_info);
 
 // data needed by background routines for close/unmap
-struct BGCloseInfo
+class BGCloseInfo : public ThreadTask
 {
+public:
     int fd_;
     void * base_;
     size_t offset_;
@@ -74,6 +75,16 @@ struct BGCloseInfo
         if (NULL!=ref_count_)
             inc_and_fetch(ref_count_);
     };
+
+    virtual ~BGCloseInfo() {};
+
+    virtual void operator()() {BGFileUnmapper2(this);};
+
+private:
+    BGCloseInfo();
+    BGCloseInfo(const BGCloseInfo &);
+    BGCloseInfo & operator=(const BGCloseInfo &);
+
 };
 
 class PosixSequentialFile: public SequentialFile {
@@ -220,7 +231,7 @@ class PosixMmapFile : public WritableFile {
       {
           BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_,
                                             ref_count_, metadata_offset_);
-          Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
+          gWriteThreads->Submit(ptr);
       }   // else
 
       file_offset_ += limit_ - base_;
@@ -1195,7 +1206,7 @@ void BGFileUnmapper2(void * arg)
 
     PosixMmapFile::ReleaseRef(file_ptr->ref_count_, file_ptr->fd_);
 
-    delete file_ptr;
+    // hot_threads deletes ... delete file_ptr;
     gPerfCounters->Inc(ePerfRWFileUnmap);
 
     if (err_flag)
@@ -1241,8 +1252,10 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
-    gImmThreads=new HotThreadPool(7, ePerfDebug1, ePerfDebug2,
+    gImmThreads=new HotThreadPool(5, ePerfDebug1, ePerfDebug2,
                                   ePerfDebug3, ePerfDebug4);
+    gWriteThreads=new HotThreadPool(7, ePerfDebug1, ePerfDebug2,
+                                    ePerfDebug3, ePerfDebug4);
 
     started=true;
 }
@@ -1275,6 +1288,9 @@ void Env::Shutdown()
 
     delete gImmThreads;
     gImmThreads=NULL;
+
+    delete gWriteThreads;
+    gWriteThreads=NULL;
 
 }   // Env::Shutdown
 

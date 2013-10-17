@@ -155,6 +155,7 @@ private:
 };  // class HotThreadPool
 
 extern HotThreadPool * gImmThreads;
+extern HotThreadPool * gWriteThreads;
 
 } // namespace leveldb
 

@@ -34,6 +34,8 @@ namespace leveldb {
 
 HotThreadPool * gImmThreads=NULL;
 
+HotThreadPool * gWriteThreads=NULL;
+
 
 void *ThreadStaticEntry(void *args)
 {
