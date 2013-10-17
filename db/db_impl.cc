@@ -944,7 +944,7 @@ DBImpl::BackgroundImmCompactCall() {
       mutex_.Lock();
     }
   }
-//  IsCompactionScheduled() = false;
+
   --running_compactions_;
 
   // Previous compaction may have produced too many files in a level,
@@ -963,7 +963,6 @@ DBImpl::BackgroundImmCompactCall() {
 
   bg_cv_.SignalAll();
 }
-
 
 
 Status DBImpl::BackgroundCompaction() {
