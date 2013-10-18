@@ -226,7 +226,12 @@ public:
     bool VersionTest()
         {return(ePerfCountEnumSize<=m_CounterSize && ePerfVersion==m_Version);};
 
+    //!< mostly for perf_count_test.cc
+    void SetVersion(uint32_t Version, uint32_t CounterSize)
+    {m_Version=Version; m_CounterSize=CounterSize;};
+
     static PerformanceCounters * Init(bool IsReadOnly);
+    static int Close(PerformanceCounters * Counts);
 
     uint64_t Inc(unsigned Index);
     uint64_t Dec(unsigned Index);

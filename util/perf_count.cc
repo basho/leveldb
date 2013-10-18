@@ -1,8 +1,8 @@
 // -------------------------------------------------------------------
 //
-// perf_count.cc:  performance counters LevelDB (http://code.google.com/p/leveldb/)
+// perf_count.cc:  performance counters LevelDB
 //
-// Copyright (c) 2012 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2012-2013 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -26,6 +26,7 @@
 #include <sys/shm.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <errno.h>
 
 #ifndef STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
@@ -205,23 +206,63 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
     }   // PerformanceCounters::PerformanceCounters
 
+
     PerformanceCounters *
     PerformanceCounters::Init(
         bool IsReadOnly)
     {
         PerformanceCounters * ret_ptr;
+        bool should_create, good;
+        int ret_val, id;
+        struct shmid_ds shm_info;
 
         ret_ptr=NULL;
+        memset(&shm_info, 0, sizeof(shm_info));
+        good=true;
+
+        // first id attempt, minimal request
+        id=shmget(ePerfKey, 0, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if (-1!=id)
+            ret_val=shmctl(id, IPC_STAT, &shm_info);
+        else
+            ret_val=-1;
+
+        // does the shared memory already exists (and of proper size if writing)
+        should_create=(0!=ret_val || ((shm_info.shm_segsz < sizeof(PerformanceCounters)) && !IsReadOnly));
+
+        // should old shared memory be deleted?
+        if (should_create && 0==ret_val)
+        {
+            ret_val=shmctl(id, IPC_RMID, &shm_info);
+            if (0!=ret_val)
+            {
+                syslog(LOG_ERR, "shmctl IPC_RMID failed [%d, %m]", errno);
+                good=false;
+            }   // if
+        }   // if
 
         // attempt to attach/create to shared memory instance
-        m_PerfSharedId=shmget(ePerfKey, sizeof(PerformanceCounters), IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-        if (-1!=m_PerfSharedId)
+        if (good)
+        {
+            int flags;
+
+            if (IsReadOnly)
+                flags = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+            else
+                flags = IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+
+            m_PerfSharedId=shmget(ePerfKey, sizeof(PerformanceCounters), flags);
+            good=(-1!=m_PerfSharedId);
+        }   // if
+
+        // map shared memory instance
+        if (good)
         {
             ret_ptr=(PerformanceCounters *)shmat(m_PerfSharedId, NULL, (IsReadOnly ? SHM_RDONLY : 0));
             if ((void*)-1 != ret_ptr)
             {
                 // initialize?
-                if (0==ret_ptr->m_Version || ePerfCountEnumSize!=ret_ptr->m_CounterSize)
+                if (should_create || ePerfVersion!=ret_ptr->m_Version)
                 {
                     if (!IsReadOnly)
                     {
@@ -233,13 +274,18 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
                     // bad version match to existing segment
                     else
                     {
-                        ret_ptr=(PerformanceCounters *)-1;
+                        good=false;
                         errno=EINVAL;
                     }   // else
                 }   // if
             }   // if
+            else
+            {
+                good=false;
+                syslog(LOG_ERR, "shmat failed [%d, %m]", errno);
+            }   // else
 
-            if ((void*)-1 != ret_ptr)
+            if (good)
             {
                 // make this available process wide
                 gPerfCounters=ret_ptr;
@@ -259,6 +305,31 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         return(ret_ptr);
 
     };  // PerformanceCounters::Init
+
+
+    int
+    PerformanceCounters::Close(
+        PerformanceCounters * Counts)
+    {
+        int ret_val;
+
+        if (NULL!=Counts && &LocalStartupCounters != Counts)
+        {
+            // keep gPerf valid
+            if (gPerfCounters==Counts)
+                gPerfCounters=&LocalStartupCounters;
+
+            ret_val=shmdt(Counts);
+            if (0!=ret_val)
+                ret_val=errno;
+        }   // if
+        else
+        {
+            ret_val=EINVAL;
+        }   // else
+
+        return(ret_val);
+    }   // PerformanceCounters::Close
 
 
     uint64_t
