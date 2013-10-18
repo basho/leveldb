@@ -191,6 +191,8 @@ enum PerformanceCountersEnum
 
     ePerfBGWriteError=66,   //!< error in write/close, see syslog
 
+    ePerfThrottleWait=67,      //!< milliseconds of throttle wait
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values

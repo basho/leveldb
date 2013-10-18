@@ -928,6 +928,7 @@ DBImpl::BackgroundImmCompactCall() {
   assert(NULL != imm_);
 
   ++running_compactions_;
+  gPerfCounters->Inc(ePerfBGCompactImm);
 
   if (!shutting_down_.Acquire_Load()) {
     Status s = CompactMemTable();
@@ -1540,7 +1541,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
           env_->SleepForMicroseconds(remaining_wait);
           new_end=now+remaining_wait+throttle;
 
-          gPerfCounters->Add(ePerfDebug0, remaining_wait);
+          gPerfCounters->Add(ePerfThrottleWait, remaining_wait);
       }   // if
       else
       {
@@ -1561,7 +1562,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
           env_->SleepForMicroseconds(remaining_wait);
           new_end +=remaining_wait;
 
-          gPerfCounters->Add(ePerfDebug0, remaining_wait);
+          gPerfCounters->Add(ePerfThrottleWait, remaining_wait);
       }   // if
 
       throttle_end=new_end;
