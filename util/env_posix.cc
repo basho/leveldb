@@ -29,9 +29,11 @@
 #include "port/port.h"
 #include "util/crc32c.h"
 #include "util/db_list.h"
+#include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"
+#include "util/thread_tasks.h"
 #include "util/throttle.h"
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
@@ -55,8 +57,9 @@ static Status IOError(const std::string& context, int err_number) {
 static void BGFileUnmapper2(void* file_info);
 
 // data needed by background routines for close/unmap
-struct BGCloseInfo
+class BGCloseInfo : public ThreadTask
 {
+public:
     int fd_;
     void * base_;
     size_t offset_;
@@ -69,9 +72,24 @@ struct BGCloseInfo
         : fd_(fd), base_(base), offset_(offset), length_(length),
           ref_count_(ref_count), metadata_(metadata)
     {
+        // reference count of independent file object count
         if (NULL!=ref_count_)
             inc_and_fetch(ref_count_);
+
+        // reference count of threads/paths using this object 
+        //  (because there is a direct path and a threaded path usage)
+        RefInc();
     };
+
+    virtual ~BGCloseInfo() {};
+
+    virtual void operator()() {BGFileUnmapper2(this);};
+
+private:
+    BGCloseInfo();
+    BGCloseInfo(const BGCloseInfo &);
+    BGCloseInfo & operator=(const BGCloseInfo &);
+
 };
 
 class PosixSequentialFile: public SequentialFile {
@@ -218,7 +236,7 @@ class PosixMmapFile : public WritableFile {
       {
           BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_,
                                             ref_count_, metadata_offset_);
-          Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
+          gWriteThreads->Submit(ptr);
       }   // else
 
       file_offset_ += limit_ - base_;
@@ -1193,11 +1211,14 @@ void BGFileUnmapper2(void * arg)
 
     PosixMmapFile::ReleaseRef(file_ptr->ref_count_, file_ptr->fd_);
 
-    delete file_ptr;
     gPerfCounters->Inc(ePerfRWFileUnmap);
 
     if (err_flag)
         gPerfCounters->Inc(ePerfBGWriteError);
+
+    // routine called directly or via async thread, this
+    //  controls when to delete file_ptr object
+    file_ptr->RefDec();
 
     return;
 
@@ -1239,6 +1260,11 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
+    gImmThreads=new HotThreadPool(5, ePerfDebug1, ePerfDebug2,
+                                  ePerfDebug3, ePerfDebug4);
+    gWriteThreads=new HotThreadPool(7, ePerfDebug1, ePerfDebug2,
+                                    ePerfDebug3, ePerfDebug4);
+
     started=true;
 }
 
@@ -1267,6 +1293,12 @@ void Env::Shutdown()
 
     ComparatorShutdown();
     DBListShutdown();
+
+    delete gImmThreads;
+    gImmThreads=NULL;
+
+    delete gWriteThreads;
+    gWriteThreads=NULL;
 
 }   // Env::Shutdown
 
