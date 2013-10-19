@@ -418,11 +418,9 @@ DoubleCache::DoubleCache(
     const Options & options)
     : m_FileCache(NULL), m_BlockCache(NULL),
       m_IsInternalDB(options.is_internal_db),
+      m_Overhead(0), m_TotalAllocation(0),
       m_FileTimeout(4*24*60*60)  // default is 4 days
 {
-    // build two new caches
-    Flush();
-
     // fixed allocation for recovery log and info LOG: 20M each
     //  (with 64 or open databases, this is a serious number)
     // and fixed allocation for two write buffers
@@ -433,6 +431,9 @@ DoubleCache::DoubleCache(
         m_TotalAllocation -= m_Overhead;
     else
         m_TotalAllocation=0;
+
+    // build two new caches
+    Flush();
 
 }   // DoubleCache::DoubleCache
 

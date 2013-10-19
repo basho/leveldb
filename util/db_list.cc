@@ -63,6 +63,7 @@ DBListShutdown()
 
 
 DBListImpl::DBListImpl()
+    : m_UserDBCount(0), m_InternalDBCount(0)
 {
 }   // DBListImpl::DBListImpl
 
