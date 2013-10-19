@@ -516,7 +516,8 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "ThrottleBacklog1",
         "ThrottleCompacts1",
         "BGWriteError",
-        "ThrottleWait"
+        "ThrottleWait",
+        "ThreadError"
     };
 
 

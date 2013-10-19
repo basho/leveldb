@@ -72,8 +72,13 @@ public:
         : fd_(fd), base_(base), offset_(offset), length_(length),
           ref_count_(ref_count), metadata_(metadata)
     {
+        // reference count of independent file object count
         if (NULL!=ref_count_)
             inc_and_fetch(ref_count_);
+
+        // reference count of threads/paths using this object 
+        //  (because there is a direct path and a threaded path usage)
+        RefInc();
     };
 
     virtual ~BGCloseInfo() {};
@@ -1206,11 +1211,14 @@ void BGFileUnmapper2(void * arg)
 
     PosixMmapFile::ReleaseRef(file_ptr->ref_count_, file_ptr->fd_);
 
-    // hot_threads deletes ... delete file_ptr;
     gPerfCounters->Inc(ePerfRWFileUnmap);
 
     if (err_flag)
         gPerfCounters->Inc(ePerfBGWriteError);
+
+    // routine called directly or via async thread, this
+    //  controls when to delete file_ptr object
+    file_ptr->RefDec();
 
     return;
 

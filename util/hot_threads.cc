@@ -26,6 +26,8 @@
 //  the Erlang VM than other traditional designs.
 // -------------------------------------------------------------------
 
+#include <errno.h>
+#include <syslog.h>
 #include "leveldb/atomics.h"
 #include "util/hot_threads.h"
 #include "util/thread_tasks.h"
@@ -77,7 +79,8 @@ HotThread::ThreadRoutine()
                     m_Pool.m_WorkQueue.pop_front();
                     dec_and_fetch(&m_Pool.m_WorkQueueAtomic);
                     m_Pool.IncWorkDequeued();
-                    m_Pool.IncWorkWeighted(2);
+                    m_Pool.IncWorkWeighted(Env::Default()->NowMicros()
+                                           - submission->m_QueueStart);
                 }   // if
             }   // if
         }   // if
@@ -133,14 +136,57 @@ void *QueueThreadStaticEntry(void *args)
 
 QueueThread::QueueThread(
     class HotThreadPool & Pool)
-    : m_Pool(Pool)
+    : m_ThreadGood(false), m_Pool(Pool)
 {
+    int ret_val;
+
     memset(&m_Semaphore, 0, sizeof(m_Semaphore));
-    sem_init(&m_Semaphore, 0, 0);
+    ret_val=sem_init(&m_Semaphore, 0, 0);
+
+    // only start this if we have a working semaphore
+    if (0==ret_val)
+    {
+        ret_val=pthread_create(&m_ThreadId, NULL,  &QueueThreadStaticEntry, this);
+        if (0==ret_val)
+        {
+            m_ThreadGood=true;
+        }   // if
+        else
+        {
+            syslog(LOG_ERR, "thread_create failed in QueueThread::QueueThread [%d, %m]",
+                   errno);
+            gPerfCounters->Inc(ePerfThreadError);
+            sem_destroy(&m_Semaphore);
+        }   // else
+    }   // if
+    else
+    {
+        // OSX currently fails with error 78, not implemented.  Fix is
+        //  to create unique names then open with sem_open
+        syslog(LOG_ERR, "sem_init failed in QueueThread::QueueThread [%d, %m]",
+               errno);
+        gPerfCounters->Inc(ePerfThreadError);
+    }   // else
 
     return;
 
 }   // QueueThread::QueueThread
+
+
+QueueThread::~QueueThread() 
+{
+    // only clean up resources if they were started
+    if (m_ThreadGood)
+    {
+        // release the m_QueueThread to exit
+        sem_post(&m_Semaphore);
+        pthread_join(m_ThreadId, NULL);
+
+        sem_destroy(&m_Semaphore);
+    }   // if
+
+    return;
+}   // QueueThread::~QueueThread
 
 
 /**
@@ -223,9 +269,6 @@ HotThreadPool::HotThreadPool(
             delete hot_ptr;
     }   // for
 
-    if (0==ret_val)
-        ret_val=pthread_create(&m_QueueThread.m_ThreadId, NULL,  &QueueThreadStaticEntry, &m_QueueThread);
-
     m_Shutdown=(0!=ret_val);
 
     return;
@@ -251,10 +294,6 @@ HotThreadPool::~HotThreadPool()
         pthread_join((*thread_it)->m_ThreadId, NULL);
         delete *thread_it;
     }   // for
-
-    // release the m_QueueThread to exit
-    sem_post(&m_QueueThread.m_Semaphore);
-    pthread_join(m_QueueThread.m_ThreadId, NULL);
 
     // release any objects hanging in work queue
     for (work_it=m_WorkQueue.begin(); m_WorkQueue.end()!=work_it; ++work_it)
@@ -322,6 +361,7 @@ HotThreadPool::Submit(
     ThreadTask* item)
 {
     bool ret_flag(false);
+    int ret_val;
 
     if (NULL!=item)
     {
@@ -349,10 +389,19 @@ HotThreadPool::Submit(
             FindWaitingThread(NULL);
 
             // to address second race condition, send in QueueThread
-            sem_post(&m_QueueThread.m_Semaphore);
+            //   (thread not likely good on OSX)
+            if (m_QueueThread.m_ThreadGood)
+            {
+                ret_val=sem_post(&m_QueueThread.m_Semaphore);
+                if (0!=ret_val)
+                {
+                    syslog(LOG_ERR, "sem_post failed in HotThreadPool::Submit [%d, %m]",
+                           errno);
+                    gPerfCounters->Inc(ePerfThreadError);
+                }   // if
+            }   // if
 
             IncWorkQueued();
-
             ret_flag=true;
         }   // if
         else

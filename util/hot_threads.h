@@ -81,6 +81,7 @@ private:
 struct QueueThread
 {
 public:
+    bool m_ThreadGood;                   //!< true if thread and semaphore good
     pthread_t m_ThreadId;                //!< handle for this thread
 
     class HotThreadPool & m_Pool;        //!< parent pool object
@@ -90,7 +91,7 @@ public:
 public:
     QueueThread(class HotThreadPool & Pool);
 
-    virtual ~QueueThread() {sem_destroy(&m_Semaphore);};
+    virtual ~QueueThread();
 
     // actual work loop
     void * QueueThreadRoutine();
