@@ -324,6 +324,8 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
         match=(*saver)(arg, block_iter->key(), block_iter->value());
         if (!match && NULL!=filter)
             gPerfCounters->Inc(ePerfBlockFilterFalse);
+        if (match)
+            gPerfCounters->Inc(ePerfBlockValidGet);
       }
 
       s = block_iter->status();
