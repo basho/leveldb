@@ -119,7 +119,11 @@ public:
 
     virtual ~CompactionTask() {delete m_Compaction;};
 
-    virtual void operator()() {m_DBImpl->BackgroundCall2(m_Compaction);};
+    virtual void operator()() 
+    {
+        m_DBImpl->BackgroundCall2(m_Compaction);
+        m_Compaction=NULL;
+    };
 
 private:
     CompactionTask();

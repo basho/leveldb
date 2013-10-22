@@ -69,7 +69,7 @@ class DBImpl : public DB {
 
   void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
-  bool IsCompactionScheduled() {mutex_.AssertHeld(); return(bg_compaction_scheduled_ || NULL!=imm_);};
+  bool IsCompactionScheduled();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
 
  private:

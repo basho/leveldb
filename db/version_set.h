@@ -279,6 +279,12 @@ class VersionSet {
 
   TableCache* GetTableCache() {return(table_cache_);};
 
+  bool IsCompactionSubmitted(int level) 
+  {return(m_CompactionStatus[level].m_Submitted);}
+
+  void SetCompactionSubmitted(int level) 
+  {m_CompactionStatus[level].m_Submitted=true;}
+
   void SetCompactionRunning(int level) 
   {m_CompactionStatus[level].m_Running=true;}
 
