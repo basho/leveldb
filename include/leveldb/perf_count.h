@@ -194,6 +194,26 @@ enum PerformanceCountersEnum
     ePerfThrottleWait=67,   //!< milliseconds of throttle wait
     ePerfThreadError=68,    //!< system error on thread related call, no LOG access
 
+    ePerfBGImmDirect=69,    //!< count Imm compactions happened directly
+    ePerfBGImmQueued=70,    //!< count Imm compactions placed on queue
+    ePerfBGImmDequeued=71,  //!< count Imm compactions removed from queue
+    ePerfBGImmWeighted=72,  //!< total microseconds item spent on queue
+
+    ePerfBGUnmapDirect=73,  //!< count Unmap operations happened directly
+    ePerfBGUnmapQueued=74,  //!< count Unmap operations placed on queue
+    ePerfBGUnmapDequeued=75,//!< count Unmap operations removed from queue
+    ePerfBGUnmapWeighted=76,//!< total microseconds item spent on queue
+
+    ePerfBGLevel0Direct=77,  //!< count Level0 compactions happened directly
+    ePerfBGLevel0Queued=78,  //!< count Level0 compactions placed on queue
+    ePerfBGLevel0Dequeued=79,//!< count Level0 compactions removed from queue
+    ePerfBGLevel0Weighted=80,//!< total microseconds item spent on queue
+
+    ePerfBGCompactDirect=81,  //!< count generic compactions happened directly
+    ePerfBGCompactQueued=82,  //!< count generic compactions placed on queue
+    ePerfBGCompactDequeued=83,//!< count generic compactions removed from queue
+    ePerfBGCompactWeighted=84,//!< total microseconds item spent on queue
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values

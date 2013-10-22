@@ -1260,10 +1260,14 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
-    gImmThreads=new HotThreadPool(5, ePerfDebug1, ePerfDebug2,
-                                  ePerfDebug3, ePerfDebug4);
-    gWriteThreads=new HotThreadPool(7, ePerfDebug1, ePerfDebug2,
-                                    ePerfDebug3, ePerfDebug4);
+    gImmThreads=new HotThreadPool(5, ePerfBGImmDirect, ePerfBGImmQueued,
+                                  ePerfBGImmDequeued, ePerfBGImmWeighted);
+    gWriteThreads=new HotThreadPool(7, ePerfBGUnmapDirect, ePerfBGUnmapQueued,
+                                    ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
+    gLevel0Threads=new HotThreadPool(7, ePerfBGLevel0Direct, ePerfBGLevel0Queued,
+                                    ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
+    gCompactionThreads=new HotThreadPool(5, ePerfBGCompactDirect, ePerfBGCompactQueued,
+                                    ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 
     started=true;
 }
@@ -1299,6 +1303,12 @@ void Env::Shutdown()
 
     delete gWriteThreads;
     gWriteThreads=NULL;
+
+    delete gLevel0Threads;
+    gLevel0Threads=NULL;
+
+    delete gCompactionThreads;
+    gCompactionThreads=NULL;
 
 }   // Env::Shutdown
 

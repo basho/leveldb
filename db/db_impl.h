@@ -67,6 +67,7 @@ class DBImpl : public DB {
   size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
   void PurgeExpiredFileCache() {double_cache.PurgeExpiredFiles();};
 
+  void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
   bool IsCompactionScheduled() {mutex_.AssertHeld(); return(bg_compaction_scheduled_ || NULL!=imm_);};
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
@@ -113,7 +114,7 @@ class DBImpl : public DB {
   void MaybeScheduleCompaction();
   static void BGWork(void* db);
   void BackgroundCall();
-  Status BackgroundCompaction();
+  Status BackgroundCompaction(Compaction * Compact=NULL);
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
   int64_t PrioritizeWork(bool IsLevel0);
