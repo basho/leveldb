@@ -1269,6 +1269,10 @@ static void InitDefaultEnv()
                                   ePerfBGImmDequeued, ePerfBGImmWeighted);
     gWriteThreads=new HotThreadPool(7, ePerfBGUnmapDirect, ePerfBGUnmapQueued,
                                     ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
+    gLevel0Threads=new HotThreadPool(7, ePerfBGLevel0Direct, ePerfBGLevel0Queued,
+                                    ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
+    gCompactionThreads=new HotThreadPool(5, ePerfBGCompactDirect, ePerfBGCompactQueued,
+                                    ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 
     started=true;
 }
@@ -1304,6 +1308,12 @@ void Env::Shutdown()
 
     delete gWriteThreads;
     gWriteThreads=NULL;
+
+    delete gLevel0Threads;
+    gLevel0Threads=NULL;
+
+    delete gCompactionThreads;
+    gCompactionThreads=NULL;
 
 }   // Env::Shutdown
 

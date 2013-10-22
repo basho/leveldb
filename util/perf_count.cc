@@ -596,7 +596,15 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "BGUnmapDirect",
         "BGUnmapQueued",
         "BGUnmapDequeued",
-        "BGUnmapWeighted"
+        "BGUnmapWeighted",
+        "BGLevel0Direct",
+        "BGLevel0Queued",
+        "BGLevel0Dequeued",
+        "BGLevel0Weighted",
+        "BGCompactDirect",
+        "BGCompactQueued",
+        "BGCompactDequeued",
+        "BGCompactWeighted"
     };
 
 

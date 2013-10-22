@@ -16,8 +16,10 @@
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "util/thread_tasks.h"
 #include "leveldb/perf_count.h"
 
 namespace leveldb {
@@ -1062,103 +1064,173 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
   }
 }
 
-void VersionSet::Finalize(Version* v) {
-  // Precomputed best level for next compaction
-  int best_level = -1;
-  double best_score = -1;
-  int penalty=0;
+bool 
+VersionSet::Finalize(Version* v) 
+{
+    // Riak:  looking for first compaction needed in level order
+    int best_level = -1;
+    double best_score = -1;
+    bool compaction_found;
 
-  for (int level = 0; level < config::kNumLevels-1; level++) {
-    double score;
-    if (gLevelTraits[level].m_OverlappedFiles) {
-      // We treat level-0 specially by bounding the number of files
-      // instead of number of bytes for two reasons:
-      //
-      // (1) With larger write-buffer sizes, it is nice not to do too
-      // many level-0 compactions.
-      //
-      // (2) The files in level-0 are merged on every read and
-      // therefore we wish to avoid too many files when the individual
-      // file size is small (perhaps because of a small write-buffer
-      // setting, or very high compression ratios, or lots of
-      // overwrites/deletions).
+    compaction_found=false;
+    for (int level = 0; level < config::kNumLevels-1 && !compaction_found; level++) 
+    {
+        bool compact_ok;
+        double score;
 
-      score=0;
+        // is this level eligible for compaction consideration?
+        compact_ok=!m_CompactionStatus[level].m_Submitted;
 
-      // score of 1 at compaction trigger, incrementing for each thereafter
-      if ( config::kL0_CompactionTrigger <= v->files_[level].size())
-          score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
+        // not already scheduled for compaction
+        if (compact_ok)
+        {
+            // is overlapped and so is next level
+            if (gLevelTraits[level].m_OverlappedFiles && gLevelTraits[level+1].m_OverlappedFiles)
+            {
+                // good ... stop consideration
+            }   // if
+            
+            // overlapped and next level is not compacting
+            else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted)
+            {
+                // good ... stop consideration
+            }   // else if
 
-      // raise score above slowdown trigger to ensure this out scores
-      //  compactions at config::kNumOverlapLevels level
-      if ( config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
-          score += (v->files_[level].size() - config::kL0_SlowdownWritesTrigger)*3;
+            else
+            {
+                // must not have compactions scheduled on neither level below nor level above
+                compact_ok=(!m_CompactionStatus[level-1].m_Submitted && !m_CompactionStatus[level+1].m_Submitted);
+            }   // else
+        }   // if
 
-      // compute penalty for write throttle if too many Level-0 files accumulating
-      if (config::kL0_CompactionTrigger < v->files_[level].size())
-      {
-          // assume each overlapped file represents another pass at same key
-          //   and we are "close" on compaction backlog
-          if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
-          {
-              penalty+= (v->files_[level].size() - config::kL0_CompactionTrigger);
-          }   // if
+        // consider this level
+        if (compact_ok)
+        {
+            if (gLevelTraits[level].m_OverlappedFiles) {
+                // We treat level-0 specially by bounding the number of files
+                // instead of number of bytes for two reasons:
+                //
+                // (1) With larger write-buffer sizes, it is nice not to do too
+                // many level-0 compactions.
+                //
+                // (2) The files in level-0 are merged on every read and
+                // therefore we wish to avoid too many files when the individual
+                // file size is small (perhaps because of a small write-buffer
+                // setting, or very high compression ratios, or lots of
+                // overwrites/deletions).
+                score=0;
 
-          // no longer estimating work, now trying to throw on the breaks
-          //  to keep leveldb from stalling
-          else
-          {
-              int loop, count, value;
+                // score of 1 at compaction trigger, incrementing for each thereafter
+                if ( config::kL0_CompactionTrigger <= v->files_[level].size())
+                    score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
 
-              count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
+                // raise score above slowdown trigger to ensure this out scores
+                //  compactions at config::kNumOverlapLevels level
+                if ( config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
+                    score += (v->files_[level].size() - config::kL0_SlowdownWritesTrigger)*3;
 
-              for (loop=0, value=4; loop<count; ++loop)
-                  value*=8;
+                // don't screw around ... get data written to disk!
+                if (0==level
+                    && (size_t)config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
+                    score*=1000000.0;
+                else
+                    score*=10;  // give weight to overlapped levels over non-overlapped
+            } else {
+                // Compute the ratio of current size to size limit.
+                const uint64_t level_bytes = TotalFileSize(v->files_[level]);
+                score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
+            }
 
-              penalty+=value;
-          }   // else
-      }   // if
+            if (0!= score)
+            {
+                best_level = level;
+                best_score = score;
+                compaction_found=true;
+            }   // if
+        }   // if
+    }   // for
 
-      // don't screw around ... get data written to disk!
-      if (0==level
-          && (size_t)config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
-          score*=1000000.0;
-      else
-          score*=10;  // give weight to overlapped levels over non-overlapped
+    v->compaction_level_ = best_level;
+    v->compaction_score_ = best_score;
 
-    } else {
-      // Compute the ratio of current size to size limit.
-      double penalty_score;
+    return(compaction_found);
 
-      const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-      score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
+} // VersionSet::Finalize
 
-      if (config::kNumOverlapLevels!=level)
-          penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
-      // first sort layer needs to clear before next dump of overlapped files.
-      else
-          penalty_score = (1<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0);
+/**
+ * UpdatePenalty was previous part of Finalize().  It is now
+ *  an independent routine dedicated to setting the penalty
+ *  value used within the WriteThrottle calculations.
+ *
+ * Penalty is an estimate of how many compactions/keys of work
+ *  are overdue.
+ */
+void 
+VersionSet::UpdatePenalty(
+    Version* v) 
+{
+    int penalty=0;
 
-      if (1.0<=penalty_score)
-          penalty+=(static_cast<int>(penalty_score));
-    }
+    for (int level = 0; level < config::kNumLevels-1; ++level) 
+    {
+        if (gLevelTraits[level].m_OverlappedFiles) 
+        {
+            // compute penalty for write throttle if too many Level-0 files accumulating
+            if (config::kL0_CompactionTrigger < v->files_[level].size())
+            {
+                // assume each overlapped file represents another pass at same key
+                //   and we are "close" on compaction backlog
+                if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
+                {
+                    penalty+= (v->files_[level].size() - config::kL0_CompactionTrigger);
+                }   // if
 
-    if (score > best_score) {
-      best_level = level;
-      best_score = score;
-    }
-  }
+                // no longer estimating work, now trying to throw on the breaks
+                //  to keep leveldb from stalling
+                else
+                {
+                    int loop, count, value;
 
-  v->compaction_level_ = best_level;
-  v->compaction_score_ = best_score;
+                    count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
 
-  if (100000<penalty)
-      penalty=100000;
+                    for (loop=0, value=4; loop<count; ++loop)
+                        value*=8;
 
-  v->write_penalty_ = penalty;
+                    penalty+=value;
+                }   // else
+            }   // if
+        }   // if
+        else 
+        {
+            // Compute the ratio of current size to size limit.
+            double penalty_score;
 
-}
+            const uint64_t level_bytes = TotalFileSize(v->files_[level]);
+
+            if (config::kNumOverlapLevels!=level)
+                penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+
+            // first sort layer needs to clear before next dump of overlapped files.
+            else
+                penalty_score = (1<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0);
+
+            if (1.0<=penalty_score)
+                penalty+=(static_cast<int>(penalty_score));
+        }   // else
+
+    }   // for
+
+    // put a ceiling on the value
+    if (100000<penalty)
+        penalty=100000;
+
+    v->write_penalty_ = penalty;
+
+    return;
+
+}   // VersionSet::UpdatePenalty
+
 
 Status VersionSet::WriteSnapshot(log::Writer* log) {
   // TODO: Break up into multiple records to reduce memory usage on recovery?
@@ -1368,75 +1440,99 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   return result;
 }
 
-Compaction* VersionSet::PickCompaction() {
+
+/** 
+ * PickCompactions() directly feeds hot_thread pools as of October 2013
+ */
+void
+VersionSet::PickCompaction(
+    class DBImpl * db_impl)
+{
   Compaction* c;
   int level;
 
-  // current_ could be really stale compared to state of files, recompute
-  Finalize(current_);
+  // perform this once per call ... since Finalize now loops
+  UpdatePenalty(current_);
 
-  // We prefer compactions triggered by too much data in a level over
-  // the compactions triggered by seeks.
-  const bool size_compaction = (current_->compaction_score_ >= 1);
-  const bool seek_compaction = (current_->file_to_compact_ != NULL);
-  if (size_compaction) {
-    level = current_->compaction_level_;
-    assert(level >= 0);
-    assert(level+1 < config::kNumLevels);
-    c = new Compaction(level);
+  // submit a work object for every valid compaction needed
+  while(Finalize(current_))
+  {
+      // We prefer compactions triggered by too much data in a level over
+      // the compactions triggered by seeks.  (Riak redefines "seeks" to
+      // "files containing delete tombstones")
+      const bool size_compaction = (current_->compaction_score_ >= 1);
+      const bool seek_compaction = (current_->file_to_compact_ != NULL);
+      if (size_compaction) 
+      {
+          bool compact_ok;
+          level = current_->compaction_level_;
+          assert(level >= 0);
+          assert(level+1 < config::kNumLevels);
 
-    // Pick the first file that comes after compact_pointer_[level]
-    for (size_t i = 0; i < current_->files_[level].size(); i++) {
-      FileMetaData* f = current_->files_[level][i];
-      if (compact_pointer_[level].empty() ||
-          icmp_.Compare(f->largest.Encode(), compact_pointer_[level]) > 0) {
-        c->inputs_[0].push_back(f);
-        break;
+          c = new Compaction(level);
+
+          // Pick the first file that comes after compact_pointer_[level]
+          for (size_t i = 0; i < current_->files_[level].size(); i++) {
+              FileMetaData* f = current_->files_[level][i];
+              if (compact_pointer_[level].empty() ||
+                  icmp_.Compare(f->largest.Encode(), compact_pointer_[level]) > 0) {
+                  c->inputs_[0].push_back(f);
+                  break;
+              }
+          }
+          if (c->inputs_[0].empty()) {
+              // Wrap-around to the beginning of the key space
+              c->inputs_[0].push_back(current_->files_[level][0]);
+          }
+      } else if (seek_compaction) {
+          level = current_->file_to_compact_level_;
+          c = new Compaction(level);
+          c->inputs_[0].push_back(current_->file_to_compact_);
+      } else {
+          return;
       }
-    }
-    if (c->inputs_[0].empty()) {
-      // Wrap-around to the beginning of the key space
-      c->inputs_[0].push_back(current_->files_[level][0]);
-    }
-  } else if (seek_compaction) {
-    level = current_->file_to_compact_level_;
-    c = new Compaction(level);
-    c->inputs_[0].push_back(current_->file_to_compact_);
-  } else {
-    return NULL;
-  }
 
-  c->input_version_ = current_;
-  c->input_version_->Ref();
+      c->input_version_ = current_;
+      c->input_version_->Ref();
 
-  // m_OverlappedFiles==true levels have files that
-  //   may overlap each other, so pick up all overlapping ones
-  if (gLevelTraits[level].m_OverlappedFiles) {
-    InternalKey smallest, largest;
-    GetRange(c->inputs_[0], &smallest, &largest);
-    // Note that the next call will discard the file we placed in
-    // c->inputs_[0] earlier and replace it with an overlapping set
-    // which will include the picked file.
-    current_->GetOverlappingInputs(level, &smallest, &largest, &c->inputs_[0]);
-    assert(!c->inputs_[0].empty());
+      // m_OverlappedFiles==true levels have files that
+      //   may overlap each other, so pick up all overlapping ones
+      if (gLevelTraits[level].m_OverlappedFiles) {
+          InternalKey smallest, largest;
+          GetRange(c->inputs_[0], &smallest, &largest);
+          // Note that the next call will discard the file we placed in
+          // c->inputs_[0] earlier and replace it with an overlapping set
+          // which will include the picked file.
+          current_->GetOverlappingInputs(level, &smallest, &largest, &c->inputs_[0]);
+          assert(!c->inputs_[0].empty());
 
-    // this can get into tens of thousands after a repair
-    //  keep it sane
-    size_t max_open_files=100;  // previously an options_ member variable
-    if (max_open_files < c->inputs_[0].size())
-    {
-        std::nth_element(c->inputs_[0].begin(),
-                         c->inputs_[0].begin()+max_open_files-1,
-                         c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
-        c->inputs_[0].erase(c->inputs_[0].begin()+max_open_files,
-                            c->inputs_[0].end());
-    }   // if
+          // this can get into tens of thousands after a repair
+          //  keep it sane
+          size_t max_open_files=100;  // previously an options_ member variable
+          if (max_open_files < c->inputs_[0].size())
+          {
+              std::nth_element(c->inputs_[0].begin(),
+                               c->inputs_[0].begin()+max_open_files-1,
+                               c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
+              c->inputs_[0].erase(c->inputs_[0].begin()+max_open_files,
+                                  c->inputs_[0].end());
+          }   // if
 
-  }
+      }
 
-  SetupOtherInputs(c);
+      SetupOtherInputs(c);
 
-  return c;
+      m_CompactionStatus[level].m_Submitted=true;
+      ThreadTask * task=new CompactionTask(db_impl, c);
+
+      if (0==level)
+          gLevel0Threads->Submit(task);
+      else
+          gCompactionThreads->Submit(task);
+
+  }   // while
+
+  return;
 }
 
 void VersionSet::SetupOtherInputs(Compaction* c) {

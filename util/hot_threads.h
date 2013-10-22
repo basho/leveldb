@@ -157,6 +157,8 @@ private:
 
 extern HotThreadPool * gImmThreads;
 extern HotThreadPool * gWriteThreads;
+extern HotThreadPool * gLevel0Threads;
+extern HotThreadPool * gCompactionThreads;
 
 } // namespace leveldb
 

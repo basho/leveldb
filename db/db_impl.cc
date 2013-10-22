@@ -838,51 +838,9 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  int state, priority;
-  bool push;
+  // ask versions_ to schedule work to hot threads
+  versions_->PickCompaction(this);
 
-  // decide which background thread gets the compaction job
-  state=0;
-  priority=0;
-  push=false;
-
-  // merge level 0s to level 1
-  Compaction * c_ptr;
-  c_ptr=versions_->PickCompaction();
-
-  // compaction of level 0 files:  high priority
-  if (NULL!=c_ptr && c_ptr->level()==0)
-  {
-      push=true;
-      priority=versions_->NumLevelFiles(0);
-  }   // if
-  else
-  {
-      priority=versions_->current()->WritePenalty();
-  }   // else
-
-  delete c_ptr;
-
-  if (push)
-  {
-      // is something else already on background work queue
-      if (bg_compaction_scheduled_)
-          state=2;
-      else
-          state=1;
-  }   // if
-
-  if (bg_compaction_scheduled_ && !push) {
-    // Already scheduled
-  } else if (shutting_down_.Acquire_Load()) {
-    // DB is being deleted; no more background compactions
-  } else if (manual_compaction_ == NULL &&
-             !versions_->NeedsCompaction()) {
-    // No work to be done
-  } else {
-    bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_), priority);
-  }
 }
 
 void DBImpl::BGWork(void* db) {
@@ -912,6 +870,41 @@ void DBImpl::BackgroundCall() {
   }
   bg_compaction_scheduled_ = false;
   --running_compactions_;
+
+  // Previous compaction may have produced too many files in a level,
+  // so reschedule another compaction if needed.
+  if (!options_.is_repair)
+      MaybeScheduleCompaction();
+  bg_cv_.SignalAll();
+
+}
+
+
+void DBImpl::BackgroundCall2(
+    Compaction * Compact) {
+  MutexLock l(&mutex_);
+  assert(bg_compaction_scheduled_);
+
+  ++running_compactions_;
+  versions_->SetCompactionRunning(Compact->level());
+  if (!shutting_down_.Acquire_Load()) {
+    Status s = BackgroundCompaction(Compact);
+    if (!s.ok()) {
+      // Wait a little bit before retrying background compaction in
+      // case this is an environmental problem and we do not want to
+      // chew up resources for failed compactions for the duration of
+      // the problem.
+      bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      Log(options_.info_log, "Waiting after background compaction error: %s",
+          s.ToString().c_str());
+      mutex_.Unlock();
+      env_->SleepForMicroseconds(1000000);
+      mutex_.Lock();
+    }
+  }
+  bg_compaction_scheduled_ = false;
+  --running_compactions_;
+  versions_->SetCompactionDone(Compact->level());
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
@@ -966,15 +959,18 @@ DBImpl::BackgroundImmCompactCall() {
 }
 
 
-Status DBImpl::BackgroundCompaction() {
+Status DBImpl::BackgroundCompaction(
+    Compaction * Compact) {
   Status status;
 
   mutex_.AssertHeld();
 
-  Compaction* c;
+  Compaction* c(Compact);
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
-  if (is_manual) {
+  if (NULL!=c) {
+      // do nothing in this work block
+  } else  if (is_manual) {
     ManualCompaction* m = (ManualCompaction *) manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == NULL);
@@ -988,7 +984,7 @@ Status DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
-    c = versions_->PickCompaction();
+      // c = versions_->PickCompaction();
   }
 
 
