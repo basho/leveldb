@@ -1457,6 +1457,8 @@ VersionSet::PickCompaction(
   // submit a work object for every valid compaction needed
   while(Finalize(current_))
   {
+      c=NULL;
+
       // We prefer compactions triggered by too much data in a level over
       // the compactions triggered by seeks.  (Riak redefines "seeks" to
       // "files containing delete tombstones")

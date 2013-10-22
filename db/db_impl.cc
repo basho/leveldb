@@ -838,9 +838,22 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  // ask versions_ to schedule work to hot threads
-  versions_->PickCompaction(this);
+  if (!shutting_down_.Acquire_Load()) 
+  {
+      if (NULL==manual_compaction_)
+      {
+          // ask versions_ to schedule work to hot threads
+          versions_->PickCompaction(this);
+      }   // if
 
+      else if (!versions_->IsCompactionSubmitted(manual_compaction_->level))
+      {
+          // support manual compaction under hot threads
+          versions_->SetCompactionSubmitted(manual_compaction_->level);
+          ThreadTask * task=new CompactionTask(this, NULL);
+          gCompactionThreads->Submit(task);
+      }   // else if
+  }   // if
 }
 
 void DBImpl::BGWork(void* db) {
@@ -883,10 +896,19 @@ void DBImpl::BackgroundCall() {
 void DBImpl::BackgroundCall2(
     Compaction * Compact) {
   MutexLock l(&mutex_);
-  assert(bg_compaction_scheduled_);
+  int level;
+  assert(IsCompactionScheduled());
 
   ++running_compactions_;
-  versions_->SetCompactionRunning(Compact->level());
+  if (NULL!=Compact)
+      level=Compact->level();
+  else if (NULL!=manual_compaction_)
+      level=manual_compaction_->level;
+  else
+      level=0;
+
+  versions_->SetCompactionRunning(level);
+
   if (!shutting_down_.Acquire_Load()) {
     Status s = BackgroundCompaction(Compact);
     if (!s.ok()) {
@@ -902,9 +924,13 @@ void DBImpl::BackgroundCall2(
       mutex_.Lock();
     }
   }
+  else
+  {
+    delete Compact;
+  }   // else
   bg_compaction_scheduled_ = false;
   --running_compactions_;
-  versions_->SetCompactionDone(Compact->level());
+  versions_->SetCompactionDone(level);
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
@@ -1988,5 +2014,16 @@ DBImpl::VerifyLevels()
     return(result);
 
 }   // VerifyLevels
+
+
+bool 
+DBImpl::IsCompactionScheduled() 
+{
+    mutex_.AssertHeld(); 
+    bool flag(false);
+    for (int level=0; level< config::kNumLevels && !flag; ++level)
+        flag=versions_->IsCompactionSubmitted(level);
+    return(flag || NULL!=imm_);
+}   // DBImpl::IsCompactionScheduled
 
 }  // namespace leveldb
