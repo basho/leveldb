@@ -138,11 +138,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
       : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0)
   {
 #if defined(HAVE_FADVISE)
-    // Currently hurts performance instead of helps.  Likely
-    //  requires better interaction with tables already in cache
-    //  that start compaction.  See comment in table_cache.cc.
     posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
 #endif
+    gPerfCounters->Inc(ePerfROFileOpen);
   }
   virtual ~PosixRandomAccessFile()
   {
@@ -153,6 +151,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
 #endif
       }   // if
 
+     gPerfCounters->Inc(ePerfROFileClose);
      close(fd_);
   }
 
@@ -421,6 +420,7 @@ class PosixMmapFile : public WritableFile {
                   syslog(LOG_ERR,"ReleaseRef ftruncate failed [%d, %m]", errno);
 
               ret_val=close(File);
+              gPerfCounters->Inc(ePerfRWFileClose);
 
               delete [] Count;
           }   // if
@@ -1172,6 +1172,11 @@ void BGFileUnmapper2(void * arg)
     err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
+    // non-null implies this is a background job,
+    //  i.e. not on direct thread of compaction.
+    if (NULL!=file_ptr->ref_count_)
+        gPerfCounters->Inc(ePerfBGCloseUnmap);
+
     ret_val=munmap(file_ptr->base_, file_ptr->length_);
     if (0!=ret_val)
     {
@@ -1260,10 +1265,10 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
-    gImmThreads=new HotThreadPool(5, ePerfDebug1, ePerfDebug2,
-                                  ePerfDebug3, ePerfDebug4);
-    gWriteThreads=new HotThreadPool(7, ePerfDebug1, ePerfDebug2,
-                                    ePerfDebug3, ePerfDebug4);
+    gImmThreads=new HotThreadPool(5, ePerfBGImmDirect, ePerfBGImmQueued,
+                                  ePerfBGImmDequeued, ePerfBGImmWeighted);
+    gWriteThreads=new HotThreadPool(7, ePerfBGUnmapDirect, ePerfBGUnmapQueued,
+                                    ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
 
     started=true;
 }

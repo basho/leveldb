@@ -588,7 +588,15 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "ThrottleCompacts1",
         "BGWriteError",
         "ThrottleWait",
-        "ThreadError"
+        "ThreadError",
+        "BGImmDirect",
+        "BGImmQueued",
+        "BGImmDequeued",
+        "BGImmWeighted",
+        "BGUnmapDirect",
+        "BGUnmapQueued",
+        "BGUnmapDequeued",
+        "BGUnmapWeighted"
     };
 
 
