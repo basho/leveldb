@@ -89,16 +89,17 @@ class Repairer {
           port::Mutex mu;
           MutexLock l(&mu);
           uint64_t fnum;
+          int lnum;
           VersionEdit edit;
           status = versions_->Recover();
-          while (infile >> fnum) {
-              edit.DeleteFile(4, fnum);
+          while (infile >> lnum >> fnum) {
+              edit.DeleteFile(lnum, fnum);
               Log(options_.info_log, "Deleting #%lld\n",
                 static_cast<unsigned long long>(fnum));
           }
           if (status.ok()) {
               status = versions_->LogAndApply(&edit, &mu);
-              Log(options_.info_log, "Extra ultra special Voxer specific repair is complete.");
+              Log(options_.info_log, "Extra special manifest repair is complete.");
           } 
       if (db_lock_ != NULL) {
         env_->UnlockFile(db_lock_);
