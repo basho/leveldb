@@ -59,7 +59,16 @@ PLATFORM_SHARED_VERSIONED=true
 case "$TARGET_OS" in
     Darwin)
         PLATFORM=OS_MACOSX
-        COMMON_FLAGS="-fno-builtin-memcmp -DOS_MACOSX"
+        oIFS="$IFS"; IFS=.
+        set `uname -r`
+        IFS="$oIFS"
+        if [ "$1" -ge 13 ]; then
+            # assume clang compiler
+            COMMON_FLAGS="-mmacosx-version-min=10.8 -DOS_MACOSX"
+            PLATFORM_LDFLAGS="-mmacosx-version-min=10.8"
+        else
+            COMMON_FLAGS="-fno-builtin-memcmp -DOS_MACOSX"
+        fi
         PLATFORM_SHARED_EXT=dylib
         PLATFORM_SHARED_LDFLAGS="-dynamiclib -install_name "
         PORT_FILE=port/port_posix.cc
