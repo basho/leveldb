@@ -582,9 +582,14 @@ void LRUCache2::Unref(LRUHandle2* e) {
   e->refs--;
   if (e->refs <= 0) {
       sub_and_fetch(parent_->GetUsagePtr(), (uint64_t)e->charge);
-//    usage_ -= e->charge;
-    (*e->deleter)(e->key(), e->value);
-    free(e);
+
+      if (is_file_cache_)
+          gPerfCounters->Add(ePerfFileCacheRemove, e->charge);
+      else
+          gPerfCounters->Add(ePerfBlockCacheRemove, e->charge);
+
+      (*e->deleter)(e->key(), e->value);
+      free(e);
   }
 }
 
@@ -612,6 +617,12 @@ Cache::Handle* LRUCache2::Insert(
         e->expire_seconds=Env::Default()->NowMicros() / 1000000L
             + parent_->GetFileTimeout();
     }   // if
+
+    if (is_file_cache_)
+        gPerfCounters->Add(ePerfFileCacheInsert, e->charge);
+    else
+        gPerfCounters->Add(ePerfBlockCacheInsert, e->charge);
+
 
     {
         SpinLock l(&spin_);
