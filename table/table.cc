@@ -375,7 +375,8 @@ Table::TEST_GetIndexBlock() {return(rep_->index_block);};
 size_t
 Table::TableObjectSize()
 {
-    return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size + rep_->file->ObjectSize());
+    return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size + rep_->file->ObjectSize()
+           + sizeof(FilterBlockReader) + sizeof(Block));
 };
 
 size_t

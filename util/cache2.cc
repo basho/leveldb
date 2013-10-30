@@ -631,7 +631,7 @@ Cache::Handle* LRUCache2::Insert(
         SpinLock l(&spin_);
 
         LRU_Append(e);
-        add_and_fetch(parent_->GetUsagePtr(), e->charge);
+        add_and_fetch(parent_->GetUsagePtr(), (uint64_t)e->charge);
 
         LRUHandle2* old = table_.Insert(e);
         if (old != NULL) {
