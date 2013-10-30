@@ -267,7 +267,7 @@ Iterator* Table::BlockReader(void* arg,
           if (contents.cachable && options.fill_cache) {
             cache_handle = block_cache->Insert(
                 key, block,
-                (block->size() + block_cache->EntryOverheadSize() + sizeof(cache_key_buffer)),
+                (block->size() + /*block_cache->EntryOverheadSize() +*/ sizeof(cache_key_buffer)),
                 &DeleteCachedBlock);
           }
         }
@@ -375,7 +375,7 @@ Table::TEST_GetIndexBlock() {return(rep_->index_block);};
 size_t
 Table::TableObjectSize()
 {
-    return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size);
+    return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size + rep_->file->ObjectSize());
 };
 
 size_t

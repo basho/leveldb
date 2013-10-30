@@ -234,6 +234,9 @@ class RandomAccessFile {
 
   // Riak optimization:  allows advising Linux page cache
   virtual void SetForCompaction(uint64_t file_size) {};
+
+  // Riak addition:  size of this structure in bytes
+  virtual size_t ObjectSize() {return(sizeof(RandomAccessFile));};
 };
 
 // A file abstraction for sequential writing.  The implementation

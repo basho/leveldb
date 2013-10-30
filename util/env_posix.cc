@@ -177,6 +177,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
 
   };
 
+  // Riak addition:  size of this structure in bytes
+  virtual size_t ObjectSize() {return(sizeof(PosixRandomAccessFile)+filename_.length());};
+
 };
 
 
