@@ -976,7 +976,8 @@ DBImpl::BackgroundImmCompactCall() {
   if (shutting_down_.Acquire_Load()) {
 
     // must abandon data in memory ... hope recovery log works
-    imm_->Unref();
+    if (NULL!=imm_)
+      imm_->Unref();
     imm_ = NULL;
     has_imm_.Release_Store(NULL);
   } // if
