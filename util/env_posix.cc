@@ -76,7 +76,7 @@ public:
         if (NULL!=ref_count_)
             inc_and_fetch(ref_count_);
 
-        // reference count of threads/paths using this object 
+        // reference count of threads/paths using this object
         //  (because there is a direct path and a threaded path usage)
         RefInc();
     };
@@ -884,9 +884,9 @@ void PosixEnv::BGThread() {
   //  has completed AND set bgthreadX_ values
   PthreadCall("lock", pthread_mutex_lock(&mu_));
   ++bgthread_count_;
-  PthreadCall(
-        "pthread_setname_np",
-        pthread_setname_np("PosixEnv::BGThread"));
+//  PthreadCall(
+//        "pthread_setname_np",
+//        pthread_setname_np("PosixEnv::BGThread"));
   PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
   while (bgthread_running_ || 0!=queue_.size()) {
@@ -908,7 +908,7 @@ void PosixEnv::BGThread() {
     else
     {
       PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-    } // else        
+    } // else
   }
 
   --bgthread_count_;
@@ -1042,10 +1042,10 @@ static void InitDefaultEnv()
     gWriteThreads=new HotThreadPool(7, "RecoveryWrite",
                                     ePerfBGUnmapDirect, ePerfBGUnmapQueued,
                                     ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
-    gLevel0Threads=new HotThreadPool(7, "Level0Compact", 
+    gLevel0Threads=new HotThreadPool(7, "Level0Compact",
                                      ePerfBGLevel0Direct, ePerfBGLevel0Queued,
                                      ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
-    gCompactionThreads=new HotThreadPool(5, "GeneralCompact", 
+    gCompactionThreads=new HotThreadPool(5, "GeneralCompact",
                                          ePerfBGCompactDirect, ePerfBGCompactQueued,
                                          ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 

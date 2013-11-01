@@ -67,7 +67,7 @@ HotThread::ThreadRoutine()
 
     submission=NULL;
 
-    pthread_setname_np(m_Pool.m_PoolName.c_str());
+//    pthread_setname_np(m_Pool.m_PoolName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
@@ -166,13 +166,13 @@ QueueThread::QueueThread(
         snprintf(pid_str, sizeof(pid_str), "%d", (int)getpid());
         m_QueueName.append(pid_str);
 
-        m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL, 
+        m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL,
                                 S_IRUSR | S_IWUSR, 0);
         // attempt delete and retry blindly
         if (SEM_FAILED==m_SemaphorePtr)
         {
             sem_unlink(m_QueueName.c_str());
-            m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL, 
+            m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL,
                                     S_IRUSR | S_IWUSR, 0);
         }   // if
 
@@ -220,7 +220,7 @@ QueueThread::QueueThread(
 }   // QueueThread::QueueThread
 
 
-QueueThread::~QueueThread() 
+QueueThread::~QueueThread()
 {
     // only clean up resources if they were started
     if (m_ThreadGood)
@@ -255,7 +255,7 @@ QueueThread::QueueThreadRoutine()
 
     submission=NULL;
 
-    pthread_setname_np(m_QueueName.c_str());
+//    pthread_setname_np(m_QueueName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
