@@ -28,6 +28,10 @@
 
 #include <errno.h>
 #include <syslog.h>
+#include <sys/fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "leveldb/atomics.h"
 #include "util/hot_threads.h"
 #include "util/thread_tasks.h"
@@ -62,6 +66,8 @@ HotThread::ThreadRoutine()
     ThreadTask * submission;
 
     submission=NULL;
+
+    pthread_setname_np(m_Pool.m_PoolName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
@@ -138,12 +144,41 @@ void *QueueThreadStaticEntry(void *args)
 
 QueueThread::QueueThread(
     class HotThreadPool & Pool)
-    : m_ThreadGood(false), m_Pool(Pool)
+    : m_ThreadGood(false), m_Pool(Pool), m_SemaphorePtr(NULL)
 {
     int ret_val;
 
+    m_QueueName=m_Pool.m_PoolName;
+    m_QueueName.append("Semaphore");
+
     memset(&m_Semaphore, 0, sizeof(m_Semaphore));
     ret_val=sem_init(&m_Semaphore, 0, 0);
+
+    if (0==ret_val)
+    {
+        m_SemaphorePtr=&m_Semaphore;
+    }   // if
+
+    // retry with named semaphore
+    else if (0!=ret_val && ENOSYS==errno)
+    {
+        char pid_str[32];
+        snprintf(pid_str, sizeof(pid_str), "%d", (int)getpid());
+        m_QueueName.append(pid_str);
+
+        m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL, 
+                                S_IRUSR | S_IWUSR, 0);
+        // attempt delete and retry blindly
+        if (SEM_FAILED==m_SemaphorePtr)
+        {
+            sem_unlink(m_QueueName.c_str());
+            m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL, 
+                                    S_IRUSR | S_IWUSR, 0);
+        }   // if
+
+        // so ret_val will be zero on success
+        ret_val=(SEM_FAILED==m_SemaphorePtr);
+    }   // else if
 
     // only start this if we have a working semaphore
     if (0==ret_val)
@@ -158,13 +193,23 @@ QueueThread::QueueThread(
             syslog(LOG_ERR, "thread_create failed in QueueThread::QueueThread [%d, %m]",
                    errno);
             gPerfCounters->Inc(ePerfThreadError);
-            sem_destroy(&m_Semaphore);
+
+            if (&m_Semaphore==m_SemaphorePtr)
+            {
+                sem_destroy(&m_Semaphore);
+            }   // if
+            else
+            {
+                sem_close(m_SemaphorePtr);
+                sem_unlink(m_QueueName.c_str());
+            }   // else
+
+            m_SemaphorePtr=NULL;
         }   // else
     }   // if
     else
     {
-        // OSX currently fails with error 78, not implemented.  Fix is
-        //  to create unique names then open with sem_open
+        m_SemaphorePtr=NULL;
         syslog(LOG_ERR, "sem_init failed in QueueThread::QueueThread [%d, %m]",
                errno);
         gPerfCounters->Inc(ePerfThreadError);
@@ -181,10 +226,18 @@ QueueThread::~QueueThread()
     if (m_ThreadGood)
     {
         // release the m_QueueThread to exit
-        sem_post(&m_Semaphore);
+        sem_post(m_SemaphorePtr);
         pthread_join(m_ThreadId, NULL);
 
-        sem_destroy(&m_Semaphore);
+        if (&m_Semaphore==m_SemaphorePtr)
+        {
+            sem_destroy(&m_Semaphore);
+        }   // if
+        else
+        {
+            sem_close(m_SemaphorePtr);
+            sem_unlink(m_QueueName.c_str());
+        }   // else
     }   // if
 
     return;
@@ -201,6 +254,8 @@ QueueThread::QueueThreadRoutine()
     ThreadTask * submission;
 
     submission=NULL;
+
+    pthread_setname_np(m_QueueName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
@@ -235,7 +290,7 @@ QueueThread::QueueThreadRoutine()
         }   // if
 
         // loop until semaphore hits zero
-        sem_wait(&m_Semaphore);
+        sem_wait(m_SemaphorePtr);
 
     }   // while
 
@@ -246,11 +301,13 @@ QueueThread::QueueThreadRoutine()
 
 HotThreadPool::HotThreadPool(
     const size_t PoolSize,
+    const char * Name,
     enum PerformanceCountersEnum Direct,
     enum PerformanceCountersEnum Queued,
     enum PerformanceCountersEnum Dequeued,
     enum PerformanceCountersEnum Weighted)
-    : m_Shutdown(false), m_QueueThread(*this),
+    : m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
+      m_Shutdown(false), m_QueueThread(*this),
       m_WorkQueueAtomic(0),
       m_DirectCounter(Direct), m_QueuedCounter(Queued),
       m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
@@ -394,7 +451,7 @@ HotThreadPool::Submit(
             //   (thread not likely good on OSX)
             if (m_QueueThread.m_ThreadGood)
             {
-                ret_val=sem_post(&m_QueueThread.m_Semaphore);
+                ret_val=sem_post(m_QueueThread.m_SemaphorePtr);
                 if (0!=ret_val)
                 {
                     syslog(LOG_ERR, "sem_post failed in HotThreadPool::Submit [%d, %m]",

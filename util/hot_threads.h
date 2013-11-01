@@ -83,10 +83,12 @@ struct QueueThread
 public:
     bool m_ThreadGood;                   //!< true if thread and semaphore good
     pthread_t m_ThreadId;                //!< handle for this thread
+    std::string m_QueueName;
 
     class HotThreadPool & m_Pool;        //!< parent pool object
 
     sem_t m_Semaphore;                   //!< counts items inserted to queue
+    sem_t * m_SemaphorePtr;              //!< either &m_Semaphore or sem_open return value
 
 public:
     QueueThread(class HotThreadPool & Pool);
@@ -107,7 +109,7 @@ private:
 class HotThreadPool
 {
 public:
-
+    std::string m_PoolName;              //!< used to name threads for gdb / core
     typedef std::deque<ThreadTask*> WorkQueue_t;
     typedef std::vector<HotThread *>   ThreadPool_t;
 
@@ -126,7 +128,7 @@ public:
     enum PerformanceCountersEnum m_WeightedCounter;
 
 public:
-    HotThreadPool(const size_t thread_pool_size,
+    HotThreadPool(const size_t thread_pool_size, const char * Name,
                   enum PerformanceCountersEnum Direct,
                   enum PerformanceCountersEnum Queued,
                   enum PerformanceCountersEnum Dequeued,

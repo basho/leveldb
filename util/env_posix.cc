@@ -862,6 +862,7 @@ void PosixEnv::Schedule(void (*function)(void*), void* arg) {
     PthreadCall(
         "create thread",
         pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this));
+
   }
 
   // If the queue is currently empty, the background thread may currently be
@@ -883,6 +884,9 @@ void PosixEnv::BGThread() {
   //  has completed AND set bgthreadX_ values
   PthreadCall("lock", pthread_mutex_lock(&mu_));
   ++bgthread_count_;
+  PthreadCall(
+        "pthread_setname_np",
+        pthread_setname_np("PosixEnv::BGThread"));
   PthreadCall("unlock", pthread_mutex_unlock(&mu_));
 
   while (bgthread_running_ || 0!=queue_.size()) {
@@ -1032,14 +1036,18 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
-    gImmThreads=new HotThreadPool(5, ePerfBGImmDirect, ePerfBGImmQueued,
+    gImmThreads=new HotThreadPool(5, "ImmWrite",
+                                  ePerfBGImmDirect, ePerfBGImmQueued,
                                   ePerfBGImmDequeued, ePerfBGImmWeighted);
-    gWriteThreads=new HotThreadPool(7, ePerfBGUnmapDirect, ePerfBGUnmapQueued,
+    gWriteThreads=new HotThreadPool(7, "RecoveryWrite",
+                                    ePerfBGUnmapDirect, ePerfBGUnmapQueued,
                                     ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
-    gLevel0Threads=new HotThreadPool(7, ePerfBGLevel0Direct, ePerfBGLevel0Queued,
-                                    ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
-    gCompactionThreads=new HotThreadPool(5, ePerfBGCompactDirect, ePerfBGCompactQueued,
-                                    ePerfBGCompactDequeued, ePerfBGCompactWeighted);
+    gLevel0Threads=new HotThreadPool(7, "Level0Compact", 
+                                     ePerfBGLevel0Direct, ePerfBGLevel0Queued,
+                                     ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
+    gCompactionThreads=new HotThreadPool(5, "GeneralCompact", 
+                                         ePerfBGCompactDirect, ePerfBGCompactQueued,
+                                         ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 
     started=true;
 }
