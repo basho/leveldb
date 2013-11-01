@@ -112,8 +112,7 @@ class DBImpl : public DB {
   WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   void MaybeScheduleCompaction();
-  static void BGWork(void* db);
-  void BackgroundCall();
+
   Status BackgroundCompaction(Compaction * Compact=NULL);
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
