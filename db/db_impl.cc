@@ -851,7 +851,7 @@ void DBImpl::MaybeScheduleCompaction() {
           // support manual compaction under hot threads
           versions_->SetCompactionSubmitted(manual_compaction_->level);
           ThreadTask * task=new CompactionTask(this, NULL);
-          gCompactionThreads->Submit(task);
+          gCompactionThreads->Submit(task, true);
       }   // else if
   }   // if
 }
@@ -1687,7 +1687,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       if (NULL!=imm_)
       {
          ThreadTask * task=new ImmWriteTask(this);
-         gImmThreads->Submit(task);
+         gImmThreads->Submit(task, true);
       }
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();

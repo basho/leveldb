@@ -139,6 +139,7 @@ class Version {
   // are initialized by Finalize().
   double compaction_score_;
   int compaction_level_;
+  bool compaction_grooming_;
   volatile int write_penalty_;
 
   explicit Version(VersionSet* vset)

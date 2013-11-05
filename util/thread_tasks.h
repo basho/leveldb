@@ -132,6 +132,35 @@ private:
 
 };  // class CompactionTask
 
+
+/**
+ * Original env_posix.cc task
+ */
+
+class LegacyTask : public ThreadTask
+{
+protected:
+    void (*m_Function)(void*);
+    void * m_Arg;
+
+public:
+    LegacyTask(void (*Function)(void*), void * Arg)
+        : m_Function(Function), m_Arg(Arg) {};
+
+    virtual ~LegacyTask() {};
+
+    virtual void operator()() 
+    {
+        (*m_Function)(m_Arg);
+    };
+
+private:
+    LegacyTask();
+    LegacyTask(const LegacyTask &);
+    LegacyTask & operator=(const LegacyTask &);
+
+};  // class LegacyTask
+
 } // namespace leveldb
 
 

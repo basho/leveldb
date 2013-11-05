@@ -140,7 +140,7 @@ public:
 
     bool FindWaitingThread(ThreadTask * work);
 
-    bool Submit(ThreadTask * item);
+    bool Submit(ThreadTask * item, bool OkToQueue=true);
 
     size_t work_queue_size() const { return m_WorkQueue.size();}
     bool shutdown_pending() const  { return m_Shutdown; }

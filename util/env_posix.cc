@@ -758,7 +758,9 @@ class PosixEnv : public Env {
   }  // SleepForMicroSeconds
 
 
-  virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
+  virtual int GetBackgroundBacklog() const 
+    {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic 
+          + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
 
  private:
 
@@ -779,30 +781,10 @@ class PosixEnv : public Env {
   size_t page_size_;
   pthread_mutex_t mu_;
   pthread_cond_t bgsignal_;
-  pthread_t bgthread_;     // normal compactions
-  bool started_bgthread_;
-  volatile int bg_backlog_;// count of items on 3 compaction queues
-  volatile int bg_active_; // count of threads actually working compaction
-  volatile bool bgthread_running_; // flag to all threads when time to stop
-  volatile int bgthread_count_;    // number of active threads
   int64_t clock_res_;
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); int priority;};
-  typedef std::deque<BGItem> BGQueue;
-  BGQueue queue_;     //normal compactions
-
-  void SetBacklog()
-  {
-      uint32_t cur_backlog;
-
-      // mutex mu_ is assumed locked.
-      cur_backlog=queue_.size()+bg_active_;
-
-      bg_backlog_=cur_backlog;
-
-      return;
-  };
 
   volatile uint64_t write_rate_usec_; // recently experienced average time to
                                       // write one key during background compaction
@@ -811,9 +793,6 @@ class PosixEnv : public Env {
 
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
-                       started_bgthread_(false),
-                       bg_backlog_(0), bg_active_(0),
-                       bgthread_running_(true), bgthread_count_(0),
                        clock_res_(1), write_rate_usec_(0)
 {
   struct timespec ts;
@@ -832,87 +811,15 @@ PosixEnv::PosixEnv() : page_size_(getpagesize()),
 
 PosixEnv::~PosixEnv()
 {
-    // kill off background threads
-    bgthread_running_=false;
-
-    // be sure thread actually started before attempting
-    //  shutdown and join.
-    if (0!=bgthread_count_)
-    {
-        while(0!=bgthread_count_)
-        {
-            PthreadCall("lock", pthread_mutex_lock(&mu_));
-            PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
-            PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-            SleepForMicroseconds(10);
-        }   // while
-
-        // clean up now that we know they are stopping
-        pthread_join(bgthread_, NULL);
-    }   // if
-
 }   // PosixEnf::~PosixEnv
 
 void PosixEnv::Schedule(void (*function)(void*), void* arg) {
-  PthreadCall("lock", pthread_mutex_lock(&mu_));
+    ThreadTask * task;
 
-  // Start background thread if necessary
-  if (!started_bgthread_) {
-    started_bgthread_ = true;
-    PthreadCall(
-        "create thread",
-        pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this));
-
-  }
-
-  // If the queue is currently empty, the background thread may currently be
-  // waiting.
-  if (queue_.empty()) {
-    PthreadCall("signal", pthread_cond_signal(&bgsignal_));
-  }
-
-  // Add to priority queue
-  queue_.push_back(BGItem());
-  queue_.back().function = function;
-  queue_.back().arg = arg;
-
-  PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+    task=new LegacyTask(function,arg);
+    gCompactionThreads->Submit(task, true);
 }
 
-void PosixEnv::BGThread() {
-  // avoid race condition of whether or not thread creation
-  //  has completed AND set bgthreadX_ values
-  PthreadCall("lock", pthread_mutex_lock(&mu_));
-  ++bgthread_count_;
-//  PthreadCall(
-//        "pthread_setname_np",
-//        pthread_setname_np("PosixEnv::BGThread"));
-  PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-
-  while (bgthread_running_ || 0!=queue_.size()) {
-    // Wait until there is an item that is ready to run
-    PthreadCall("lock", pthread_mutex_lock(&mu_));
-    while (queue_.empty() && bgthread_running_) {
-      PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
-    }
-
-    if (bgthread_running_)
-    {
-      void (*function)(void*) = queue_.front().function;
-      void* arg = queue_.front().arg;
-      queue_.pop_front();
-
-      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-      (*function)(arg);
-    }
-    else
-    {
-      PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-    } // else
-  }
-
-  --bgthread_count_;
-}
 
 namespace {
 struct StartThreadState {

@@ -1071,8 +1071,10 @@ VersionSet::Finalize(Version* v)
     int best_level = -1;
     double best_score = -1;
     bool compaction_found;
+    bool is_grooming;
 
     compaction_found=false;
+    is_grooming=false;
     for (int level = 0; level < config::kNumLevels-1 && !compaction_found; level++) 
     {
         bool compact_ok;
@@ -1135,10 +1137,13 @@ VersionSet::Finalize(Version* v)
                     score*=1000000.0;
                 else
                     score*=10;  // give weight to overlapped levels over non-overlapped
+
+                is_grooming=false;
             } else {
                 // Compute the ratio of current size to size limit.
                 const uint64_t level_bytes = TotalFileSize(v->files_[level]);
                 score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
+                is_grooming=(level_bytes < gLevelTraits[level].m_MaxFileSizeForLevel);
             }
 
             if (0!= score)
@@ -1152,6 +1157,7 @@ VersionSet::Finalize(Version* v)
 
     v->compaction_level_ = best_level;
     v->compaction_score_ = best_score;
+    v->compaction_grooming_ = is_grooming;
 
     return(compaction_found);
 
@@ -1457,6 +1463,8 @@ VersionSet::PickCompaction(
   // submit a work object for every valid compaction needed
   while(Finalize(current_))
   {
+      bool submit_flag;
+
       c=NULL;
 
       // We prefer compactions triggered by too much data in a level over
@@ -1524,13 +1532,18 @@ VersionSet::PickCompaction(
 
       SetupOtherInputs(c);
 
+      // set submitted as race defense
       m_CompactionStatus[level].m_Submitted=true;
       ThreadTask * task=new CompactionTask(db_impl, c);
 
       if (0==level)
-          gLevel0Threads->Submit(task);
+          submit_flag=gLevel0Threads->Submit(task, true);
       else
-          gCompactionThreads->Submit(task);
+          submit_flag=gCompactionThreads->Submit(task, !current_->compaction_grooming_);
+
+      // set/reset submitted based upon truth of queuing
+      //  (ref counting will auto delete task rejected)
+      m_CompactionStatus[level].m_Submitted=submit_flag;
 
   }   // while
 

@@ -417,7 +417,8 @@ HotThreadPool::FindWaitingThread(
 
 bool
 HotThreadPool::Submit(
-    ThreadTask* item)
+    ThreadTask* item,
+    bool OkToQueue)
 {
     bool ret_flag(false);
     int ret_val;
@@ -426,6 +427,7 @@ HotThreadPool::Submit(
     {
         item->RefInc();
 
+        // do nothing if shutting down
         if(shutdown_pending())
         {
             item->RefDec();
@@ -433,7 +435,13 @@ HotThreadPool::Submit(
         }   // if
 
         // try to give work to a waiting thread first
-        else if (!FindWaitingThread(item))
+        else if (FindWaitingThread(item))
+        {
+            IncWorkDirect();
+            ret_flag=true;
+        }   // else if
+
+        else if (OkToQueue)
         {
             item->m_QueueStart=Env::Default()->NowMicros();
 
@@ -462,11 +470,13 @@ HotThreadPool::Submit(
 
             IncWorkQueued();
             ret_flag=true;
-        }   // if
+        }   // else if
+
+        // did not post to thread or queue
         else
         {
-            IncWorkDirect();
-            ret_flag=true;
+            item->RefDec();
+            ret_flag=false;  // redundant, but safe
         }   // else
     }   // if
 
