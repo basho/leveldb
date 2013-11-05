@@ -214,6 +214,13 @@ enum PerformanceCountersEnum
     ePerfBGCompactDequeued=83,//!< count generic compactions removed from queue
     ePerfBGCompactWeighted=84,//!< total microseconds item spent on queue
 
+    ePerfFileCacheInsert=85,  //!< total bytes inserted into file cache
+    ePerfFileCacheRemove=86,  //!< total bytes removed from file cache
+
+    ePerfBlockCacheInsert=87, //!< total bytes inserted into block cache
+    ePerfBlockCacheRemove=88, //!< total bytes removed from block cache
+
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values

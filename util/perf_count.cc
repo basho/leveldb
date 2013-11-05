@@ -231,17 +231,15 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
             ret_val=-1;
 
         // does the shared memory already exists (and of proper size if writing)
-        should_create=(0!=ret_val || ((shm_info.shm_segsz < sizeof(PerformanceCounters)) && !IsReadOnly));
+        should_create=(0!=ret_val || (shm_info.shm_segsz < sizeof(PerformanceCounters))) && !IsReadOnly;
 
         // should old shared memory be deleted?
         if (should_create && 0==ret_val)
         {
             ret_val=shmctl(id, IPC_RMID, &shm_info);
+            good=(0==ret_val);
             if (0!=ret_val)
-            {
                 syslog(LOG_ERR, "shmctl IPC_RMID failed [%d, %m]", errno);
-                good=false;
-            }   // if
         }   // if
 
         // else open the size that exists
@@ -613,7 +611,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "BGCompactDirect",
         "BGCompactQueued",
         "BGCompactDequeued",
-        "BGCompactWeighted"
+        "BGCompactWeighted",
+        "FileCacheInsert",
+        "FileCacheRemove",
+        "BlockCacheInsert",
+        "BlockCacheRemove"
     };
 
 

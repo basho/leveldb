@@ -126,6 +126,9 @@ TEST(FlexCacheTest, UserSizing) {
         st=DestroyDB(dbname, options);
         ASSERT_OK(st);
     }   // for
+
+    delete options.filter_policy;
+    options.filter_policy=NULL;
 }
 
 TEST(FlexCacheTest, MixedSizing) {
@@ -230,6 +233,9 @@ TEST(FlexCacheTest, MixedSizing) {
         st=DestroyDB(dbname, options);
         ASSERT_OK(st);
     }   // for
+
+    delete options.filter_policy;
+    options.filter_policy=NULL;
 }
 
 
