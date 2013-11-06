@@ -277,6 +277,7 @@ class VersionSet {
     char buffer[100];
   };
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
+  const char* CompactionSummary(LevelSummaryStorage* scratch) const;
 
   TableCache* GetTableCache() {return(table_cache_);};
 

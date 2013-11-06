@@ -1075,11 +1075,12 @@ VersionSet::Finalize(Version* v)
 
     compaction_found=false;
     is_grooming=false;
-    for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; level++) 
+    for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level) 
     {
         bool compact_ok;
         double score;
 
+        is_grooming=false;
         // is this level eligible for compaction consideration?
         compact_ok=!m_CompactionStatus[level].m_Submitted;
 
@@ -1126,18 +1127,6 @@ VersionSet::Finalize(Version* v)
                 if ( config::kL0_CompactionTrigger <= v->files_[level].size())
                     score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
 
-                // raise score above slowdown trigger to ensure this out scores
-                //  compactions at config::kNumOverlapLevels level
-                if ( config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
-                    score += (v->files_[level].size() - config::kL0_SlowdownWritesTrigger)*3;
-
-                // don't screw around ... get data written to disk!
-                if (0==level
-                    && (size_t)config::kL0_SlowdownWritesTrigger <= v->files_[level].size())
-                    score*=1000000.0;
-                else
-                    score*=10;  // give weight to overlapped levels over non-overlapped
-
                 is_grooming=false;
             } else {
                 // Compute the ratio of current size to size limit.
@@ -1146,7 +1135,7 @@ VersionSet::Finalize(Version* v)
                 is_grooming=(level_bytes < gLevelTraits[level].m_MaxFileSizeForLevel);
             }
 
-            if (0!= score)
+            if (1<=score)
             {
                 best_level = level;
                 best_score = score;
@@ -1292,6 +1281,22 @@ const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
            int(current_->files_[4].size()),
            int(current_->files_[5].size()),
            int(current_->files_[6].size()));
+  return scratch->buffer;
+}
+
+const char* VersionSet::CompactionSummary(LevelSummaryStorage* scratch) const {
+  // Update code if kNumLevels changes
+  assert(config::kNumLevels == 7);
+  snprintf(scratch->buffer, sizeof(scratch->buffer),
+           "files[ %d,%d %d,%d %d,%d %d,%d %d,%d %d,%d %d,%d ]",
+           m_CompactionStatus[0].m_Submitted, m_CompactionStatus[0].m_Running,
+           m_CompactionStatus[1].m_Submitted, m_CompactionStatus[1].m_Running,
+           m_CompactionStatus[2].m_Submitted, m_CompactionStatus[2].m_Running,
+           m_CompactionStatus[3].m_Submitted, m_CompactionStatus[3].m_Running,
+           m_CompactionStatus[4].m_Submitted, m_CompactionStatus[4].m_Running,
+           m_CompactionStatus[5].m_Submitted, m_CompactionStatus[5].m_Running,
+           m_CompactionStatus[6].m_Submitted, m_CompactionStatus[6].m_Running);
+
   return scratch->buffer;
 }
 
@@ -1461,6 +1466,7 @@ VersionSet::PickCompaction(
   UpdatePenalty(current_);
 
   // submit a work object for every valid compaction needed
+  current_->compaction_level_=-1;
   while(Finalize(current_))
   {
       bool submit_flag;

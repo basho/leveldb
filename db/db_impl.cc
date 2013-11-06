@@ -871,6 +871,11 @@ void DBImpl::BackgroundCall2(
   else
       level=0;
 
+  if (0==level)
+      gPerfCounters->Inc(ePerfBGCompactLevel0);
+  else
+      gPerfCounters->Inc(ePerfBGNormal);
+
   versions_->SetCompactionRunning(level);
 
   if (!shutting_down_.Acquire_Load()) {
@@ -1663,6 +1668,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // There are too many level-0 files.
       Log(options_.info_log, "waiting...\n");
       gPerfCounters->Inc(ePerfWriteWaitLevel0);
+      MaybeScheduleCompaction();
       bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
     } else {
