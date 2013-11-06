@@ -1075,7 +1075,7 @@ VersionSet::Finalize(Version* v)
 
     compaction_found=false;
     is_grooming=false;
-    for (int level = 0; level < config::kNumLevels-1 && !compaction_found; level++) 
+    for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; level++) 
     {
         bool compact_ok;
         double score;
@@ -1474,7 +1474,6 @@ VersionSet::PickCompaction(
       const bool seek_compaction = (current_->file_to_compact_ != NULL);
       if (size_compaction) 
       {
-          bool compact_ok;
           level = current_->compaction_level_;
           assert(level >= 0);
           assert(level+1 < config::kNumLevels);

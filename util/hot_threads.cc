@@ -307,8 +307,8 @@ HotThreadPool::HotThreadPool(
     enum PerformanceCountersEnum Dequeued,
     enum PerformanceCountersEnum Weighted)
     : m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
-      m_Shutdown(false), m_QueueThread(*this),
-      m_WorkQueueAtomic(0),
+      m_Shutdown(false), 
+      m_WorkQueueAtomic(0), m_QueueThread(*this),
       m_DirectCounter(Direct), m_QueuedCounter(Queued),
       m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
 {
