@@ -74,6 +74,9 @@ class TableBuilder {
   // Finish() call, returns the size of the final generated file.
   uint64_t FileSize() const;
 
+  // Number of delete tombstones so far.
+  uint64_t NumDeletes() const;
+
  private:
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);

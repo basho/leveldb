@@ -16,16 +16,18 @@ class VersionSet;
 
 struct FileMetaData {
   int refs;
-  int allowed_seeks;          // Seeks allowed until compaction
+//  int allowed_seeks;          // Seeks allowed until compaction
   uint64_t number;
   uint64_t file_size;         // File size in bytes
   uint64_t num_entries;
+  uint64_t num_deletes;       // Riak 2.0:  number of tombstones in file
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
   int level;
 
   FileMetaData()
-  : refs(0), allowed_seeks(1 << 30), file_size(0), num_entries(0), level(-1)
+  : refs(0), /*allowed_seeks(1 << 30),*/ file_size(0), 
+      num_entries(0), num_deletes(0), level(-1)
   { }
 };
 
@@ -82,13 +84,15 @@ class VersionEdit {
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
                const InternalKey& smallest,
-               const InternalKey& largest) {
+               const InternalKey& largest,
+               uint64_t num_deletes=0) {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;
     f.smallest = smallest;
     f.largest = largest;
     f.level = level;
+    f.num_deletes = num_deletes;
     new_files_.push_back(std::make_pair(level, f));
   }
 

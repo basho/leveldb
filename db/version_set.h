@@ -105,6 +105,8 @@ class Version {
 
   size_t NumFiles(int level) const { return files_[level].size(); }
 
+  typedef std::vector<FileMetaData*> FileMetaDataVector_t; 
+
   const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
   volatile int WritePenalty() const {return write_penalty_; }
@@ -130,7 +132,7 @@ class Version {
   // List of files per level
   USED_BY_NESTED_FRIEND(std::vector<FileMetaData*> files_[config::kNumLevels])
 
-  // Next file to compact based on seek stats.
+  // Next file to compact based on seek stats (or Riak delete test)
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 

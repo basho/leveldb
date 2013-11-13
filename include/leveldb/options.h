@@ -169,6 +169,12 @@ struct Options {
   // Default: false
   bool limited_developer_mem;
 
+  // Riak option to adjust aggressive delete behavior.
+  //  - zero disables aggressive delete
+  //  - positive value indicates how many deletes must exist
+  //     in a file for it to be compacted due to deletes
+  uint64_t delete_threshold;
+
   Options();
 
   void Dump(Logger * log) const;

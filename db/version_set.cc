@@ -712,6 +712,7 @@ class VersionSet::Builder {
       FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
       f->refs = 1;
 
+#if 0
       // We arrange to automatically compact this file after
       // a certain number of seeks.  Let's assume:
       //   (1) One seek costs 10ms
@@ -727,6 +728,7 @@ class VersionSet::Builder {
       // of data before triggering a compaction.
       f->allowed_seeks = (f->file_size / 16384);
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
+#endif
 
       levels_[level].deleted_files.erase(f->number);
       levels_[level].added_files->insert(f);
@@ -1135,6 +1137,24 @@ VersionSet::Finalize(Version* v)
                 is_grooming=(level_bytes < gLevelTraits[level].m_MaxFileSizeForLevel);
             }
 
+            // within size constraints, are there any deletes worthy of consideration
+            if (score < 1 && 0!=options_->delete_threshold)
+            {
+                Version::FileMetaDataVector_t::iterator it;
+
+                for (it=v->files_[level].begin(); v->files_[level].end()!=it && score<1; ++it)
+                {
+                    if (options_->delete_threshold <= (*it)->num_deletes)
+                    {
+                        score=1;
+                        v->file_to_compact_=*it;
+                        v->file_to_compact_level_=level;
+                        is_grooming=true;
+                    }
+                }   // for
+            }   // if
+
+
             if (1<=score)
             {
                 best_level = level;
@@ -1542,7 +1562,7 @@ VersionSet::PickCompaction(
       ThreadTask * task=new CompactionTask(db_impl, c);
 
       if (0==level)
-          submit_flag=gLevel0Threads->Submit(task, true);
+          submit_flag=gLevel0Threads->Submit(task, !current_->compaction_grooming_);
       else
           submit_flag=gCompactionThreads->Submit(task, !current_->compaction_grooming_);
 

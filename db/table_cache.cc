@@ -160,4 +160,33 @@ void TableCache::Evict(uint64_t file_number, bool is_overlapped) {
   cache_->Erase(Slice(buf, sizeof(buf)));
 }
 
+/**
+ * Riak specific routine to return table statistic ONLY if table metadata
+ *  already within cache ... otherwise return 0.
+ */
+uint64_t 
+TableCache::GetStatisticValue(uint64_t file_number, unsigned Index)
+{
+    uint64_t ret_val;
+    char buf[sizeof(file_number)];
+    Cache::Handle *handle;
+
+    ret_val=0;
+    EncodeFixed64(buf, file_number);
+    Slice key(buf, sizeof(buf));
+    handle = cache_->Lookup(key);
+
+    if (NULL != handle) 
+    {
+        TableAndFile * tf;
+
+        tf=reinterpret_cast<TableAndFile*>(cache_->Value(handle));
+        ret_val=tf->table->GetSstCounters().Value(Index);
+        cache_->Release(handle);
+    }   // if
+
+    return(ret_val);
+    
+}   // TableCache::GetStatisticValue
+
 }  // namespace leveldb

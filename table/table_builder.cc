@@ -320,4 +320,8 @@ uint64_t TableBuilder::FileSize() const {
   return rep_->offset;
 }
 
+uint64_t TableBuilder::NumDeletes() const {
+  return rep_->sst_counters.Value(eSstCountDeleteKey);
+}
+
 }  // namespace leveldb

@@ -34,7 +34,8 @@ Options::Options()
       is_repair(false),
       is_internal_db(false),
       total_leveldb_mem(0),
-      limited_developer_mem(false)
+      limited_developer_mem(false),
+      delete_threshold(1000)
 {
 }
 
