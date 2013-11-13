@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <syslog.h>
+#include <memory.h>
 #include <errno.h>
 
 #ifndef STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
@@ -215,10 +216,12 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         bool should_create, good;
         int ret_val, id;
         struct shmid_ds shm_info;
+        size_t open_size;
 
         ret_ptr=NULL;
         memset(&shm_info, 0, sizeof(shm_info));
         good=true;
+        open_size=sizeof(PerformanceCounters);
 
         // first id attempt, minimal request
         id=shmget(ePerfKey, 0, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
@@ -228,18 +231,22 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
             ret_val=-1;
 
         // does the shared memory already exists (and of proper size if writing)
-        should_create=(0!=ret_val || ((shm_info.shm_segsz < sizeof(PerformanceCounters)) && !IsReadOnly));
+        should_create=(0!=ret_val || (shm_info.shm_segsz < sizeof(PerformanceCounters))) && !IsReadOnly;
 
         // should old shared memory be deleted?
         if (should_create && 0==ret_val)
         {
             ret_val=shmctl(id, IPC_RMID, &shm_info);
+            good=(0==ret_val);
             if (0!=ret_val)
-            {
                 syslog(LOG_ERR, "shmctl IPC_RMID failed [%d, %m]", errno);
-                good=false;
-            }   // if
         }   // if
+
+        // else open the size that exists
+        else if (0==ret_val)
+        {
+            open_size=shm_info.shm_segsz;
+        }   // else if
 
         // attempt to attach/create to shared memory instance
         if (good)
@@ -251,7 +258,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
             else
                 flags = IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
-            m_PerfSharedId=shmget(ePerfKey, sizeof(PerformanceCounters), flags);
+            m_PerfSharedId=shmget(ePerfKey, open_size, flags);
             good=(-1!=m_PerfSharedId);
         }   // if
 
@@ -596,7 +603,19 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "BGUnmapDirect",
         "BGUnmapQueued",
         "BGUnmapDequeued",
-        "BGUnmapWeighted"
+        "BGUnmapWeighted",
+        "BGLevel0Direct",
+        "BGLevel0Queued",
+        "BGLevel0Dequeued",
+        "BGLevel0Weighted",
+        "BGCompactDirect",
+        "BGCompactQueued",
+        "BGCompactDequeued",
+        "BGCompactWeighted",
+        "FileCacheInsert",
+        "FileCacheRemove",
+        "BlockCacheInsert",
+        "BlockCacheRemove"
     };
 
 

@@ -250,7 +250,7 @@ TEST(CacheTest, FileCacheExpire) {
     }   // while
 
     // did file cache take away?
-    ASSERT_EQ(beginning_size-(kCacheSize/2)*kOneMeg, double_cache_.GetCapacity(false));
+    ASSERT_GT(beginning_size-(kCacheSize/2)*kOneMeg, double_cache_.GetCapacity(false));
 
     // sleep two seconds
     Env::Default()->SleepForMicroseconds(2000000);
@@ -278,7 +278,7 @@ TEST(CacheTest, FileCacheExpire) {
     }   // while
 
     // did file cache take away?
-    ASSERT_EQ(beginning_size-(kCacheSize/2)*kOneMeg, double_cache_.GetCapacity(false));
+    ASSERT_GT(beginning_size-(kCacheSize/2)*kOneMeg, double_cache_.GetCapacity(false));
 
     // sleep two seconds
     Env::Default()->SleepForMicroseconds(2000000);
@@ -287,7 +287,7 @@ TEST(CacheTest, FileCacheExpire) {
     double_cache_.PurgeExpiredFiles();
 
     // did only half get purged
-    ASSERT_EQ(beginning_size-(kCacheSize/4)*kOneMeg, double_cache_.GetCapacity(false));
+    ASSERT_GT(beginning_size-(kCacheSize/4)*kOneMeg, double_cache_.GetCapacity(false));
 
     // reset timeout to default
     double_cache_.SetFileTimeout(expire_default);

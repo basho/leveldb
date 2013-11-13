@@ -151,10 +151,7 @@ class Env {
   // serialized.
   virtual void Schedule(
       void (*function)(void* arg),
-      void* arg,
-      int state=0,
-      bool imm_flag=false,
-      int priority=0) = 0;
+      void* arg) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
@@ -234,6 +231,9 @@ class RandomAccessFile {
 
   // Riak optimization:  allows advising Linux page cache
   virtual void SetForCompaction(uint64_t file_size) {};
+
+  // Riak addition:  size of this structure in bytes
+  virtual size_t ObjectSize() {return(sizeof(RandomAccessFile));};
 };
 
 // A file abstraction for sequential writing.  The implementation
@@ -359,8 +359,8 @@ class EnvWrapper : public Env {
     return target_->LockFile(f, l);
   }
   Status UnlockFile(FileLock* l) { return target_->UnlockFile(l); }
-  void Schedule(void (*f)(void*), void* a, int state=0, bool imm=false, int priority=0) {
-      return target_->Schedule(f, a, state, imm, priority);
+  void Schedule(void (*f)(void*), void* a) {
+      return target_->Schedule(f, a);
   }
   pthread_t StartThread(void (*f)(void*), void* a) {
     return target_->StartThread(f, a);
