@@ -46,6 +46,7 @@ enum SstCountEnum
     eSstCountKeySmallest=9,    //!< smallest key in sst
     eSstCountValueLargest=10,  //!< largest value in sst
     eSstCountValueSmallest=11, //!< smallest value in sst
+    eSstCountDeleteKey=12,     //!< tombstone count
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values

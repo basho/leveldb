@@ -5,6 +5,7 @@
 #include "leveldb/table_builder.h"
 
 #include <assert.h>
+#include "db/dbformat.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
@@ -131,6 +132,9 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
       r->sst_counters.Set(eSstCountValueSmallest, value.size());
   if (r->sst_counters.Value(eSstCountValueLargest) < value.size())
       r->sst_counters.Set(eSstCountValueLargest, value.size());
+
+  if (kTypeDeletion==ExtractValueType(key))
+      r->sst_counters.Inc(eSstCountDeleteKey);
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
   if (estimated_block_size >= r->options.block_size) {
