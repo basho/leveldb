@@ -582,9 +582,14 @@ void LRUCache2::Unref(LRUHandle2* e) {
   e->refs--;
   if (e->refs <= 0) {
       sub_and_fetch(parent_->GetUsagePtr(), (uint64_t)e->charge);
-//    usage_ -= e->charge;
-    (*e->deleter)(e->key(), e->value);
-    free(e);
+
+      if (is_file_cache_)
+          gPerfCounters->Add(ePerfFileCacheRemove, e->charge);
+      else
+          gPerfCounters->Add(ePerfBlockCacheRemove, e->charge);
+
+      (*e->deleter)(e->key(), e->value);
+      free(e);
   }
 }
 
@@ -592,13 +597,16 @@ void LRUCache2::Unref(LRUHandle2* e) {
 Cache::Handle* LRUCache2::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
+    
+    size_t this_size;
 
+    this_size=sizeof(LRUHandle2)-1 + key.size();
     LRUHandle2* e = reinterpret_cast<LRUHandle2*>(
-        malloc(sizeof(LRUHandle2)-1 + key.size()));
+        malloc(this_size));
 
     e->value = value;
     e->deleter = deleter;
-    e->charge = charge;
+    e->charge = charge + this_size;  // assumes charge is always byte size
     e->key_length = key.size();
     e->hash = hash;
     e->refs = 2;  // One from LRUCache2, one for the returned handle
@@ -613,11 +621,17 @@ Cache::Handle* LRUCache2::Insert(
             + parent_->GetFileTimeout();
     }   // if
 
+    if (is_file_cache_)
+        gPerfCounters->Add(ePerfFileCacheInsert, e->charge);
+    else
+        gPerfCounters->Add(ePerfBlockCacheInsert, e->charge);
+
+
     {
         SpinLock l(&spin_);
 
         LRU_Append(e);
-        add_and_fetch(parent_->GetUsagePtr(), (uint64_t)charge);
+        add_and_fetch(parent_->GetUsagePtr(), (uint64_t)e->charge);
 
         LRUHandle2* old = table_.Insert(e);
         if (old != NULL) {

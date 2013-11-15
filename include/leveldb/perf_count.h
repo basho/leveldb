@@ -204,6 +204,12 @@ enum PerformanceCountersEnum
     ePerfBGUnmapDequeued=75,//!< count Unmap operations removed from queue
     ePerfBGUnmapWeighted=76,//!< total microseconds item spent on queue
 
+    ePerfFileCacheInsert=77,//!< total bytes inserted into file cache
+    ePerfFileCacheRemove=78,//!< total bytes removed from file cache
+
+    ePerfBlockCacheInsert=79,//!< total bytes inserted into block cache
+    ePerfBlockCacheRemove=80,//!< total bytes removed from block cache
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values
