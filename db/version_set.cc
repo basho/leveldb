@@ -1784,6 +1784,8 @@ bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
 
 bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
 
+  bool ret_flag(false);
+
   // This is a look ahead to see how costly this key will make the subsequent compaction
   //  of this new file to the next higher level.  Start a new file if the cost is high.
   if (!gLevelTraits[level()+1].m_OverlappedFiles)
@@ -1802,23 +1804,21 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
 
     if (overlapped_bytes_ > gLevelTraits[level_].m_MaxGrandParentOverlapBytes) {
       // Too much overlap for current output; start new output
-      overlapped_bytes_ = 0;
-      return true;
+      ret_flag=true;
     } // if
 
     // Second consideration:  sorted files need to keep the bloom filter size controlled
     //  to meet file open speed goals
     else
     {
-      overlapped_bytes_ = 0;
-      return (75000 < key_count);
-    } // else
+      ret_flag=(75000<key_count);
+     } // else
   }  // if
-  else
-  {
-    // overlapped levels do NOT split their output file
-    return false;
-  }
+
+  if (ret_flag)
+    overlapped_bytes_ = 0;
+
+  return(ret_flag);
 }
 
 void Compaction::ReleaseInputs() {
