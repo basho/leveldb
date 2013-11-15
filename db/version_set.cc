@@ -1066,8 +1066,8 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
   }
 }
 
-bool 
-VersionSet::Finalize(Version* v) 
+bool
+VersionSet::Finalize(Version* v)
 {
     // Riak:  looking for first compaction needed in level order
     int best_level = -1;
@@ -1077,7 +1077,7 @@ VersionSet::Finalize(Version* v)
 
     compaction_found=false;
     is_grooming=false;
-    for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level) 
+    for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level)
     {
         bool compact_ok;
         double score;
@@ -1094,7 +1094,7 @@ VersionSet::Finalize(Version* v)
             {
                 // good ... stop consideration
             }   // if
-            
+
             // overlapped and next level is not compacting
             else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted)
             {
@@ -1144,12 +1144,17 @@ VersionSet::Finalize(Version* v)
 
                 for (it=v->files_[level].begin(); v->files_[level].end()!=it && score<1; ++it)
                 {
-                    if (options_->delete_threshold <= (*it)->num_deletes)
+                    // if number of tombstones in stats exceeds threshold,
+                    //  we have a compaction candidate
+                    if (options_->delete_threshold <= GetTableCache()->GetStatisticValue((*it)->number, eSstCountDeleteKey))
                     {
-                        score=1;
+                        compaction_found=true;
+                        best_level=level;
+                        best_score=0;
                         v->file_to_compact_=*it;
                         v->file_to_compact_level_=level;
                         is_grooming=true;
+                        gPerfCounters->Inc(ePerfDebug0);
                     }
                 }   // for
             }   // if
@@ -1181,15 +1186,15 @@ VersionSet::Finalize(Version* v)
  * Penalty is an estimate of how many compactions/keys of work
  *  are overdue.
  */
-void 
+void
 VersionSet::UpdatePenalty(
-    Version* v) 
+    Version* v)
 {
     int penalty=0;
 
-    for (int level = 0; level < config::kNumLevels-1; ++level) 
+    for (int level = 0; level < config::kNumLevels-1; ++level)
     {
-        if (gLevelTraits[level].m_OverlappedFiles) 
+        if (gLevelTraits[level].m_OverlappedFiles)
         {
             // compute penalty for write throttle if too many Level-0 files accumulating
             if (config::kL0_CompactionTrigger < v->files_[level].size())
@@ -1216,7 +1221,7 @@ VersionSet::UpdatePenalty(
                 }   // else
             }   // if
         }   // if
-        else 
+        else
         {
             // Compute the ratio of current size to size limit.
             double penalty_score;
@@ -1472,7 +1477,7 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
 }
 
 
-/** 
+/**
  * PickCompactions() directly feeds hot_thread pools as of October 2013
  */
 void
@@ -1498,7 +1503,7 @@ VersionSet::PickCompaction(
       // "files containing delete tombstones")
       const bool size_compaction = (current_->compaction_score_ >= 1);
       const bool seek_compaction = (current_->file_to_compact_ != NULL);
-      if (size_compaction) 
+      if (size_compaction)
       {
           level = current_->compaction_level_;
           assert(level >= 0);

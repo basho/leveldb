@@ -67,7 +67,6 @@ Status BuildTable(const std::string& dbname,
       if (s.ok()) {
         meta->file_size = builder->FileSize();
         assert(meta->file_size > 0);
-        meta->num_deletes = builder->NumDeletes();
       }
     } else {
       builder->Abandon();
