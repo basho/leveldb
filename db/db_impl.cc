@@ -838,65 +838,48 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  int state, priority;
-  bool push;
-
-  // decide which background thread gets the compaction job
-  state=0;
-  priority=0;
-  push=false;
-
-  // merge level 0s to level 1
-  Compaction * c_ptr;
-  c_ptr=versions_->PickCompaction();
-
-  // compaction of level 0 files:  high priority
-  if (NULL!=c_ptr && c_ptr->level()==0)
+  if (!shutting_down_.Acquire_Load()) 
   {
-      push=true;
-      priority=versions_->NumLevelFiles(0);
+      if (NULL==manual_compaction_)
+      {
+          // ask versions_ to schedule work to hot threads
+          versions_->PickCompaction(this);
+      }   // if
+
+      else if (!versions_->IsCompactionSubmitted(manual_compaction_->level))
+      {
+          // support manual compaction under hot threads
+          versions_->SetCompactionSubmitted(manual_compaction_->level);
+          ThreadTask * task=new CompactionTask(this, NULL);
+          gCompactionThreads->Submit(task, true);
+      }   // else if
   }   // if
-  else
-  {
-      priority=versions_->current()->WritePenalty();
-  }   // else
-
-  delete c_ptr;
-
-  if (push)
-  {
-      // is something else already on background work queue
-      if (bg_compaction_scheduled_)
-          state=2;
-      else
-          state=1;
-  }   // if
-
-  if (bg_compaction_scheduled_ && !push) {
-    // Already scheduled
-  } else if (shutting_down_.Acquire_Load()) {
-    // DB is being deleted; no more background compactions
-  } else if (manual_compaction_ == NULL &&
-             !versions_->NeedsCompaction()) {
-    // No work to be done
-  } else {
-    bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_), priority);
-  }
 }
 
-void DBImpl::BGWork(void* db) {
-  reinterpret_cast<DBImpl*>(db)->BackgroundCall();
-}
 
-void DBImpl::BackgroundCall() {
+void DBImpl::BackgroundCall2(
+    Compaction * Compact) {
   MutexLock l(&mutex_);
-  assert(bg_compaction_scheduled_);
+  int level;
+  assert(IsCompactionScheduled());
 
   ++running_compactions_;
+  if (NULL!=Compact)
+      level=Compact->level();
+  else if (NULL!=manual_compaction_)
+      level=manual_compaction_->level;
+  else
+      level=0;
+
+  if (0==level)
+      gPerfCounters->Inc(ePerfBGCompactLevel0);
+  else
+      gPerfCounters->Inc(ePerfBGNormal);
+
+  versions_->SetCompactionRunning(level);
 
   if (!shutting_down_.Acquire_Load()) {
-    Status s = BackgroundCompaction();
+    Status s = BackgroundCompaction(Compact);
     if (!s.ok()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
@@ -910,8 +893,13 @@ void DBImpl::BackgroundCall() {
       mutex_.Lock();
     }
   }
+  else
+  {
+    delete Compact;
+  }   // else
   bg_compaction_scheduled_ = false;
   --running_compactions_;
+  versions_->SetCompactionDone(level);
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
@@ -957,7 +945,8 @@ DBImpl::BackgroundImmCompactCall() {
   if (shutting_down_.Acquire_Load()) {
 
     // must abandon data in memory ... hope recovery log works
-    imm_->Unref();
+    if (NULL!=imm_)
+      imm_->Unref();
     imm_ = NULL;
     has_imm_.Release_Store(NULL);
   } // if
@@ -966,15 +955,18 @@ DBImpl::BackgroundImmCompactCall() {
 }
 
 
-Status DBImpl::BackgroundCompaction() {
+Status DBImpl::BackgroundCompaction(
+    Compaction * Compact) {
   Status status;
 
   mutex_.AssertHeld();
 
-  Compaction* c;
+  Compaction* c(Compact);
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
-  if (is_manual) {
+  if (NULL!=c) {
+      // do nothing in this work block
+  } else  if (is_manual) {
     ManualCompaction* m = (ManualCompaction *) manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == NULL);
@@ -988,7 +980,7 @@ Status DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
-    c = versions_->PickCompaction();
+      // c = versions_->PickCompaction();
   }
 
 
@@ -1676,6 +1668,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // There are too many level-0 files.
       Log(options_.info_log, "waiting...\n");
       gPerfCounters->Inc(ePerfWriteWaitLevel0);
+      MaybeScheduleCompaction();
       bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
     } else {
@@ -1700,7 +1693,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       if (NULL!=imm_)
       {
          ThreadTask * task=new ImmWriteTask(this);
-         gImmThreads->Submit(task);
+         gImmThreads->Submit(task, true);
       }
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
@@ -1992,5 +1985,16 @@ DBImpl::VerifyLevels()
     return(result);
 
 }   // VerifyLevels
+
+
+bool 
+DBImpl::IsCompactionScheduled() 
+{
+    mutex_.AssertHeld(); 
+    bool flag(false);
+    for (int level=0; level< config::kNumLevels && !flag; ++level)
+        flag=versions_->IsCompactionSubmitted(level);
+    return(flag || NULL!=imm_);
+}   // DBImpl::IsCompactionScheduled
 
 }  // namespace leveldb

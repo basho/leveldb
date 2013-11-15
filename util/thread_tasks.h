@@ -30,8 +30,9 @@
 
 #include <stdint.h>
 
-#include "leveldb/atomics.h"
 #include "db/db_impl.h"
+#include "db/version_set.h"
+#include "leveldb/atomics.h"
 
 namespace leveldb {
 
@@ -87,7 +88,7 @@ protected:
     DBImpl * m_DBImpl;
 
 public:
-    ImmWriteTask(DBImpl * Db)
+    explicit ImmWriteTask(DBImpl * Db)
         : m_DBImpl(Db) {};
 
     virtual ~ImmWriteTask() {};
@@ -100,6 +101,65 @@ private:
     ImmWriteTask & operator=(const ImmWriteTask &);
 
 };  // class ImmWriteTask
+
+
+/**
+ * Background compaction 
+ */
+
+class CompactionTask : public ThreadTask
+{
+protected:
+    DBImpl * m_DBImpl;
+    Compaction * m_Compaction;
+
+public:
+    CompactionTask(DBImpl * Db, Compaction * Compact)
+        : m_DBImpl(Db), m_Compaction(Compact) {};
+
+    virtual ~CompactionTask() {delete m_Compaction;};
+
+    virtual void operator()() 
+    {
+        m_DBImpl->BackgroundCall2(m_Compaction);
+        m_Compaction=NULL;
+    };
+
+private:
+    CompactionTask();
+    CompactionTask(const CompactionTask &);
+    CompactionTask & operator=(const CompactionTask &);
+
+};  // class CompactionTask
+
+
+/**
+ * Original env_posix.cc task
+ */
+
+class LegacyTask : public ThreadTask
+{
+protected:
+    void (*m_Function)(void*);
+    void * m_Arg;
+
+public:
+    LegacyTask(void (*Function)(void*), void * Arg)
+        : m_Function(Function), m_Arg(Arg) {};
+
+    virtual ~LegacyTask() {};
+
+    virtual void operator()() 
+    {
+        (*m_Function)(m_Arg);
+    };
+
+private:
+    LegacyTask();
+    LegacyTask(const LegacyTask &);
+    LegacyTask & operator=(const LegacyTask &);
+
+};  // class LegacyTask
 
 } // namespace leveldb
 

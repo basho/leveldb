@@ -139,6 +139,7 @@ class Version {
   // are initialized by Finalize().
   double compaction_score_;
   int compaction_level_;
+  bool compaction_grooming_;
   volatile int write_penalty_;
 
   explicit Version(VersionSet* vset)
@@ -234,7 +235,10 @@ class VersionSet {
   // Returns NULL if there is no compaction to be done.
   // Otherwise returns a pointer to a heap-allocated object that
   // describes the compaction.  Caller should delete the result.
-  Compaction* PickCompaction();
+  //
+  // Riak October 2013:  Pick Compaction now posts work directly
+  //  to hot_thread pools
+  void PickCompaction(class DBImpl * db_impl);
 
   // Return a compaction object for compacting the range [begin,end] in
   // the specified level.  Returns NULL if there is nothing in that
@@ -273,8 +277,22 @@ class VersionSet {
     char buffer[100];
   };
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
+  const char* CompactionSummary(LevelSummaryStorage* scratch) const;
 
   TableCache* GetTableCache() {return(table_cache_);};
+
+  bool IsCompactionSubmitted(int level) 
+  {return(m_CompactionStatus[level].m_Submitted);}
+
+  void SetCompactionSubmitted(int level) 
+  {m_CompactionStatus[level].m_Submitted=true;}
+
+  void SetCompactionRunning(int level) 
+  {m_CompactionStatus[level].m_Running=true;}
+
+  void SetCompactionDone(int level) 
+  {   m_CompactionStatus[level].m_Running=false;
+      m_CompactionStatus[level].m_Submitted=false;}
 
  private:
   class Builder;
@@ -282,7 +300,8 @@ class VersionSet {
   friend class Compaction;
   friend class Version;
 
-  void Finalize(Version* v);
+  bool Finalize(Version* v);
+  void UpdatePenalty(Version *v);
 
   void GetRange(const std::vector<FileMetaData*>& inputs,
                 InternalKey* smallest,
@@ -325,6 +344,17 @@ class VersionSet {
   // Riak allows multiple compaction threads, this mutex allows
   //  only one to write to manifest at a time.  Only used in LogAndApply
   port::Mutex manifest_mutex_;
+
+  struct CompactionStatus_s
+  {
+      bool m_Submitted;     //!< level submitted to hot thread pool
+      bool m_Running;       //!< thread actually running compaction
+
+      CompactionStatus_s() 
+      : m_Submitted(false), m_Running(false)
+      {};
+  } m_CompactionStatus[config::kNumLevels];
+
 
   // No copying allowed
   VersionSet(const VersionSet&);
