@@ -1823,6 +1823,11 @@ Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
 Status DB::Delete(const WriteOptions& opt, const Slice& key) {
   WriteBatch batch;
   batch.Delete(key);
+
+  // Negate the count to "ApiWrite"
+  gPerfCounters->Dec(ePerfApiWrite);
+  gPerfCounters->Inc(ePerfApiDelete);
+
   return Write(opt, &batch);
 }
 

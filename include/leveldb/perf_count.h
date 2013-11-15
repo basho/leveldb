@@ -221,6 +221,7 @@ enum PerformanceCountersEnum
     ePerfBlockCacheInsert=87, //!< total bytes inserted into block cache
     ePerfBlockCacheRemove=88, //!< total bytes removed from block cache
 
+    ePerfApiDelete=89,        //!< Count of DB::Delete
 
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
