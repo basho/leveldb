@@ -46,6 +46,7 @@ enum SstCountEnum
     eSstCountKeySmallest=9,    //!< smallest key in sst
     eSstCountValueLargest=10,  //!< largest value in sst
     eSstCountValueSmallest=11, //!< smallest value in sst
+    eSstCountDeleteKey=12,     //!< tombstone count
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values
@@ -220,6 +221,7 @@ enum PerformanceCountersEnum
     ePerfBlockCacheInsert=87, //!< total bytes inserted into block cache
     ePerfBlockCacheRemove=88, //!< total bytes removed from block cache
 
+    ePerfApiDelete=89,        //!< Count of DB::Delete
 
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)

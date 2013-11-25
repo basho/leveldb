@@ -615,7 +615,8 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         "FileCacheInsert",
         "FileCacheRemove",
         "BlockCacheInsert",
-        "BlockCacheRemove"
+        "BlockCacheRemove",
+        "ApiDelete"
     };
 
 
