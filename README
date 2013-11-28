@@ -21,6 +21,16 @@ that necessitate leveldb adjustments, both in options and code:
   contain prioritized threads for specific compaction activities.
 
 
+This repository follows the Basho standard for branch management 
+as of November 28, 2013.  The standard is found here:
+
+https://github.com/basho/riak/wiki/Basho-repository-management
+
+In summary, the "develop" branch contains the most recently reviewed
+engineering work.  The "master" branch contains the most recently
+released work, i.e. distributed as part of a Riak release.
+
+
 Those wishing to truly savor the benefits of Basho's modifications
 need to initialize a new leveldb::Options structure similar to the
 following before each call to leveldb::DB::Open:
