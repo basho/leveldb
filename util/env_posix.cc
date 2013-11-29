@@ -141,6 +141,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
     posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
 #endif
     gPerfCounters->Inc(ePerfROFileOpen);
+    syslog(LOG_ERR, "PosixRandomAccessFile opening %s", fname.c_str());
   }
   virtual ~PosixRandomAccessFile()
   {
@@ -761,8 +762,8 @@ class PosixEnv : public Env {
   }  // SleepForMicroSeconds
 
 
-  virtual int GetBackgroundBacklog() const 
-    {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic 
+  virtual int GetBackgroundBacklog() const
+    {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic
           + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
 
  private:

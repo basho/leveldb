@@ -365,11 +365,24 @@ private:
               one_deleted=shard_[next_shard_].ReleaseOne();
               next_shard_=(next_shard_ +1) % kNumShards;
           } while(end_shard!=next_shard_ && !one_deleted);
+
       }   // while
 
       return;
 
   } // ShardedLRUCache2::Resize
+
+
+  // let doublecache know state of cache space
+  void SetFreeSpaceWarning(size_t FileMetaSize)
+  {
+      bool plenty_space;
+
+      plenty_space=(GetUsage() + 5*FileMetaSize < GetCapacity());
+
+      parent_.SetPlentySpace(plenty_space);
+  }   // SetFreeSpaceWarning
+
 
   // Only used on file cache.  Remove entries that are too old
   void PurgeExpiredFiles()
@@ -417,7 +430,7 @@ private:
 DoubleCache::DoubleCache(
     const Options & options)
     : m_FileCache(NULL), m_BlockCache(NULL),
-      m_IsInternalDB(options.is_internal_db),
+      m_IsInternalDB(options.is_internal_db), m_PlentySpace(true),
       m_Overhead(0), m_TotalAllocation(0),
       m_FileTimeout(4*24*60*60)  // default is 4 days
 {
@@ -484,7 +497,7 @@ DoubleCache::GetCapacity(
         //  cache allocation less minimum block size
         if (IsFileCache)
         {
-            ret_val=m_TotalAllocation - (2*1024*1024);
+            ret_val=m_TotalAllocation - (2*1024*1024L);
         }   // if
 
         // block cache capacity is whatever file cache is not
@@ -501,8 +514,10 @@ DoubleCache::GetCapacity(
             {
                 ret_val=m_TotalAllocation - temp;
 
-                if (ret_val < (2*1024*1024))
-                    ret_val=(2*1024*1024);
+                if (ret_val < (2*1024*1024L))
+                {
+                    ret_val=(2*1024*1024L);
+                }   // if
             }   // if
         }   // else
     }   // if
@@ -597,7 +612,7 @@ void LRUCache2::Unref(LRUHandle2* e) {
 Cache::Handle* LRUCache2::Insert(
     const Slice& key, uint32_t hash, void* value, size_t charge,
     void (*deleter)(const Slice& key, void* value)) {
-    
+
     size_t this_size;
 
     this_size=sizeof(LRUHandle2)-1 + key.size();
@@ -642,9 +657,13 @@ Cache::Handle* LRUCache2::Insert(
 
     // call parent to rebalance across all shards, not just this one
     if (parent_->GetCapacity() <parent_->GetUsage())
-    {
         parent_->Resize();
-    }   // if
+
+    // let parent adjust free space warning level
+    if (is_file_cache_)
+        parent_->SetFreeSpaceWarning(e->charge);
+
+
 
   return reinterpret_cast<Cache::Handle*>(e);
 }

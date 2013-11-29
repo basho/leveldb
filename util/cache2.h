@@ -53,13 +53,18 @@ public:
     void SetFileTimeout(time_t Timeout) {m_FileTimeout=Timeout;};
 
     void Flush();
+    void SetPlentySpace(bool PlentySpace) {m_PlentySpace=PlentySpace;};
+    bool GetPlentySpace() const {return(m_PlentySpace);};
     void PurgeExpiredFiles();
+
+    bool IsInternalDB() const {return(m_IsInternalDB);};
 
 protected:
     ShardedLRUCache2 * m_FileCache;   //!< file cache used by db/tablecache.cc
     ShardedLRUCache2 * m_BlockCache;  //!< used by table/table.cc
 
     bool m_IsInternalDB;        //!< internal db gets smaller allocation from FlexCache
+    bool m_PlentySpace;         //!< true when lots of spare space in file cache
     size_t m_Overhead;          //!< reduce from allocation to better estimate limits
     size_t m_TotalAllocation;
     time_t m_FileTimeout;       //!< seconds to allow file to stay cached.  default 4 days.

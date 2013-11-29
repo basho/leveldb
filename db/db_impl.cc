@@ -838,7 +838,7 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  if (!shutting_down_.Acquire_Load()) 
+  if (!shutting_down_.Acquire_Load())
   {
       if (NULL==manual_compaction_)
       {
@@ -1087,7 +1087,20 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   std::string fname = TableFileName(dbname_, file_number, compact->compaction->level()+1);
   Status s = env_->NewWritableFile(fname, &compact->outfile);
   if (s.ok()) {
-    compact->builder = new TableBuilder(options_, compact->outfile);
+      Options options;
+      options=options_;
+
+      if (double_cache.GetFreeWarning())
+      {
+          options.block_size=4096;
+      }   // if
+      else
+      {
+          options.block_size=121332;
+          gPerfCounters->Inc(ePerfDebug0);
+      }   // else
+
+    compact->builder = new TableBuilder(options, compact->outfile);
   }
   return s;
 }
@@ -1992,10 +2005,10 @@ DBImpl::VerifyLevels()
 }   // VerifyLevels
 
 
-bool 
-DBImpl::IsCompactionScheduled() 
+bool
+DBImpl::IsCompactionScheduled()
 {
-    mutex_.AssertHeld(); 
+    mutex_.AssertHeld();
     bool flag(false);
     for (int level=0; level< config::kNumLevels && !flag; ++level)
         flag=versions_->IsCompactionSubmitted(level);
