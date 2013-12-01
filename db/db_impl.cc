@@ -1182,7 +1182,7 @@ DBImpl::MaybeRaiseBlockSize(
                 cur_step=0;
 
             // move to next step, but not over the top step
-            if (cur_step < options_.block_size_steps)
+            if (cur_step < (size_t)options_.block_size_steps)
                 ++cur_step;
             else
                 cur_step=options_.block_size_steps;
@@ -1194,7 +1194,7 @@ DBImpl::MaybeRaiseBlockSize(
 
             Log(options_.info_log,
                 "Block size selected %zd block size, %zd cur, %zd low, %zd high, %zd inc, %zd step",
-                new_block_size, cur_size, low_size, high_size, cur_step);
+                new_block_size, cur_size, low_size, high_size, increment, cur_step);
 
         }   // if
     }   // if
