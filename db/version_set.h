@@ -105,7 +105,7 @@ class Version {
 
   size_t NumFiles(int level) const { return files_[level].size(); }
 
-  typedef std::vector<FileMetaData*> FileMetaDataVector_t; 
+  typedef std::vector<FileMetaData*> FileMetaDataVector_t;
 
   const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
@@ -283,16 +283,16 @@ class VersionSet {
 
   TableCache* GetTableCache() {return(table_cache_);};
 
-  bool IsCompactionSubmitted(int level) 
+  bool IsCompactionSubmitted(int level)
   {return(m_CompactionStatus[level].m_Submitted);}
 
-  void SetCompactionSubmitted(int level) 
+  void SetCompactionSubmitted(int level)
   {m_CompactionStatus[level].m_Submitted=true;}
 
-  void SetCompactionRunning(int level) 
+  void SetCompactionRunning(int level)
   {m_CompactionStatus[level].m_Running=true;}
 
-  void SetCompactionDone(int level) 
+  void SetCompactionDone(int level)
   {   m_CompactionStatus[level].m_Running=false;
       m_CompactionStatus[level].m_Submitted=false;}
 
@@ -352,7 +352,7 @@ class VersionSet {
       bool m_Submitted;     //!< level submitted to hot thread pool
       bool m_Running;       //!< thread actually running compaction
 
-      CompactionStatus_s() 
+      CompactionStatus_s()
       : m_Submitted(false), m_Running(false)
       {};
   } m_CompactionStatus[config::kNumLevels];
@@ -405,6 +405,14 @@ class Compaction {
   // is successful.
   void ReleaseInputs();
 
+  // Riak specific:  get summary statistics from compaction inputs
+  void CalcInputStats(TableCache & tables);
+  size_t TotalUserDataSize() const {return(tot_user_data_);};
+  size_t TotalIndexKeys()    const {return(tot_index_keys_);};
+  size_t AverageValueSize()  const {return(avg_value_size_);};
+  size_t AverageKeySize()    const {return(avg_key_size_);};
+  size_t AverageBlockSize()  const {return(avg_block_size_);};
+
  private:
   friend class Version;
   friend class VersionSet;
@@ -434,6 +442,14 @@ class Compaction {
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).
   size_t level_ptrs_[config::kNumLevels];
+
+  // Riak specific:  output statistics from CalcInputStats
+  size_t tot_user_data_;
+  size_t tot_index_keys_;
+  size_t avg_value_size_;
+  size_t avg_key_size_;
+  size_t avg_block_size_;
+  bool stats_done_;
 };
 
 }  // namespace leveldb

@@ -13,6 +13,7 @@
 #include "db/table_cache.h"
 #include "leveldb/env.h"
 #include "leveldb/table_builder.h"
+#include "table/block.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
@@ -1709,7 +1710,11 @@ Compaction::Compaction(int level)
       input_version_(NULL),
       grandparent_index_(0),
       seen_key_(false),
-      overlapped_bytes_(0) {
+      overlapped_bytes_(0),
+      tot_user_data_(0), tot_index_keys_(0),
+      avg_value_size_(0), avg_key_size_(0), avg_block_size_(0),
+      stats_done_(false)
+  {
   for (int i = 0; i < config::kNumLevels; i++) {
     level_ptrs_[i] = 0;
   }
@@ -1828,4 +1833,163 @@ void Compaction::ReleaseInputs() {
   }
 }
 
-}  // namespace leveldb
+/**
+ * Riak specific:  populate statics data about this compaction
+ */
+void
+Compaction::CalcInputStats(
+    TableCache & tables)
+{
+    uint64_t temp, temp_cnt;
+    size_t value_count, key_count, block_count;
+    std::vector<FileMetaData *>::iterator it;
+
+    if (!stats_done_)
+    {
+        tot_user_data_=0;
+        tot_index_keys_=0;
+        avg_value_size_=0; value_count=0;
+        avg_key_size_=0;   key_count=0;
+        avg_block_size_=0; block_count=0;
+
+        // walk both levels of input files
+        for (it=inputs_[0].begin();
+             inputs_[1].end()!=it;
+             (inputs_[0].end()!=it ? ++it:  it=inputs_[1].begin()))
+        {
+            // only do actions if not about to switch levels
+            if (inputs_[0].end()!=it)
+            {
+                FileMetaData * fmd;
+                Status s;
+                Cache::Handle * handle;
+                size_t user_est, idx_est;
+
+                fmd=*it;
+                temp=0;
+                temp_cnt=0;
+                user_est=0;
+                idx_est=0;
+
+                // get and hold handle to cache entry
+                s=tables.TEST_FindTable(fmd->number, fmd->file_size, fmd->level, &handle);
+
+                if (s.ok())
+                {
+                    // 1. total size of all blocks before compaction
+                    temp=tables.GetStatisticValue(fmd->number, eSstCountBlockSize);
+
+                    // estimate size when counter does not exist
+                    if (0==temp)
+                    {
+                        TableAndFile * tf;
+
+                        tf=reinterpret_cast<TableAndFile*>(tables.TEST_GetInternalCache()->Value(handle));
+                        if (tf->table->TableObjectSize() < fmd->file_size)
+                            temp=fmd->file_size - tf->table->TableObjectSize();
+                    }   // if
+
+                    user_est=temp;
+                    tot_user_data_+=temp;
+
+                    // 2. total keys in the indexes
+                    temp=tables.GetStatisticValue(fmd->number, eSstCountIndexKeys);
+
+                    // estimate total when counter does not exist
+                    if (0==temp)
+                    {
+                        TableAndFile * tf;
+                        Block * index_block;
+
+                        tf=reinterpret_cast<TableAndFile*>(tables.TEST_GetInternalCache()->Value(handle));
+                        index_block=tf->table->TEST_GetIndexBlock();
+                        temp=index_block->NumRestarts();
+                    }   // if
+
+                    idx_est=temp;
+                    tot_index_keys_+=temp;
+
+                    // 3. average size of values in input set
+                    //    (value is really size of value plus size of key)
+                    temp=tables.GetStatisticValue(fmd->number, eSstCountValueSize);
+                    temp+=tables.GetStatisticValue(fmd->number, eSstCountKeySize);
+                    temp_cnt=tables.GetStatisticValue(fmd->number, eSstCountKeys);
+
+                    // estimate total when counter does not exist
+                    if (0==temp || 0==temp_cnt)
+                    {
+                        // no way to estimate total key count
+                        //  (ok, could try from bloom filter size ... but likely no
+                        //   bloom filter if no stats)
+                        temp=0;
+                        temp_cnt=0;
+                    }   // if
+
+                    avg_value_size_+=temp;
+                    value_count+=temp_cnt;
+
+                    // 4. average key size
+                    temp=tables.GetStatisticValue(fmd->number, eSstCountKeySize);
+                    temp_cnt=tables.GetStatisticValue(fmd->number, eSstCountKeys);
+
+                    // estimate total when counter does not exist
+                    if (0==temp || 0==temp_cnt)
+                    {
+                        // no way to estimate total key count
+                        //  (ok, could try from bloom filter size ... but likely no
+                        //   bloom filter if no stats)
+                        temp=0;
+                        temp_cnt=0;
+                    }   // if
+
+                    avg_key_size_+=temp;
+                    key_count+=temp_cnt;
+
+                    // 5. block key size
+                    temp=tables.GetStatisticValue(fmd->number, eSstCountBlockSizeUsed);
+                    temp_cnt=tables.GetStatisticValue(fmd->number, eSstCountBlocks);
+                    temp*=temp_cnt;
+
+                    // estimate total when counter does not exist
+                    if (0==temp || 0==temp_cnt)
+                    {
+                        temp=user_est;
+                        temp_cnt=idx_est;
+                    }   // if
+
+                    avg_block_size_+=temp;
+                    block_count+=temp_cnt;
+
+                    // cleanup
+                    tables.Release(handle);
+                }   // if
+
+            }   // if
+        }   // for
+
+        // compute averages
+        if (0!=value_count)
+            avg_value_size_/=value_count;
+        else
+            avg_value_size_=0;
+
+        if (0!=key_count)
+            avg_key_size_/=key_count;
+        else
+            avg_key_size_=0;
+
+        if (0!=block_count)
+            avg_block_size_/=block_count;
+        else
+            avg_block_size_=0;
+
+        // only want to do this once per compaction
+        stats_done_=true;
+    }   // if
+
+    return;
+
+}   // Compaction::CalcInputStats
+
+
+}   // namespace leveldb

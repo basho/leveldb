@@ -28,6 +28,7 @@ Options::Options()
       max_open_files(1000),
       block_cache(NULL),
       block_size(4096),
+      block_size_steps(4),
       block_restart_interval(16),
       compression(kSnappyCompression),
       filter_policy(NULL),
@@ -55,6 +56,7 @@ Options::Dump(
     Log(log,"        Options.max_open_files: %d", max_open_files);
     Log(log,"           Options.block_cache: %p", block_cache);
     Log(log,"            Options.block_size: %zd", block_size);
+    Log(log,"      Options.block_size_steps: %d", block_size_steps);
     Log(log,"Options.block_restart_interval: %d", block_restart_interval);
     Log(log,"           Options.compression: %d", compression);
     Log(log,"         Options.filter_policy: %s", filter_policy == NULL ? "NULL" : filter_policy->Name());

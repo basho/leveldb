@@ -233,6 +233,7 @@ Status TableBuilder::Finish() {
       sst_stats_block_handle;
 
   // pass hint to Linux fadvise management
+  r->sst_counters.Set(eSstCountUserDataSize, r->offset);
   r->file->SetMetadataOffset(r->offset);
 
   // Write filter block
@@ -245,6 +246,8 @@ Status TableBuilder::Finish() {
   if (ok())
   {
       std::string encoded_stats;
+
+      r->sst_counters.Set(eSstCountBlockSizeUsed, r->options.block_size);
 
       if (r->pending_index_entry)
           r->sst_counters.Inc(eSstCountIndexKeys);

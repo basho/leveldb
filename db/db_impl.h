@@ -119,6 +119,7 @@ class DBImpl : public DB {
   int64_t PrioritizeWork(bool IsLevel0);
 
   Status OpenCompactionOutputFile(CompactionState* compact);
+  size_t MaybeRaiseBlockSize(Compaction & CompactionStuff);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact);
 

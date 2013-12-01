@@ -1090,20 +1090,61 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
       Options options;
       options=options_;
 
-      if (double_cache.GetFreeWarning())
+      // consider larger block size if option enabled (block_size_steps!=0)
+      //  and low on file cache space
+      if (0!=options.block_size_steps && !double_cache.GetPlentySpace())
       {
-          options.block_size=4096;
-      }   // if
-      else
-      {
-          options.block_size=121332;
-          gPerfCounters->Inc(ePerfDebug0);
-      }   // else
+          options.block_size=MaybeRaiseBlockSize(*compact->compaction);
 
-    compact->builder = new TableBuilder(options, compact->outfile);
-  }
+          // did size change?
+          if (options.block_size!=options_.block_size)
+              gPerfCounters->Inc(ePerfDebug0);
+      }   // if
+
+      compact->builder = new TableBuilder(options, compact->outfile);
+  }   // if
+
   return s;
 }
+
+
+size_t
+DBImpl::MaybeRaiseBlockSize(
+    Compaction & CompactionStuff)
+{
+    size_t new_block_size, tot_user_data, tot_index_keys, avg_value_size,
+        avg_key_size, avg_block_size;
+
+    new_block_size=options_.block_size;
+
+    //
+    // 1. Get estimates for key values.  Zero implies unable to estimate
+    //
+    CompactionStuff.CalcInputStats(*table_cache_);
+    tot_user_data=CompactionStuff.TotalUserDataSize();
+    tot_index_keys=CompactionStuff.TotalIndexKeys();
+    avg_value_size=CompactionStuff.AverageValueSize();
+    avg_key_size=CompactionStuff.AverageKeySize();
+    avg_block_size=CompactionStuff.AverageBlockSize();
+
+    Log(options_.info_log,
+        "Stats used %zd user data, %zd index keys, %zd avg value, %zd avg key, %zd avg block",
+        tot_user_data, tot_index_keys, avg_value_size, avg_key_size, avg_block_size);
+
+    //
+    // 2. Define boundaries of block size steps.  Calculate
+    //    "next step"
+    //
+    if (0!=tot_user_data && 0!=tot_index_keys && 0!=avg_value_size
+        && 0!=avg_key_size && 0!=avg_block_size)
+    {
+
+    }   // if
+
+    return(new_block_size);
+
+}   // DBImpl::MaybeRaiseBlockSize
+
 
 Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
                                           Iterator* input) {

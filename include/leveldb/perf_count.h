@@ -47,6 +47,8 @@ enum SstCountEnum
     eSstCountValueLargest=10,  //!< largest value in sst
     eSstCountValueSmallest=11, //!< smallest value in sst
     eSstCountDeleteKey=12,     //!< tombstone count
+    eSstCountBlockSizeUsed=13, //!< Options::block_size used with this file
+    eSstCountUserDataSize=14,  //!< post-compression size of non-metadata (user keys/values/block overhead)
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values
