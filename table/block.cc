@@ -15,7 +15,7 @@
 
 namespace leveldb {
 
-inline uint32_t Block::NumRestarts() const {
+uint32_t Block::NumRestarts() const {
   assert(size_ >= 2*sizeof(uint32_t));
   return DecodeFixed32(data_ + size_ - sizeof(uint32_t));
 }

@@ -118,8 +118,8 @@ class DBImpl : public DB {
   Status DoCompactionWork(CompactionState* compact);
   int64_t PrioritizeWork(bool IsLevel0);
 
-  Status OpenCompactionOutputFile(CompactionState* compact);
-  size_t MaybeRaiseBlockSize(Compaction & CompactionStuff);
+  Status OpenCompactionOutputFile(CompactionState* compact, size_t sample_value_size);
+  size_t MaybeRaiseBlockSize(Compaction & CompactionStuff, size_t SampleValueSize);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact);
 

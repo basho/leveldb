@@ -7,6 +7,7 @@
 #include <time.h>
 #include <algorithm>
 #include <errno.h>
+#include <math.h>
 #include <set>
 #include <string>
 #include <stdint.h>
@@ -1067,7 +1068,9 @@ void DBImpl::CleanupCompaction(CompactionState* compact) {
   delete compact;
 }
 
-Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
+Status DBImpl::OpenCompactionOutputFile(
+    CompactionState* compact,
+    size_t sample_value_size) {
   assert(compact != NULL);
   assert(compact->builder == NULL);
   uint64_t file_number;
@@ -1094,7 +1097,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
       //  and low on file cache space
       if (0!=options.block_size_steps && !double_cache.GetPlentySpace())
       {
-          options.block_size=MaybeRaiseBlockSize(*compact->compaction);
+          options.block_size=MaybeRaiseBlockSize(*compact->compaction, sample_value_size);
 
           // did size change?
           if (options.block_size!=options_.block_size)
@@ -1110,7 +1113,8 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
 
 size_t
 DBImpl::MaybeRaiseBlockSize(
-    Compaction & CompactionStuff)
+    Compaction & CompactionStuff,
+    size_t SampleValueSize)
 {
     size_t new_block_size, tot_user_data, tot_index_keys, avg_value_size,
         avg_key_size, avg_block_size;
@@ -1127,6 +1131,11 @@ DBImpl::MaybeRaiseBlockSize(
     avg_key_size=CompactionStuff.AverageKeySize();
     avg_block_size=CompactionStuff.AverageBlockSize();
 
+    // CalcInputStats does not have second source for avg_value_size.
+    //  Use size of next key.
+    if (0==avg_value_size)
+        avg_value_size=SampleValueSize;
+
     Log(options_.info_log,
         "Stats used %zd user data, %zd index keys, %zd avg value, %zd avg key, %zd avg block",
         tot_user_data, tot_index_keys, avg_value_size, avg_key_size, avg_block_size);
@@ -1138,7 +1147,56 @@ DBImpl::MaybeRaiseBlockSize(
     if (0!=tot_user_data && 0!=tot_index_keys && 0!=avg_value_size
         && 0!=avg_key_size && 0!=avg_block_size)
     {
+        size_t high_size, low_size, cur_size, increment;
 
+        // 2a. Highest block size:
+        //      (sqrt()/sqrt() stuff is from first derivative to minimize
+        //       total read size of one block plus file metadata)
+        high_size=(size_t)((double)tot_user_data / (sqrt(tot_user_data)/sqrt(avg_key_size)));
+
+        // 2b. Lowest block size: largest of given block size or average value size
+        //      because large values are one block
+        if (avg_value_size < options_.block_size)
+            low_size=options_.block_size;
+        else
+            low_size=avg_value_size;
+
+        // 2c. Current block size: compaction can skew numbers in files
+        //     without counters, use given block_size in that case
+        if (options_.block_size < avg_block_size)
+            cur_size=avg_block_size;
+        else
+            cur_size=options_.block_size;
+
+        // safety check values to eliminate negatives
+        if (low_size <= high_size)
+        {
+            size_t cur_step;
+
+            increment=(high_size - low_size)/options_.block_size_steps;
+
+            // adjust old, too low stuff
+            if (low_size < cur_size)
+                cur_step=(cur_size - low_size)/increment;
+            else
+                cur_step=0;
+
+            // move to next step, but not over the top step
+            if (cur_step < options_.block_size_steps)
+                ++cur_step;
+            else
+                cur_step=options_.block_size_steps;
+
+            //
+            // 3. Set new block size to next higher step
+            //
+            new_block_size=low_size + increment * cur_step;
+
+            Log(options_.info_log,
+                "Block size selected %zd block size, %zd cur, %zd low, %zd high, %zd inc, %zd step",
+                new_block_size, cur_size, low_size, high_size, cur_step);
+
+        }   // if
     }   // if
 
     return(new_block_size);
@@ -1273,7 +1331,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     if (!drop) {
       // Open output file if necessary
       if (compact->builder == NULL) {
-        status = OpenCompactionOutputFile(compact);
+        status = OpenCompactionOutputFile(compact, input->value().size() + key.size());
         if (!status.ok()) {
           break;
         }
