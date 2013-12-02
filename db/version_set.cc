@@ -1295,6 +1295,12 @@ bool VersionSet::IsLevelOverlapped(int level) const {
   return(gLevelTraits[level].m_OverlappedFiles);
 }
 
+uint64_t VersionSet::MaxFileSizeForLevel(int level) const {
+  assert(level >= 0);
+  assert(level < config::kNumLevels);
+  return(gLevelTraits[level].m_MaxFileSizeForLevel);
+}
+
 const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
   // Update code if kNumLevels changes
   assert(config::kNumLevels == 7);

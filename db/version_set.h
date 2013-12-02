@@ -203,6 +203,8 @@ class VersionSet {
   // is the specified level overlapped (or if false->sorted)
   bool IsLevelOverlapped(int level) const;
 
+  uint64_t MaxFileSizeForLevel(int level) const;
+
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
 

@@ -1123,7 +1123,7 @@ DBImpl::MaybeRaiseBlockSize(
 
     //
     // 1. Get estimates for key values.  Zero implies unable to estimate
-    //
+    //    (as the formula is tuned, some of the values become unused ... apologies
     CompactionStuff.CalcInputStats(*table_cache_);
     tot_user_data=CompactionStuff.TotalUserDataSize();
     tot_index_keys=CompactionStuff.TotalIndexKeys();
@@ -1137,7 +1137,7 @@ DBImpl::MaybeRaiseBlockSize(
         avg_value_size=SampleValueSize;
 
     Log(options_.info_log,
-        "Stats used %zd user data, %zd index keys, %zd avg value, %zd avg key, %zd avg block",
+        "Block stats used %zd user data, %zd index keys, %zd avg value, %zd avg key, %zd avg block",
         tot_user_data, tot_index_keys, avg_value_size, avg_key_size, avg_block_size);
 
     //
@@ -1147,12 +1147,23 @@ DBImpl::MaybeRaiseBlockSize(
     if (0!=tot_user_data && 0!=tot_index_keys && 0!=avg_value_size
         && 0!=avg_key_size && 0!=avg_block_size)
     {
-        size_t high_size, low_size, cur_size, increment;
+        size_t high_size, low_size, cur_size, increment, file_data_size, file_key_size;
 
         // 2a. Highest block size:
         //      (sqrt()/sqrt() stuff is from first derivative to minimize
         //       total read size of one block plus file metadata)
-        high_size=(size_t)((double)tot_user_data / (sqrt(tot_user_data)/sqrt(avg_key_size)));
+
+        // limited by keys or filesize? (pretend metadata is zero, i love pretend games)
+        file_data_size=versions_->MaxFileSizeForLevel(CompactionStuff.level());
+        file_key_size=file_data_size / avg_value_size;
+
+        if (75000 < file_key_size)
+        {
+            file_key_size = 75000;
+            file_data_size = avg_value_size * file_key_size;
+        }   // if
+
+        high_size=(size_t)((double)file_data_size / (sqrt(file_data_size)/sqrt(avg_key_size)));
 
         // 2b. Lowest block size: largest of given block size or average value size
         //      because large values are one block
