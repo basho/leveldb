@@ -21,6 +21,7 @@
 #include "db/dbformat.h"
 #include "db/version_edit.h"
 #include "port/port.h"
+#include "leveldb/atomics.h"
 #include "leveldb/env.h"
 #include "util/throttle.h"
 
@@ -186,15 +187,18 @@ class VersionSet {
   uint64_t ManifestFileNumber() const { return manifest_file_number_; }
 
   // Allocate and return a new file number
-  uint64_t NewFileNumber() { return next_file_number_++; }
+  //  (-1 is to "duplicate" old post-increment logic while maintaining
+  //   some threading integrity ... next_file_number_ used naked a bunch)
+  uint64_t NewFileNumber() { return(inc_and_fetch(&next_file_number_) -1); }
 
   // Arrange to reuse "file_number" unless a newer file number has
   // already been allocated.
   // REQUIRES: "file_number" was returned by a call to NewFileNumber().
+  //  (disabled due to threading concerns ... and desire NOT to use mutex, matthewv)
   void ReuseFileNumber(uint64_t file_number) {
-    if (next_file_number_ == file_number + 1) {
-      next_file_number_ = file_number;
-    }
+//    if (next_file_number_ == file_number + 1) {
+//      next_file_number_ = file_number;
+//    }
   }
 
   // Return the number of Table files at the specified level.
@@ -328,7 +332,7 @@ class VersionSet {
   const Options* const options_;
   TableCache* const table_cache_;
   const InternalKeyComparator icmp_;
-  uint64_t next_file_number_;
+  volatile uint64_t next_file_number_;
   uint64_t manifest_file_number_;
   uint64_t last_sequence_;
   uint64_t log_number_;

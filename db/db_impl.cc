@@ -179,6 +179,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       throttle_end(0),
       running_compactions_(0)
 {
+  current_block_size_=options_.block_size;
   DBList()->AddDB(this, options_.is_internal_db);
 
   mem_->Ref();
@@ -672,6 +673,7 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     //  no compression for level 0.
     local_options=options_;
     local_options.compression=kNoCompression;
+    local_options.block_size=current_block_size_;
     s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
     mutex_.Lock();
@@ -1092,6 +1094,7 @@ Status DBImpl::OpenCompactionOutputFile(
   if (s.ok()) {
       Options options;
       options=options_;
+      options.block_size=current_block_size_;
 
       // consider larger block size if option enabled (block_size_steps!=0)
       //  and low on file cache space
@@ -1119,7 +1122,8 @@ DBImpl::MaybeRaiseBlockSize(
     size_t new_block_size, tot_user_data, tot_index_keys, avg_value_size,
         avg_key_size, avg_block_size;
 
-    new_block_size=options_.block_size;
+    // start with most recent dynamic sizing
+    new_block_size=current_block_size_;
 
     //
     // 1. Get estimates for key values.  Zero implies unable to estimate
@@ -1173,11 +1177,11 @@ DBImpl::MaybeRaiseBlockSize(
             low_size=avg_value_size;
 
         // 2c. Current block size: compaction can skew numbers in files
-        //     without counters, use given block_size in that case
+        //     without counters, use current dynamic block_size in that case
         if (options_.block_size < avg_block_size)
             cur_size=avg_block_size;
         else
-            cur_size=options_.block_size;
+            cur_size=current_block_size_;
 
         // safety check values to eliminate negatives
         if (low_size <= high_size)
@@ -1207,6 +1211,9 @@ DBImpl::MaybeRaiseBlockSize(
                 "Block size selected %zd block size, %zd cur, %zd low, %zd high, %zd inc, %zd step",
                 new_block_size, cur_size, low_size, high_size, increment, cur_step);
 
+            // This is not thread safe, but not worthy of mutex either
+            if (current_block_size_ < new_block_size)
+                current_block_size_ = new_block_size;
         }   // if
     }   // if
 
