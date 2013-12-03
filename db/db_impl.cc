@@ -177,7 +177,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       manual_compaction_(NULL),
       level0_good(true),
       throttle_end(0),
-      running_compactions_(0)
+      running_compactions_(0),
+      block_size_changed_(0), last_low_mem_(0)
 {
   current_block_size_=options_.block_size;
   DBList()->AddDB(this, options_.is_internal_db);
@@ -1098,15 +1099,42 @@ Status DBImpl::OpenCompactionOutputFile(
 
       // consider larger block size if option enabled (block_size_steps!=0)
       //  and low on file cache space
-      if (0!=options.block_size_steps && !double_cache.GetPlentySpace())
+      if (0!=options.block_size_steps)
       {
-          options.block_size=MaybeRaiseBlockSize(*compact->compaction, sample_value_size);
+          uint64_t now;
 
-          // did size change?
-          if (options.block_size!=options_.block_size)
-              gPerfCounters->Inc(ePerfDebug0);
+          now=env_->NowMicros();
+
+          if (!double_cache.GetPlentySpace())
+          {
+              // do not make changes often, a multi file compaction
+              //  could raise more than one step (5 min)
+              if (block_size_changed_+(5*60*1000000L) < now)
+              {
+                  size_t old_size=current_block_size_;
+
+                  options.block_size=MaybeRaiseBlockSize(*compact->compaction, sample_value_size);
+
+                  // did size change?
+                  if (options.block_size!=old_size)
+                  {
+                      gPerfCounters->Inc(ePerfDebug0);
+                      block_size_changed_=env_->NowMicros();
+                  }   // if
+              }   // if
+
+              last_low_mem_=env_->NowMicros();
+          }   // if
+
+          // has system's memory been ok for a while now
+          else if (last_low_mem_+double_cache.GetFileTimeout()*1000000L < now)
+          {
+              // reset size to original, data could have been deleted and/or old
+              //  files no longer need cache space
+              current_block_size_=options_.block_size;
+          }   // else if
+
       }   // if
-
       compact->builder = new TableBuilder(options, compact->outfile);
   }   // if
 
