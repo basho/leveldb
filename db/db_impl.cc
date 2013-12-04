@@ -170,6 +170,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 
+  // switch global for everyone ... tacky implementation for now
+  gFadviseWillNeed=options_.fadvise_willneed;
+
   options_.Dump(options_.info_log);
 }
 

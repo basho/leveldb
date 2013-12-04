@@ -152,6 +152,10 @@ struct Options {
   // as part of a Repair operation.  Default is false
   bool is_repair;
 
+  // Riak specific flag used to indicate when fadvise() management
+  // should default to WILLNEED instead of DONTNEED.  Default is false
+  bool fadvise_willneed;
+
   // Create an Options object with default values for all fields.
   Options();
 
