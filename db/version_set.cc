@@ -1840,7 +1840,7 @@ void Compaction::ReleaseInputs() {
 }
 
 /**
- * Riak specific:  populate statics data about this compaction
+ * Riak specific:  populate statistics data about this compaction
  */
 void
 Compaction::CalcInputStats(

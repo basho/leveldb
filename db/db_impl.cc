@@ -1107,6 +1107,10 @@ Status DBImpl::OpenCompactionOutputFile(
 
           if (!double_cache.GetPlentySpace())
           {
+              // keep track of last time there was lack of space.
+              //  use info in block below to revert block_size
+              last_low_mem_=now;
+
               // do not make changes often, a multi file compaction
               //  could raise more than one step (5 min)
               if (block_size_changed_+(5*60*1000000L) < now)
@@ -1119,11 +1123,10 @@ Status DBImpl::OpenCompactionOutputFile(
                   if (options.block_size!=old_size)
                   {
                       gPerfCounters->Inc(ePerfDebug0);
-                      block_size_changed_=env_->NowMicros();
+                      block_size_changed_=now;
                   }   // if
               }   // if
 
-              last_low_mem_=env_->NowMicros();
           }   // if
 
           // has system's memory been ok for a while now
@@ -1179,7 +1182,7 @@ DBImpl::MaybeRaiseBlockSize(
     if (0!=tot_user_data && 0!=tot_index_keys && 0!=avg_value_size
         && 0!=avg_key_size && 0!=avg_block_size)
     {
-        size_t high_size, low_size, cur_size, increment, file_data_size, file_key_size;
+        size_t high_size, low_size, cur_size, increment, file_data_size, keys_per_file;
 
         // 2a. Highest block size:
         //      (sqrt()/sqrt() stuff is from first derivative to minimize
@@ -1187,12 +1190,12 @@ DBImpl::MaybeRaiseBlockSize(
 
         // limited by keys or filesize? (pretend metadata is zero, i love pretend games)
         file_data_size=versions_->MaxFileSizeForLevel(CompactionStuff.level());
-        file_key_size=file_data_size / avg_value_size;
+        keys_per_file=file_data_size / avg_value_size;
 
-        if (75000 < file_key_size)
+        if (75000 < keys_per_file)
         {
-            file_key_size = 75000;
-            file_data_size = avg_value_size * file_key_size;
+            keys_per_file = 75000;
+            file_data_size = avg_value_size * keys_per_file;
         }   // if
 
         high_size=(size_t)((double)file_data_size / (sqrt(file_data_size)/sqrt(avg_key_size)));

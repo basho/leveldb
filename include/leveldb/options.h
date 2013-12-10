@@ -125,7 +125,7 @@ struct Options {
   // incremental increases to use between the original block_size
   // and largest, reasonable block_size.
   //
-  // Default: 4
+  // Default: 16
   int block_size_steps;
 
   // Number of keys between restart points for delta encoding of keys.
