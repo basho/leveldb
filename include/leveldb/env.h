@@ -376,6 +376,8 @@ class EnvWrapper : public Env {
   Env* target_;
 };
 
+extern bool gFadviseWillNeed;
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_ENV_H_

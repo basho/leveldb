@@ -42,6 +42,9 @@
 
 namespace leveldb {
 
+// ugly global used to change fadvise behaviour
+bool gFadviseWillNeed=false;
+
 namespace {
 
 static Status IOError(const std::string& context, int err_number) {
@@ -283,6 +286,10 @@ class PosixMmapFile : public WritableFile {
         *(ref_count_+1)=0;  // filesize
     }   // if
 
+    // when global set, make entire file use FADV_WILLNEED
+    if (gFadviseWillNeed)
+        metadata_offset_=1;
+
     gPerfCounters->Inc(ePerfRWFileOpen);
   }
 
@@ -383,7 +390,10 @@ class PosixMmapFile : public WritableFile {
 
   virtual void SetMetadataOffset(uint64_t Metadata)
   {
-      metadata_offset_=Metadata;
+      // when global set, make entire file use FADV_WILLNEED,
+      //  so ignore this setting
+      if (!gFadviseWillNeed)
+          metadata_offset_=Metadata;
   }   // SetMetadataOffset
 
 

@@ -53,16 +53,16 @@ static struct
 
 // WARNING: m_OverlappedFiles flags need to match config::kNumOverlapFiles ... until unified
 {
-    {10485760,  262144000,  57671680,      209715200,             0,  300000000, true},
-    {10485760,   82914560,  57671680,      419430400,             0,  209715200, true},
-    {10485760,  104371840,  57671680,     1006632960,     200000000,  314572800, false},
-    {10485760,  125829120,  57671680,     4094304000,    3355443200,  419430400, false},
-    {10485760,  147286400,  57671680,    41943040000,   33554432000,  524288000, false},
-    {10485760,  188743680,  57671680,   419430400000,  335544320000,  629145600, false},
-    {10485760,  220200960,  57671680,  4194304000000, 3355443200000,  734003200, false}
+    {10485760,  262144000,  57671680,      209715200,                0,     300000000, true},
+    {10485760,   82914560,  57671680,      419430400,                0,     209715200, true},
+    {10485760,  314572800,  57671680,     1006632960,        200000000,     314572800, false},
+    {10485760,  419430400,  57671680,     4094304000ULL,    3355443200ULL,  419430400, false},
+    {10485760,  524288000,  57671680,    41943040000ULL,   33554432000ULL,  524288000, false},
+    {10485760,  629145600,  57671680,   419430400000ULL,  335544320000ULL,  629145600, false},
+    {10485760,  734003200,  57671680,  4194304000000ULL, 3355443200000ULL,  734003200, false}
 };
 
-
+/// ULL above needed to compile on OSX 10.7.3
 
 static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
   int64_t sum = 0;
@@ -1597,6 +1597,8 @@ bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
 
 bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
 
+  bool ret_flag(false);
+
   // This is a look ahead to see how costly this key will make the subsequent compaction
   //  of this new file to the next higher level.  Start a new file if the cost is high.
   if (!gLevelTraits[level()+1].m_OverlappedFiles)
@@ -1615,23 +1617,21 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
 
     if (overlapped_bytes_ > gLevelTraits[level_].m_MaxGrandParentOverlapBytes) {
       // Too much overlap for current output; start new output
-      overlapped_bytes_ = 0;
-      return true;
+      ret_flag=true;
     } // if
 
     // Second consideration:  sorted files need to keep the bloom filter size controlled
     //  to meet file open speed goals
     else
     {
-      overlapped_bytes_ = 0;
-      return (75000 < key_count);
-    } // else
+      ret_flag=(75000<key_count);
+     } // else
   }  // if
-  else
-  {
-    // overlapped levels do NOT split their output file
-    return false;
-  }
+
+  if (ret_flag)
+    overlapped_bytes_ = 0;
+
+  return(ret_flag);
 }
 
 void Compaction::ReleaseInputs() {
