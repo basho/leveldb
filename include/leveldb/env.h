@@ -385,6 +385,7 @@ class EnvWrapper : public Env {
 //  of mapping size
 extern volatile size_t gMapSize;
 
+extern bool gFadviseWillNeed;
 
 }  // namespace leveldb
 
