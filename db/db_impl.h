@@ -118,7 +118,8 @@ class DBImpl : public DB {
   Status DoCompactionWork(CompactionState* compact);
   int64_t PrioritizeWork(bool IsLevel0);
 
-  Status OpenCompactionOutputFile(CompactionState* compact);
+  Status OpenCompactionOutputFile(CompactionState* compact, size_t sample_value_size);
+  size_t MaybeRaiseBlockSize(Compaction & CompactionStuff, size_t SampleValueSize);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact);
 
@@ -204,6 +205,9 @@ class DBImpl : public DB {
 
   volatile uint64_t throttle_end;
   volatile uint32_t running_compactions_;
+  volatile size_t current_block_size_;    // last dynamic block size computed
+  volatile uint64_t block_size_changed_;  // NowMicros() when block size computed
+  volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};

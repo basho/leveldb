@@ -21,6 +21,7 @@
 #include "db/dbformat.h"
 #include "db/version_edit.h"
 #include "port/port.h"
+#include "leveldb/atomics.h"
 #include "leveldb/env.h"
 #include "util/throttle.h"
 
@@ -105,7 +106,7 @@ class Version {
 
   size_t NumFiles(int level) const { return files_[level].size(); }
 
-  typedef std::vector<FileMetaData*> FileMetaDataVector_t; 
+  typedef std::vector<FileMetaData*> FileMetaDataVector_t;
 
   const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
@@ -186,15 +187,18 @@ class VersionSet {
   uint64_t ManifestFileNumber() const { return manifest_file_number_; }
 
   // Allocate and return a new file number
-  uint64_t NewFileNumber() { return next_file_number_++; }
+  //  (-1 is to "duplicate" old post-increment logic while maintaining
+  //   some threading integrity ... next_file_number_ used naked a bunch)
+  uint64_t NewFileNumber() { return(inc_and_fetch(&next_file_number_) -1); }
 
   // Arrange to reuse "file_number" unless a newer file number has
   // already been allocated.
   // REQUIRES: "file_number" was returned by a call to NewFileNumber().
+  //  (disabled due to threading concerns ... and desire NOT to use mutex, matthewv)
   void ReuseFileNumber(uint64_t file_number) {
-    if (next_file_number_ == file_number + 1) {
-      next_file_number_ = file_number;
-    }
+//    if (next_file_number_ == file_number + 1) {
+//      next_file_number_ = file_number;
+//    }
   }
 
   // Return the number of Table files at the specified level.
@@ -202,6 +206,8 @@ class VersionSet {
 
   // is the specified level overlapped (or if false->sorted)
   bool IsLevelOverlapped(int level) const;
+
+  uint64_t MaxFileSizeForLevel(int level) const;
 
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
@@ -283,16 +289,16 @@ class VersionSet {
 
   TableCache* GetTableCache() {return(table_cache_);};
 
-  bool IsCompactionSubmitted(int level) 
+  bool IsCompactionSubmitted(int level)
   {return(m_CompactionStatus[level].m_Submitted);}
 
-  void SetCompactionSubmitted(int level) 
+  void SetCompactionSubmitted(int level)
   {m_CompactionStatus[level].m_Submitted=true;}
 
-  void SetCompactionRunning(int level) 
+  void SetCompactionRunning(int level)
   {m_CompactionStatus[level].m_Running=true;}
 
-  void SetCompactionDone(int level) 
+  void SetCompactionDone(int level)
   {   m_CompactionStatus[level].m_Running=false;
       m_CompactionStatus[level].m_Submitted=false;}
 
@@ -326,7 +332,7 @@ class VersionSet {
   const Options* const options_;
   TableCache* const table_cache_;
   const InternalKeyComparator icmp_;
-  uint64_t next_file_number_;
+  volatile uint64_t next_file_number_;
   uint64_t manifest_file_number_;
   uint64_t last_sequence_;
   uint64_t log_number_;
@@ -352,7 +358,7 @@ class VersionSet {
       bool m_Submitted;     //!< level submitted to hot thread pool
       bool m_Running;       //!< thread actually running compaction
 
-      CompactionStatus_s() 
+      CompactionStatus_s()
       : m_Submitted(false), m_Running(false)
       {};
   } m_CompactionStatus[config::kNumLevels];
@@ -405,6 +411,14 @@ class Compaction {
   // is successful.
   void ReleaseInputs();
 
+  // Riak specific:  get summary statistics from compaction inputs
+  void CalcInputStats(TableCache & tables);
+  size_t TotalUserDataSize() const {return(tot_user_data_);};
+  size_t TotalIndexKeys()    const {return(tot_index_keys_);};
+  size_t AverageValueSize()  const {return(avg_value_size_);};
+  size_t AverageKeySize()    const {return(avg_key_size_);};
+  size_t AverageBlockSize()  const {return(avg_block_size_);};
+
  private:
   friend class Version;
   friend class VersionSet;
@@ -434,6 +448,14 @@ class Compaction {
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).
   size_t level_ptrs_[config::kNumLevels];
+
+  // Riak specific:  output statistics from CalcInputStats
+  size_t tot_user_data_;
+  size_t tot_index_keys_;
+  size_t avg_value_size_;
+  size_t avg_key_size_;
+  size_t avg_block_size_;
+  bool stats_done_;
 };
 
 }  // namespace leveldb

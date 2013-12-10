@@ -7,6 +7,7 @@
 #include <time.h>
 #include <algorithm>
 #include <errno.h>
+#include <math.h>
 #include <set>
 #include <string>
 #include <stdint.h>
@@ -176,8 +177,10 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       manual_compaction_(NULL),
       level0_good(true),
       throttle_end(0),
-      running_compactions_(0)
+      running_compactions_(0),
+      block_size_changed_(0), last_low_mem_(0)
 {
+  current_block_size_=options_.block_size;
   DBList()->AddDB(this, options_.is_internal_db);
 
   mem_->Ref();
@@ -671,6 +674,7 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     //  no compression for level 0.
     local_options=options_;
     local_options.compression=kNoCompression;
+    local_options.block_size=current_block_size_;
     s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
     mutex_.Lock();
@@ -838,7 +842,7 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  if (!shutting_down_.Acquire_Load()) 
+  if (!shutting_down_.Acquire_Load())
   {
       if (NULL==manual_compaction_)
       {
@@ -1067,7 +1071,9 @@ void DBImpl::CleanupCompaction(CompactionState* compact) {
   delete compact;
 }
 
-Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
+Status DBImpl::OpenCompactionOutputFile(
+    CompactionState* compact,
+    size_t sample_value_size) {
   assert(compact != NULL);
   assert(compact->builder == NULL);
   uint64_t file_number;
@@ -1087,10 +1093,165 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   std::string fname = TableFileName(dbname_, file_number, compact->compaction->level()+1);
   Status s = env_->NewWritableFile(fname, &compact->outfile);
   if (s.ok()) {
-    compact->builder = new TableBuilder(options_, compact->outfile);
-  }
+      Options options;
+      options=options_;
+      options.block_size=current_block_size_;
+
+      // consider larger block size if option enabled (block_size_steps!=0)
+      //  and low on file cache space
+      if (0!=options.block_size_steps)
+      {
+          uint64_t now;
+
+          now=env_->NowMicros();
+
+          if (!double_cache.GetPlentySpace())
+          {
+              // keep track of last time there was lack of space.
+              //  use info in block below to revert block_size
+              last_low_mem_=now;
+
+              // do not make changes often, a multi file compaction
+              //  could raise more than one step (5 min)
+              if (block_size_changed_+(5*60*1000000L) < now)
+              {
+                  size_t old_size=current_block_size_;
+
+                  options.block_size=MaybeRaiseBlockSize(*compact->compaction, sample_value_size);
+
+                  // did size change?
+                  if (options.block_size!=old_size)
+                  {
+                      gPerfCounters->Inc(ePerfDebug0);
+                      block_size_changed_=now;
+                  }   // if
+              }   // if
+
+          }   // if
+
+          // has system's memory been ok for a while now
+          else if (last_low_mem_+double_cache.GetFileTimeout()*1000000L < now)
+          {
+              // reset size to original, data could have been deleted and/or old
+              //  files no longer need cache space
+              current_block_size_=options_.block_size;
+          }   // else if
+
+      }   // if
+      compact->builder = new TableBuilder(options, compact->outfile);
+  }   // if
+
   return s;
 }
+
+
+size_t
+DBImpl::MaybeRaiseBlockSize(
+    Compaction & CompactionStuff,
+    size_t SampleValueSize)
+{
+    size_t new_block_size, tot_user_data, tot_index_keys, avg_value_size,
+        avg_key_size, avg_block_size;
+
+    // start with most recent dynamic sizing
+    new_block_size=current_block_size_;
+
+    //
+    // 1. Get estimates for key values.  Zero implies unable to estimate
+    //    (as the formula is tuned, some of the values become unused ... apologies
+    CompactionStuff.CalcInputStats(*table_cache_);
+    tot_user_data=CompactionStuff.TotalUserDataSize();
+    tot_index_keys=CompactionStuff.TotalIndexKeys();
+    avg_value_size=CompactionStuff.AverageValueSize();
+    avg_key_size=CompactionStuff.AverageKeySize();
+    avg_block_size=CompactionStuff.AverageBlockSize();
+
+    // CalcInputStats does not have second source for avg_value_size.
+    //  Use size of next key.
+    if (0==avg_value_size)
+        avg_value_size=SampleValueSize;
+
+    Log(options_.info_log,
+        "Block stats used %zd user data, %zd index keys, %zd avg value, %zd avg key, %zd avg block",
+        tot_user_data, tot_index_keys, avg_value_size, avg_key_size, avg_block_size);
+
+    //
+    // 2. Define boundaries of block size steps.  Calculate
+    //    "next step"
+    //
+    if (0!=tot_user_data && 0!=tot_index_keys && 0!=avg_value_size
+        && 0!=avg_key_size && 0!=avg_block_size)
+    {
+        size_t high_size, low_size, cur_size, increment, file_data_size, keys_per_file;
+
+        // 2a. Highest block size:
+        //      (sqrt()/sqrt() stuff is from first derivative to minimize
+        //       total read size of one block plus file metadata)
+
+        // limited by keys or filesize? (pretend metadata is zero, i love pretend games)
+        file_data_size=versions_->MaxFileSizeForLevel(CompactionStuff.level());
+        keys_per_file=file_data_size / avg_value_size;
+
+        if (75000 < keys_per_file)
+        {
+            keys_per_file = 75000;
+            file_data_size = avg_value_size * keys_per_file;
+        }   // if
+
+        high_size=(size_t)((double)file_data_size / (sqrt(file_data_size)/sqrt(avg_key_size)));
+
+        // 2b. Lowest block size: largest of given block size or average value size
+        //      because large values are one block
+        if (avg_value_size < options_.block_size)
+            low_size=options_.block_size;
+        else
+            low_size=avg_value_size;
+
+        // 2c. Current block size: compaction can skew numbers in files
+        //     without counters, use current dynamic block_size in that case
+        if (options_.block_size < avg_block_size)
+            cur_size=avg_block_size;
+        else
+            cur_size=current_block_size_;
+
+        // safety check values to eliminate negatives
+        if (low_size <= high_size)
+        {
+            size_t cur_step;
+
+            increment=(high_size - low_size)/options_.block_size_steps;
+
+            // adjust old, too low stuff
+            if (low_size < cur_size)
+                cur_step=(cur_size - low_size)/increment;
+            else
+                cur_step=0;
+
+            // move to next step, but not over the top step
+            if (cur_step < (size_t)options_.block_size_steps)
+                ++cur_step;
+            else
+                cur_step=options_.block_size_steps;
+
+            //
+            // 3. Set new block size to next higher step
+            //
+            new_block_size=low_size + increment * cur_step;
+
+            Log(options_.info_log,
+                "Block size selected %zd block size, %zd cur, %zd low, %zd high, %zd inc, %zd step",
+                new_block_size, cur_size, low_size, high_size, increment, cur_step);
+
+            // This is not thread safe, but not worthy of mutex either
+            if (current_block_size_ < new_block_size)
+                current_block_size_ = new_block_size;
+        }   // if
+    }   // if
+
+    return(new_block_size);
+
+}   // DBImpl::MaybeRaiseBlockSize
+
 
 Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
                                           Iterator* input) {
@@ -1219,7 +1380,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     if (!drop) {
       // Open output file if necessary
       if (compact->builder == NULL) {
-        status = OpenCompactionOutputFile(compact);
+        status = OpenCompactionOutputFile(compact, input->value().size() + key.size());
         if (!status.ok()) {
           break;
         }
@@ -1992,10 +2153,10 @@ DBImpl::VerifyLevels()
 }   // VerifyLevels
 
 
-bool 
-DBImpl::IsCompactionScheduled() 
+bool
+DBImpl::IsCompactionScheduled()
 {
-    mutex_.AssertHeld(); 
+    mutex_.AssertHeld();
     bool flag(false);
     for (int level=0; level< config::kNumLevels && !flag; ++level)
         flag=versions_->IsCompactionSubmitted(level);

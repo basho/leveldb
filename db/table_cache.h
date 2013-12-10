@@ -59,6 +59,8 @@ class TableCache {
 
   Cache* TEST_GetInternalCache() {return(cache_);};
 
+  void Release(Cache::Handle * handle) {cache_->Release(handle);};
+
  private:
   Env* const env_;
   const std::string dbname_;

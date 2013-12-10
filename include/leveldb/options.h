@@ -119,6 +119,15 @@ struct Options {
   // Default: 4K
   size_t block_size;
 
+  // Riak specific:  non-zero value activates code to automatically
+  // increase block_size as needed to ensure maximum number of files
+  // are available in the file cache.  The value indicates how many
+  // incremental increases to use between the original block_size
+  // and largest, reasonable block_size.
+  //
+  // Default: 16
+  int block_size_steps;
+
   // Number of keys between restart points for delta encoding of keys.
   // This parameter can be changed dynamically.  Most clients should
   // leave this parameter alone.

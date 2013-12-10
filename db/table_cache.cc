@@ -164,8 +164,10 @@ void TableCache::Evict(uint64_t file_number, bool is_overlapped) {
  * Riak specific routine to return table statistic ONLY if table metadata
  *  already within cache ... otherwise return 0.
  */
-uint64_t 
-TableCache::GetStatisticValue(uint64_t file_number, unsigned Index)
+uint64_t
+TableCache::GetStatisticValue(
+    uint64_t file_number,
+    unsigned Index)
 {
     uint64_t ret_val;
     char buf[sizeof(file_number)];
@@ -176,7 +178,7 @@ TableCache::GetStatisticValue(uint64_t file_number, unsigned Index)
     Slice key(buf, sizeof(buf));
     handle = cache_->Lookup(key);
 
-    if (NULL != handle) 
+    if (NULL != handle)
     {
         TableAndFile * tf;
 
@@ -186,7 +188,7 @@ TableCache::GetStatisticValue(uint64_t file_number, unsigned Index)
     }   // if
 
     return(ret_val);
-    
+
 }   // TableCache::GetStatisticValue
 
 }  // namespace leveldb
