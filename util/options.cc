@@ -36,7 +36,8 @@ Options::Options()
       is_internal_db(false),
       total_leveldb_mem(0),
       limited_developer_mem(false),
-      delete_threshold(1000)
+      delete_threshold(1000),
+      fadvise_willneed(false)
 {
 }
 
@@ -65,6 +66,7 @@ Options::Dump(
     Log(log,"     Options.total_leveldb_mem: %" PRIu64, total_leveldb_mem);
     Log(log," Options.limited_developer_mem: %s", limited_developer_mem ? "true" : "false");
     Log(log,"      Options.delete_threshold: %" PRIu64, delete_threshold);
+    Log(log,"      Options.fadvise_willneed: %s", fadvise_willneed ? "true" : "false");
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
 }   // Options::Dump
 

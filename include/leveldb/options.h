@@ -184,6 +184,11 @@ struct Options {
   //     in a file for it to be compacted due to deletes
   uint64_t delete_threshold;
 
+  // Riak specific flag used to indicate when fadvise() management
+  // should default to WILLNEED instead of DONTNEED.  Default is false
+  bool fadvise_willneed;
+
+  // Create an Options object with default values for all fields.
   Options();
 
   void Dump(Logger * log) const;

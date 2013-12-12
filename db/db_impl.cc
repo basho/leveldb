@@ -193,6 +193,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 
   gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
 
+  // switch global for everyone ... tacky implementation for now
+  gFadviseWillNeed=options_.fadvise_willneed;
+
   options_.Dump(options_.info_log);
   Log(options_.info_log,"               File cache size: %zd", double_cache.GetCapacity(true));
   Log(options_.info_log,"              Block cache size: %zd", double_cache.GetCapacity(false));
