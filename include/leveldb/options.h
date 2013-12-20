@@ -216,10 +216,18 @@ struct ReadOptions {
   // Default: NULL
   const Snapshot* snapshot;
 
+  // Riak specific flag, currently used within Erlang adaptor
+  //  to enable automatic delete and new of fresh snapshot
+  //  and database iterator objects for long running iterations
+  //  (only supports iterator NEXT operations).
+  // Default: false
+  bool iterator_refresh;
+
   ReadOptions()
   : verify_checksums(true),
       fill_cache(true),
       snapshot(NULL),
+      iterator_refresh(false),
       is_compaction(false),
       env(NULL),
       info_log(NULL)
