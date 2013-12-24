@@ -1201,7 +1201,8 @@ DBImpl::MaybeRaiseBlockSize(
             file_data_size = avg_value_size * keys_per_file;
         }   // if
 
-        high_size=(size_t)((double)file_data_size / (sqrt(file_data_size)/sqrt(avg_key_size)));
+        // cast to double inside sqrt() is required for Solaris 13
+        high_size=(size_t)((double)file_data_size / (sqrt((double)file_data_size)/sqrt((double)avg_key_size)));
 
         // 2b. Lowest block size: largest of given block size or average value size
         //      because large values are one block
