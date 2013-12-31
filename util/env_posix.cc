@@ -959,13 +959,13 @@ static void InitDefaultEnv()
     gImmThreads=new HotThreadPool(5, "ImmWrite",
                                   ePerfBGImmDirect, ePerfBGImmQueued,
                                   ePerfBGImmDequeued, ePerfBGImmWeighted);
-    gWriteThreads=new HotThreadPool(7, "RecoveryWrite",
+    gWriteThreads=new HotThreadPool(5, "RecoveryWrite",
                                     ePerfBGUnmapDirect, ePerfBGUnmapQueued,
                                     ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
-    gLevel0Threads=new HotThreadPool(7, "Level0Compact",
+    gLevel0Threads=new HotThreadPool(5, "Level0Compact",
                                      ePerfBGLevel0Direct, ePerfBGLevel0Queued,
                                      ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
-    gCompactionThreads=new HotThreadPool(5, "GeneralCompact",
+    gCompactionThreads=new HotThreadPool(3, "GeneralCompact",
                                          ePerfBGCompactDirect, ePerfBGCompactQueued,
                                          ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 
