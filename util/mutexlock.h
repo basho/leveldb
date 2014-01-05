@@ -5,7 +5,9 @@
 #ifndef STORAGE_LEVELDB_UTIL_MUTEXLOCK_H_
 #define STORAGE_LEVELDB_UTIL_MUTEXLOCK_H_
 
+#ifndef STORAGE_LEVELDB_PORT_PORT_H_
 #include "port/port.h"
+#endif
 
 namespace leveldb {
 
