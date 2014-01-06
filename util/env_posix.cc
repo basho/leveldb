@@ -412,7 +412,7 @@ class PosixMmapFile : public WritableFile {
   {
       // when global set, make entire file use FADV_WILLNEED,
       //  so ignore this setting
-      if (!gFadviseWillNeed)
+      if (!gFadviseWillNeed && 1!=metadata_offset_)
           metadata_offset_=Metadata;
   }   // SetMetadataOffset
 

@@ -1141,6 +1141,10 @@ Status DBImpl::OpenCompactionOutputFile(
           }   // else if
 
       }   // if
+
+      // tune fadvise to keep all of this lower level file in page cache
+      if (versions_->IsLevelOverlapped(compact->compaction->level()+1))
+          compact->outfile->SetMetadataOffset(1);
       compact->builder = new TableBuilder(options, compact->outfile);
   }   // if
 
