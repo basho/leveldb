@@ -69,7 +69,7 @@ HotThread::ThreadRoutine()
 
 //    pthread_setname_np(m_Pool.m_PoolName.c_str());
 
-    while(!m_Pool.m_Shutdown)
+    while(!m_Pool.shutdown_pending())
     {
         // is work assigned yet?
         //  check backlog work queue if not
@@ -143,7 +143,7 @@ void *QueueThreadStaticEntry(void *args)
 
 
 QueueThread::QueueThread(
-    class HotThreadPool & Pool)
+    class NumaPool & Pool)
     : m_ThreadGood(false), m_Pool(Pool), m_SemaphorePtr(NULL)
 {
     int ret_val;
@@ -257,7 +257,7 @@ QueueThread::QueueThreadRoutine()
 
 //    pthread_setname_np(m_QueueName.c_str());
 
-    while(!m_Pool.m_Shutdown)
+    while(!m_Pool.shutdown_pending())
     {
         // test non-blocking size for hint (much faster)
         if (0!=m_Pool.m_WorkQueueAtomic)
@@ -306,8 +306,77 @@ HotThreadPool::HotThreadPool(
     enum PerformanceCountersEnum Queued,
     enum PerformanceCountersEnum Dequeued,
     enum PerformanceCountersEnum Weighted)
-    : m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
-      m_Shutdown(false), 
+    :
+      m_Shutdown(false)
+{
+    cpu_set_t set;
+    std::string temp_name;
+
+    CPU_ZERO(&set);
+    CPU_SET(0, &set);
+    CPU_SET(1, &set);
+    CPU_SET(2, &set);
+    CPU_SET(3, &set);
+    CPU_SET(4, &set);
+    CPU_SET(5, &set);
+    CPU_SET(12, &set);
+    CPU_SET(13, &set);
+    CPU_SET(14, &set);
+    CPU_SET(15, &set);
+    CPU_SET(16, &set);
+    CPU_SET(17, &set);
+    temp_name=Name;
+    temp_name.append("0");
+    m_Pool[0]=new NumaPool(*this, set, PoolSize/2, temp_name.c_str(),
+                           Direct, Queued, Dequeued, Weighted);
+
+    CPU_ZERO(&set);
+    CPU_SET(6, &set);
+    CPU_SET(7, &set);
+    CPU_SET(8, &set);
+    CPU_SET(9, &set);
+    CPU_SET(10, &set);
+    CPU_SET(11, &set);
+    CPU_SET(18, &set);
+    CPU_SET(19, &set);
+    CPU_SET(20, &set);
+    CPU_SET(21, &set);
+    CPU_SET(22, &set);
+    CPU_SET(23, &set);
+    temp_name=Name;
+    temp_name.append("1");
+    m_Pool[1]=new NumaPool(*this, set, PoolSize/2, temp_name.c_str(),
+                           Direct, Queued, Dequeued, Weighted);
+
+    return;
+
+}   // HotThreadPool::HotThreadPool
+
+
+HotThreadPool::~HotThreadPool()
+{
+    // set flag
+    m_Shutdown=true;
+
+    delete m_Pool[0];
+    delete m_Pool[1];
+
+    return;
+
+}   // HotThreadPool::~HotThreadPool
+
+
+NumaPool::NumaPool(
+    HotThreadPool & Parent,
+    cpu_set_t CpuSet,
+    const size_t PoolSize,
+    const char * Name,
+    enum PerformanceCountersEnum Direct,
+    enum PerformanceCountersEnum Queued,
+    enum PerformanceCountersEnum Dequeued,
+    enum PerformanceCountersEnum Weighted)
+    : m_Parent(Parent),
+      m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
       m_WorkQueueAtomic(0), m_QueueThread(*this),
       m_DirectCounter(Direct), m_QueuedCounter(Queued),
       m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
@@ -323,24 +392,27 @@ HotThreadPool::HotThreadPool(
 
         ret_val=pthread_create(&hot_ptr->m_ThreadId, NULL,  &ThreadStaticEntry, hot_ptr);
         if (0==ret_val)
+        {
+            pthread_setaffinity_np(hot_ptr->m_ThreadId, sizeof(cpu_set_t), &CpuSet);
             m_Threads.push_back(hot_ptr);
+        }   // if
         else
             delete hot_ptr;
     }   // for
 
-    m_Shutdown=(0!=ret_val);
+    m_Parent.m_Shutdown=(0!=ret_val);
 
     return;
 
-}   // HotThreadPool::HotThreadPool
+}   // NumaPool::NumaPool
 
 
-HotThreadPool::~HotThreadPool()
+NumaPool::~NumaPool()
 {
     ThreadPool_t::iterator thread_it;
     WorkQueue_t::iterator work_it;
     // set flag
-    m_Shutdown=true;
+    m_Parent.m_Shutdown=true;
 
     // get all threads stopped
     for (thread_it=m_Threads.begin(); m_Threads.end()!=thread_it; ++thread_it)
@@ -362,11 +434,13 @@ HotThreadPool::~HotThreadPool()
 
     return;
 
-}   // HotThreadPool::~HotThreadPool
+}   // NumaPool::~NumaPool
 
+bool
+NumaPool::shutdown_pending() const  { return m_Parent.m_Shutdown; }
 
 bool                           // returns true if available worker thread found and claimed
-HotThreadPool::FindWaitingThread(
+NumaPool::FindWaitingThread(
     ThreadTask * work) // non-NULL to pass current work directly to a thread,
                                // NULL to potentially nudge an available worker toward backlog queue
 {
@@ -412,11 +486,11 @@ HotThreadPool::FindWaitingThread(
 
     return(ret_flag);
 
-}   // FindWaitingThread
+}   // NumaPool::FindWaitingThread
 
 
 bool
-HotThreadPool::Submit(
+NumaPool::Submit(
     ThreadTask* item,
     bool OkToQueue)
 {
@@ -478,6 +552,34 @@ HotThreadPool::Submit(
             item->RefDec();
             ret_flag=false;  // redundant, but safe
         }   // else
+    }   // if
+
+    return(ret_flag);
+
+}   // NumaPool::Submit
+
+bool
+HotThreadPool::Submit(
+    ThreadTask* item,
+    bool OkToQueue)
+{
+    bool ret_flag(false);
+    int ret_val;
+
+    if (NULL!=item)
+    {
+        ret_val=sched_getcpu();
+
+        if ((0<=ret_val && ret_val<=5) || (12<=ret_val && ret_val<=17))
+        {
+            ret_flag=m_Pool[0]->Submit(item, OkToQueue);
+            perf()->Inc(ePerfDebug3);
+        }
+        else
+        {
+            ret_flag=m_Pool[1]->Submit(item, OkToQueue);
+            perf()->Inc(ePerfDebug4);
+        }
     }   // if
 
     return(ret_flag);

@@ -30,6 +30,7 @@
 #define STORAGE_LEVELDB_INCLUDE_HOT_THREADS_H_
 
 #include <pthread.h>
+#include <sched.h>
 #include <semaphore.h>
 #include <deque>
 #include <vector>
@@ -53,14 +54,14 @@ public:
     pthread_t m_ThreadId;                //!< handle for this thread
 
     volatile uint32_t m_Available;       //!< 1 if thread waiting, using standard type for atomic operation
-    class HotThreadPool & m_Pool;        //!< parent pool object
+    class NumaPool & m_Pool;        //!< parent pool object
     volatile ThreadTask * m_DirectWork;    //!< work passed direct to thread
 
     port::Mutex m_Mutex;             //!< mutex for condition variable
     port::CondVar m_Condition;          //!< condition for thread waiting
 
 public:
-    HotThread(class HotThreadPool & Pool)
+    HotThread(class NumaPool & Pool)
     : m_Available(0), m_Pool(Pool), m_DirectWork(NULL),
         m_Condition(&m_Mutex)
     {}   // HotThread
@@ -85,13 +86,13 @@ public:
     pthread_t m_ThreadId;                //!< handle for this thread
     std::string m_QueueName;
 
-    class HotThreadPool & m_Pool;        //!< parent pool object
+    class NumaPool & m_Pool;        //!< parent pool object
 
     sem_t m_Semaphore;                   //!< counts items inserted to queue
     sem_t * m_SemaphorePtr;              //!< either &m_Semaphore or sem_open return value
 
 public:
-    QueueThread(class HotThreadPool & Pool);
+    QueueThread(class NumaPool & Pool);
 
     virtual ~QueueThread();
 
@@ -106,14 +107,13 @@ private:
 };  // class QueueThread
 
 
-class HotThreadPool
+class NumaPool
 {
 public:
+    class HotThreadPool & m_Parent;
     std::string m_PoolName;              //!< used to name threads for gdb / core
     typedef std::deque<ThreadTask*> WorkQueue_t;
     typedef std::vector<HotThread *>   ThreadPool_t;
-
-    volatile bool m_Shutdown;            //!< should we stop threads and shut down?
 
     ThreadPool_t  m_Threads;             //!< pool of fast response workers
 
@@ -127,6 +127,40 @@ public:
     enum PerformanceCountersEnum m_DequeuedCounter;
     enum PerformanceCountersEnum m_WeightedCounter;
 
+    NumaPool(class HotThreadPool & Parent, cpu_set_t CpuSet,
+             const size_t thread_pool_size, const char * Name,
+             enum PerformanceCountersEnum Direct,
+             enum PerformanceCountersEnum Queued,
+             enum PerformanceCountersEnum Dequeued,
+             enum PerformanceCountersEnum Weighted);
+
+    virtual ~NumaPool();
+
+    bool FindWaitingThread(ThreadTask * work);
+
+    bool Submit(ThreadTask * item, bool OkToQueue=true);
+
+    size_t work_queue_size() const { return m_WorkQueue.size();}
+    bool shutdown_pending() const;
+    leveldb::PerformanceCounters * perf() const {return(leveldb::gPerfCounters);};
+
+    void IncWorkDirect() {leveldb::gPerfCounters->Inc(m_DirectCounter);};
+    void IncWorkQueued() {leveldb::gPerfCounters->Inc(m_QueuedCounter);};
+    void IncWorkDequeued() {leveldb::gPerfCounters->Inc(m_DequeuedCounter);};
+    void IncWorkWeighted(uint64_t Count) {leveldb::gPerfCounters->Add(m_WeightedCounter, Count);};
+
+};  // NumaPool
+
+
+
+class HotThreadPool
+{
+public:
+    cpu_set_t m_Set[2];
+    NumaPool * m_Pool[2];
+
+    volatile bool m_Shutdown;            //!< should we stop threads and shut down?
+
 public:
     HotThreadPool(const size_t thread_pool_size, const char * Name,
                   enum PerformanceCountersEnum Direct,
@@ -138,18 +172,10 @@ public:
 
     static void *ThreadStart(void *args);
 
-    bool FindWaitingThread(ThreadTask * work);
-
     bool Submit(ThreadTask * item, bool OkToQueue=true);
 
-    size_t work_queue_size() const { return m_WorkQueue.size();}
     bool shutdown_pending() const  { return m_Shutdown; }
     leveldb::PerformanceCounters * perf() const {return(leveldb::gPerfCounters);};
-
-    void IncWorkDirect() {leveldb::gPerfCounters->Inc(m_DirectCounter);};
-    void IncWorkQueued() {leveldb::gPerfCounters->Inc(m_QueuedCounter);};
-    void IncWorkDequeued() {leveldb::gPerfCounters->Inc(m_DequeuedCounter);};
-    void IncWorkWeighted(uint64_t Count) {leveldb::gPerfCounters->Add(m_WeightedCounter, Count);};
 
 private:
     HotThreadPool(const HotThreadPool &);             // nocopy

@@ -772,8 +772,10 @@ class PosixEnv : public Env {
 
 
   virtual int GetBackgroundBacklog() const
-    {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic
-          + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
+    {return(gImmThreads->m_Pool[0]->m_WorkQueueAtomic + gWriteThreads->m_Pool[0]->m_WorkQueueAtomic
+            + gLevel0Threads->m_Pool[0]->m_WorkQueueAtomic + gCompactionThreads->m_Pool[0]->m_WorkQueueAtomic
+            + gImmThreads->m_Pool[1]->m_WorkQueueAtomic + gWriteThreads->m_Pool[1]->m_WorkQueueAtomic
+            + gLevel0Threads->m_Pool[1]->m_WorkQueueAtomic + gCompactionThreads->m_Pool[1]->m_WorkQueueAtomic);};
 
  private:
 
