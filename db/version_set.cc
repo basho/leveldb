@@ -46,9 +46,9 @@ static struct
                                                  //!<   and do not overlap
 } gLevelTraits[config::kNumLevels]=
 
-// level-0 file size of 300,000,000 applies to output files of this level
-//   being written to level-1.  The value is 5 times the default maximum
-//   write buffer size of 60,000,000.  Why five times:  4 level-0 files typically compact
+// level-0 file size of 420,000,000 applies to output files of this level
+//   being written to level-1.  The value is 7 times the default maximum
+//   write buffer size of 60,000,000.  Why seven times:  6 level-0 files typically compact
 //   to one level-1 file and are each slightly larger than 60,000,000.
 // level-1 file size of 1,500,000,000 applies to output file of this level
 //   being written to level-2.  The value is five times the 300,000,000 of level-1.
@@ -57,13 +57,13 @@ static struct
 
 // WARNING: m_OverlappedFiles flags need to match config::kNumOverlapFiles ... until unified
 {
-    {10485760,  262144000,  57671680,      209715200,                0,     300000000, true},
-    {10485760,   82914560,  57671680,      419430400,                0,     209715200, true},
-    {10485760,  314572800,  57671680,     1006632960,        200000000,     314572800, false},
-    {10485760,  419430400,  57671680,     4094304000ULL,    3355443200ULL,  419430400, false},
-    {10485760,  524288000,  57671680,    41943040000ULL,   33554432000ULL,  524288000, false},
-    {10485760,  629145600,  57671680,   419430400000ULL,  335544320000ULL,  629145600, false},
-    {10485760,  734003200,  57671680,  4194304000000ULL, 3355443200000ULL,  734003200, false}
+    {10485760,  262144000,  57671680,      209715200,                 0,     420000000, true},
+    {10485760,   82914560,  57671680,      419430400,                 0,     209715200, true},
+    {10485760,  314572800,  57671680,     2160000000,         200000000,     314572800, false},
+    {10485760,  419430400,  57671680,    40943040000ULL,    33554432000ULL,  419430400, false},
+    {10485760,  524288000,  57671680,   419430400000ULL,   335544320000ULL,  524288000, false},
+    {10485760,  629145600,  57671680,  4194304000000ULL,  3355443200000ULL,  629145600, false},
+    {10485760,  734003200,  57671680, 41943040000000ULL, 33554432000000ULL,  734003200, false}
 };
 
 /// ULL above needed to compile on OSX 10.7.3
