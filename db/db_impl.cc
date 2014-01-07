@@ -1143,7 +1143,8 @@ Status DBImpl::OpenCompactionOutputFile(
       }   // if
 
       // tune fadvise to keep all of this lower level file in page cache
-      if (versions_->IsLevelOverlapped(compact->compaction->level()+1))
+      //  (compaction of unsorted files causes severe cache misses)
+      if (versions_->IsLevelOverlapped(compact->compaction->level()))
           compact->outfile->SetMetadataOffset(1);
       compact->builder = new TableBuilder(options, compact->outfile);
   }   // if
