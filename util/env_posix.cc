@@ -956,7 +956,7 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
-    gImmThreads=new HotThreadPool(3, "ImmWrite",
+    gImmThreads=new HotThreadPool(5, "ImmWrite",
                                   ePerfBGImmDirect, ePerfBGImmQueued,
                                   ePerfBGImmDequeued, ePerfBGImmWeighted);
     gWriteThreads=new HotThreadPool(3, "RecoveryWrite",
@@ -965,7 +965,7 @@ static void InitDefaultEnv()
     gLevel0Threads=new HotThreadPool(3, "Level0Compact",
                                      ePerfBGLevel0Direct, ePerfBGLevel0Queued,
                                      ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
-    gCompactionThreads=new HotThreadPool(2, "GeneralCompact",
+    gCompactionThreads=new HotThreadPool(3, "GeneralCompact",
                                          ePerfBGCompactDirect, ePerfBGCompactQueued,
                                          ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 
