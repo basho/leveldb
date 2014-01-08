@@ -1712,7 +1712,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       }   // else
 
       // throttle is per key write, how many in batch?
-      batch_count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      batch_count=(0 && NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
       if (0 < batch_count)  // unclear if Count() could return zero
           --batch_count;
       batch_wait=throttle * batch_count;
