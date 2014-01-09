@@ -27,6 +27,7 @@ Options::Options()
       compression(kSnappyCompression),
       filter_policy(NULL),
       is_repair(false),
+      is_internal_db(false),
       fadvise_willneed(false)
 {
 }
@@ -51,6 +52,7 @@ Options::Dump(
     Log(log,"           Options.compression: %d", compression);
     Log(log,"         Options.filter_policy: %s", filter_policy == NULL ? "NULL" : filter_policy->Name());
     Log(log,"             Options.is_repair: %s", is_repair ? "true" : "false");
+    Log(log,"        Options.is_internal_db: %s", is_internal_db ? "true" : "false");
     Log(log,"      Options.fadvise_willneed: %s", fadvise_willneed ? "true" : "false");
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
 }   // Options::Dump
