@@ -152,6 +152,10 @@ struct Options {
   // as part of a Repair operation.  Default is false
   bool is_repair;
 
+  // Riak specific flag to mark Riak internal database versus
+  //  user database.  (User database gets larger cache resources.)
+  bool is_internal_db;
+
   // Riak specific flag used to indicate when fadvise() management
   // should default to WILLNEED instead of DONTNEED.  Default is false
   bool fadvise_willneed;

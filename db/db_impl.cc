@@ -1565,7 +1565,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       MutexLock l(&throttle_mutex_);
 
       // throttle is per key write, how many in batch?
-      count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      count=(!options_.is_internal_db && NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
       env_->SleepForMicroseconds(throttle * count);
       gPerfCounters->Add(ePerfDebug0, throttle);
   }   // if
