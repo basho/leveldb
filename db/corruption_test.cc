@@ -323,7 +323,9 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
 
   // Fill levels >= 1 so memtable compaction outputs to level 1
-  for (int level = 1; level < config::kNumLevels; level++) {
+  //  matthewv 1/10/14 - what does "levels" have to do with this,
+  //  switching to compaction trigger.
+  for (int level = 1; level < config::kL0_CompactionTrigger; level++) {
     dbi->Put(WriteOptions(), "", "begin");
     dbi->Put(WriteOptions(), "~", "end");
     dbi->TEST_CompactMemTable();

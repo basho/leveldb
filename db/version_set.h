@@ -235,6 +235,9 @@ class VersionSet {
   {
       uint64_t penalty=current_->write_penalty_;
 
+      if (0==penalty && 0!=env_->GetBackgroundBacklog())
+          penalty=1;
+
       return((int)(penalty * GetThrottleWriteRate()));
   }
 

@@ -84,7 +84,7 @@ ThrottleThread(
     void * /*arg*/)
 {
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
-    int replace_idx, loop;
+    int replace_idx, loop, temp;
     uint64_t new_throttle;
     time_t now_seconds, cache_expire;
     struct timespec wait_time;
@@ -167,7 +167,9 @@ ThrottleThread(
 
         // new_throttle is now a per key wait based upon backlog of work,
         //  apply that weight evenly across all user databases
-        new_throttle /= DBList()->GetDBCount(false);
+        temp = DBList()->GetDBCount(false);
+        if (0!=temp)
+            new_throttle /= temp;
         if (0==new_throttle)
             new_throttle=1;     // throttle must have an effect
 

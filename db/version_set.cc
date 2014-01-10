@@ -1211,12 +1211,25 @@ VersionSet::UpdatePenalty(
                 //  to keep leveldb from stalling
                 else
                 {
-                    int loop, count, value;
+                    int loop, count, value, increment;
+
+                    // level 0 has own thread pool and will stall writes,
+                    //  heavy penalty
+                    if (0==level)
+                    {
+                        value=4;
+                        increment=8;
+                    }   // if
+                    else
+                    {
+                        value=1;
+                        increment=2;
+                    }   // else
 
                     count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
 
-                    for (loop=0, value=4; loop<count; ++loop)
-                        value*=8;
+                    for (loop=0; loop<count; ++loop)
+                        value*=increment;
 
                     penalty+=value;
                 }   // else
@@ -1247,6 +1260,8 @@ VersionSet::UpdatePenalty(
         penalty=100000;
 
     v->write_penalty_ = penalty;
+
+    Log(options_->info_log,"UpdatePenalty: %d", penalty);
 
     return;
 
