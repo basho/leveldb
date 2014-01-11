@@ -168,11 +168,12 @@ ThrottleThread(
         // new_throttle is now a per key wait based upon backlog of work,
         //  apply that weight evenly across all user databases
         temp = DBList()->GetDBCount(false);
+#if 0
         if (0!=temp)
             new_throttle /= temp;
         if (0==new_throttle)
             new_throttle=1;     // throttle must have an effect
-
+#endif
         // change the throttle slowly
         if (gThrottleRate < new_throttle)
             gThrottleRate+=(new_throttle - gThrottleRate)/THROTTLE_SCALING;

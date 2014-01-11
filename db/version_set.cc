@@ -1213,20 +1213,20 @@ VersionSet::UpdatePenalty(
                 {
                     int loop, count, value, increment;
 
+                    count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
+
                     // level 0 has own thread pool and will stall writes,
                     //  heavy penalty
                     if (0==level)
-                    {
+                    {   // non-linear penalty
                         value=4;
                         increment=8;
                     }   // if
                     else
-                    {
-                        value=1;
-                        increment=2;
+                    {   // linear penalty
+                        value=count;
+                        increment=1;
                     }   // else
-
-                    count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
 
                     for (loop=0; loop<count; ++loop)
                         value*=increment;
