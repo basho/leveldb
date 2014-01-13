@@ -233,12 +233,19 @@ class VersionSet {
 
   int WriteThrottleUsec(bool active_compaction)
   {
-      uint64_t penalty=current_->write_penalty_;
+      uint64_t penalty, throttle;
+      int ret_val;
 
-      if (0==penalty && 0!=env_->GetBackgroundBacklog())
-          penalty=1;
+      penalty=current_->write_penalty_;
+      throttle=GetThrottleWriteRate();
 
-      return((int)(penalty * GetThrottleWriteRate()));
+      ret_val=0;
+      if (0==penalty && 1!=throttle)
+          ret_val=(int)throttle;
+      else if (0!=penalty)
+          ret_val=(int)penalty * throttle;
+
+      return(ret_val);
   }
 
 
