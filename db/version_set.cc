@@ -1130,13 +1130,27 @@ VersionSet::Finalize(Version* v)
                 if ( config::kL0_CompactionTrigger <= v->files_[level].size())
                     score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
 
+                // special case: hold off on highest overlapped level where possible to
+                //  give more time to landing level
+                if (!gLevelTraits[level+1].m_OverlappedFiles 
+                    && v->files_[level].size()< config::kL0_SlowdownWritesTrigger)
+                {
+                    const uint64_t level_bytes = TotalFileSize(v->files_[level+1]);
+                    if (1 < (level_bytes / gLevelTraits[level+1].m_DesiredBytesForLevel))
+                        score=0;
+                }   // if
+
                 is_grooming=false;
             } else {
                 // Compute the ratio of current size to size limit.
                 const uint64_t level_bytes = TotalFileSize(v->files_[level]);
                 score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
                 is_grooming=(level_bytes < gLevelTraits[level].m_MaxFileSizeForLevel);
-            }
+
+                // force landing level to not be grooming ... ever
+                if (gLevelTraits[level-1].m_OverlappedFiles)
+                    is_grooming=false;
+            }   // else
 
             // within size constraints, are there any deletes worthy of consideration
             if (score < 1 && 0!=options_->delete_threshold)
