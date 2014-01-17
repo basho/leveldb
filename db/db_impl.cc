@@ -1141,6 +1141,11 @@ Status DBImpl::OpenCompactionOutputFile(
           }   // else if
 
       }   // if
+
+      // tune fadvise to keep all of this lower level file in page cache
+      //  (compaction of unsorted files causes severe cache misses)
+      if (versions_->IsLevelOverlapped(compact->compaction->level()))
+          compact->outfile->SetMetadataOffset(1);
       compact->builder = new TableBuilder(options, compact->outfile);
   }   // if
 
@@ -1707,7 +1712,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       }   // else
 
       // throttle is per key write, how many in batch?
-      batch_count=(NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      //  (do not use batch count on internal db because of impact to AAE)
+      batch_count=(!options_.is_internal_db && NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
       if (0 < batch_count)  // unclear if Count() could return zero
           --batch_count;
       batch_wait=throttle * batch_count;

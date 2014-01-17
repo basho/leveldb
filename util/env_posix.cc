@@ -412,7 +412,7 @@ class PosixMmapFile : public WritableFile {
   {
       // when global set, make entire file use FADV_WILLNEED,
       //  so ignore this setting
-      if (!gFadviseWillNeed)
+      if (!gFadviseWillNeed && 1!=metadata_offset_)
           metadata_offset_=Metadata;
   }   // SetMetadataOffset
 
@@ -959,13 +959,13 @@ static void InitDefaultEnv()
     gImmThreads=new HotThreadPool(5, "ImmWrite",
                                   ePerfBGImmDirect, ePerfBGImmQueued,
                                   ePerfBGImmDequeued, ePerfBGImmWeighted);
-    gWriteThreads=new HotThreadPool(5, "RecoveryWrite",
+    gWriteThreads=new HotThreadPool(3, "RecoveryWrite",
                                     ePerfBGUnmapDirect, ePerfBGUnmapQueued,
                                     ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
-    gLevel0Threads=new HotThreadPool(5, "Level0Compact",
+    gLevel0Threads=new HotThreadPool(3, "Level0Compact",
                                      ePerfBGLevel0Direct, ePerfBGLevel0Queued,
                                      ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
-    gCompactionThreads=new HotThreadPool(3, "GeneralCompact",
+    gCompactionThreads=new HotThreadPool(5, "GeneralCompact",
                                          ePerfBGCompactDirect, ePerfBGCompactQueued,
                                          ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 

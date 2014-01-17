@@ -44,6 +44,10 @@ Status BuildTable(const std::string& dbname,
       return s;
     }
 
+    // tune fadvise to keep all of this lower level file in page cache
+    //  (compaction of unsorted files causes severe cache misses)
+    file->SetMetadataOffset(1);
+
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
