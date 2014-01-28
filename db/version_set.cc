@@ -873,7 +873,6 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     builder.Apply(edit);
     builder.SaveTo(v);
   }
-  Finalize(v);
 
   // Initialize new descriptor log file if necessary by creating
   // a temporary file that contains a snapshot of the current version.
@@ -1049,7 +1048,6 @@ Status VersionSet::Recover() {
     Version* v = new Version(this);
     builder.SaveTo(v);
     // Install recovered version
-    Finalize(v);
     AppendVersion(v);
     manifest_file_number_ = next_file;
     next_file_number_ = next_file + 1;
@@ -1150,29 +1148,31 @@ VersionSet::Finalize(Version* v)
                 // force landing level to not be grooming ... ever
                 if (gLevelTraits[level-1].m_OverlappedFiles)
                     is_grooming=false;
-            }   // else
 
-            // within size constraints, are there any deletes worthy of consideration
-            if (score < 1 && 0!=options_->delete_threshold)
-            {
-                Version::FileMetaDataVector_t::iterator it;
-
-                for (it=v->files_[level].begin(); v->files_[level].end()!=it && score<1; ++it)
+                // within size constraints, are there any deletes worthy of consideration
+                //  (must not do this on overlapped levels.  causes huge throughput problems
+                //   on heavy loads)
+                if (score < 1 && 0!=options_->delete_threshold)
                 {
-                    // if number of tombstones in stats exceeds threshold,
-                    //  we have a compaction candidate
-                    if (options_->delete_threshold <= GetTableCache()->GetStatisticValue((*it)->number, eSstCountDeleteKey))
+                    Version::FileMetaDataVector_t::iterator it;
+
+                    for (it=v->files_[level].begin(); v->files_[level].end()!=it && score<1; ++it)
                     {
-                        compaction_found=true;
-                        best_level=level;
-                        best_score=0;
-                        v->file_to_compact_=*it;
-                        v->file_to_compact_level_=level;
-                        is_grooming=true;
-                        gPerfCounters->Inc(ePerfDebug0);
-                    }
-                }   // for
-            }   // if
+                        // if number of tombstones in stats exceeds threshold,
+                        //  we have a compaction candidate
+                        if (options_->delete_threshold <= GetTableCache()->GetStatisticValue((*it)->number, eSstCountDeleteKey))
+                        {
+                            compaction_found=true;
+                            best_level=level;
+                            best_score=0;
+                            v->file_to_compact_=*it;
+                            v->file_to_compact_level_=level;
+                            is_grooming=true;
+                            gPerfCounters->Inc(ePerfDebug0);
+                        }
+                    }   // for
+                }   // if
+            }   // else
 
 
             if (1<=score)
