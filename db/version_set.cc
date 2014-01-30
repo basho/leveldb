@@ -59,11 +59,11 @@ static struct
 {
     {10485760,  262144000,  57671680,      209715200,                 0,     420000000, true},
     {10485760,   82914560,  57671680,      419430400,                 0,     209715200, true},
-    {10485760,  314572800,  57671680,     2160000000,         200000000,     314572800, false},
-    {10485760,  419430400,  57671680,    40943040000ULL,    33554432000ULL,  419430400, false},
-    {10485760,  524288000,  57671680,   419430400000ULL,   335544320000ULL,  524288000, false},
-    {10485760,  629145600,  57671680,  4194304000000ULL,  3355443200000ULL,  629145600, false},
-    {10485760,  734003200,  57671680, 41943040000000ULL, 33554432000000ULL,  734003200, false}
+    {10485760,  314572800,  57671680,     3082813440,         200000000,     314572800, false},
+    {10485760,  419430400,  57671680,     6442450944ULL,     4294967296ULL,  419430400, false},
+    {10485760,  524288000,  57671680,   128849018880ULL,    85899345920ULL,  524288000, false},
+    {10485760,  629145600,  57671680,  2576980377600ULL,  1717986918400ULL,  629145600, false},
+    {10485760,  734003200,  57671680, 51539607552000ULL, 34359738368000ULL,  734003200, false}
 };
 
 /// ULL above needed to compile on OSX 10.7.3
@@ -873,7 +873,6 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     builder.Apply(edit);
     builder.SaveTo(v);
   }
-  Finalize(v);
 
   // Initialize new descriptor log file if necessary by creating
   // a temporary file that contains a snapshot of the current version.
@@ -1049,7 +1048,6 @@ Status VersionSet::Recover() {
     Version* v = new Version(this);
     builder.SaveTo(v);
     // Install recovered version
-    Finalize(v);
     AppendVersion(v);
     manifest_file_number_ = next_file;
     next_file_number_ = next_file + 1;
@@ -1150,29 +1148,33 @@ VersionSet::Finalize(Version* v)
                 // force landing level to not be grooming ... ever
                 if (gLevelTraits[level-1].m_OverlappedFiles)
                     is_grooming=false;
-            }   // else
 
-            // within size constraints, are there any deletes worthy of consideration
-            if (score < 1 && 0!=options_->delete_threshold)
-            {
-                Version::FileMetaDataVector_t::iterator it;
-
-                for (it=v->files_[level].begin(); v->files_[level].end()!=it && score<1; ++it)
+                // within size constraints, are there any deletes worthy of consideration
+                //  (must not do this on overlapped levels.  causes huge throughput problems
+                //   on heavy loads)
+                if (score < 1 && 0!=options_->delete_threshold)
                 {
-                    // if number of tombstones in stats exceeds threshold,
-                    //  we have a compaction candidate
-                    if (options_->delete_threshold <= GetTableCache()->GetStatisticValue((*it)->number, eSstCountDeleteKey))
+                    Version::FileMetaDataVector_t::iterator it;
+
+                    for (it=v->files_[level].begin(); 
+                         v->files_[level].end()!=it && !compaction_found; 
+                         ++it)
                     {
-                        compaction_found=true;
-                        best_level=level;
-                        best_score=0;
-                        v->file_to_compact_=*it;
-                        v->file_to_compact_level_=level;
-                        is_grooming=true;
-                        gPerfCounters->Inc(ePerfDebug0);
-                    }
-                }   // for
-            }   // if
+                        // if number of tombstones in stats exceeds threshold,
+                        //  we have a compaction candidate
+                        if (options_->delete_threshold <= GetTableCache()->GetStatisticValue((*it)->number, eSstCountDeleteKey))
+                        {
+                            compaction_found=true;
+                            best_level=level;
+                            best_score=0;
+                            v->file_to_compact_=*it;
+                            v->file_to_compact_level_=level;
+                            is_grooming=true;
+                            gPerfCounters->Inc(ePerfDebug0);
+                        }
+                    }   // for
+                }   // if
+            }   // else
 
 
             if (1<=score)
