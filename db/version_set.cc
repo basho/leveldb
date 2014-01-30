@@ -1156,7 +1156,9 @@ VersionSet::Finalize(Version* v)
                 {
                     Version::FileMetaDataVector_t::iterator it;
 
-                    for (it=v->files_[level].begin(); v->files_[level].end()!=it && score<1; ++it)
+                    for (it=v->files_[level].begin(); 
+                         v->files_[level].end()!=it && !compaction_found; 
+                         ++it)
                     {
                         // if number of tombstones in stats exceeds threshold,
                         //  we have a compaction candidate
