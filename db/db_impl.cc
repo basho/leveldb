@@ -186,7 +186,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
-  table_cache_ = new TableCache(dbname_, &options_, file_cache());
+  table_cache_ = new TableCache(dbname_, &options_, file_cache(), double_cache);
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);

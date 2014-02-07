@@ -63,6 +63,9 @@ class Table {
   //  object in memory
   size_t TableObjectSize();
 
+  // riak routine to retrieve disk size of table file
+  uint64_t GetFileSize();
+
   // access routines for testing tools, not for public use
   Block * TEST_GetIndexBlock();
   size_t TEST_TableObjectSize() {return(TableObjectSize());};

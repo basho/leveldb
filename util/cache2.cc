@@ -432,7 +432,8 @@ DoubleCache::DoubleCache(
     : m_FileCache(NULL), m_BlockCache(NULL),
       m_IsInternalDB(options.is_internal_db), m_PlentySpace(true),
       m_Overhead(0), m_TotalAllocation(0),
-      m_FileTimeout(4*24*60*60)  // default is 4 days
+      m_FileTimeout(4*24*60*60),  // default is 4 days
+      m_SizeCachedFiles(0)
 {
     // fixed allocation for recovery log and info LOG: 20M each
     //  (with 64 or open databases, this is a serious number)
@@ -504,7 +505,7 @@ DoubleCache::GetCapacity(
         //  not using, or its minimum ... whichever is larger
         else
         {
-            size_t temp;
+            uint64_t temp;
 
             // usage could vary between two calls,
             //   get it once and use same twice
@@ -514,10 +515,18 @@ DoubleCache::GetCapacity(
             {
                 ret_val=m_TotalAllocation - temp;
 
+                // use m_SizeCachedFiles as approximation of page cache
+                //  space needed for full files ... prefer page cache to block
+                //  (must use temp since m_SizeCachedFiles is volatile)
+                temp = m_SizeCachedFiles;
+                if (temp < ret_val)
+                    ret_val -= temp;
+                else
+                    ret_val=0;
+
+                // always allow for 2Mbyte minimum
                 if (ret_val < (2*1024*1024L))
-                {
                     ret_val=(2*1024*1024L);
-                }   // if
             }   // if
         }   // else
     }   // if
