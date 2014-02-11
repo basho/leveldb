@@ -73,6 +73,8 @@ protected:
     size_t m_TotalAllocation;
     time_t m_FileTimeout;       //!< seconds to allow file to stay cached.  default 4 days.
 
+    uint64_t m_BlockCacheThreshold; //!< from Options, point where block cache canNOT be
+                                    //!< sacrificed for page cache
     volatile uint64_t m_SizeCachedFiles; //!< disk size of .sst files in file cache
 
 private:

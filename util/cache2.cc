@@ -433,6 +433,7 @@ DoubleCache::DoubleCache(
       m_IsInternalDB(options.is_internal_db), m_PlentySpace(true),
       m_Overhead(0), m_TotalAllocation(0),
       m_FileTimeout(4*24*60*60),  // default is 4 days
+      m_BlockCacheThreshold(options.block_cache_threshold),
       m_SizeCachedFiles(0)
 {
     // fixed allocation for recovery log and info LOG: 20M each
@@ -513,18 +514,32 @@ DoubleCache::GetCapacity(
 
             if (temp<m_TotalAllocation)
             {
+                // block cache gets whatever is left after
+                //  file cache usage
                 ret_val=m_TotalAllocation - temp;
 
-                // use m_SizeCachedFiles as approximation of page cache
-                //  space needed for full files ... prefer page cache to block
-                //  (must use temp since m_SizeCachedFiles is volatile)
-                temp = m_SizeCachedFiles;
-                if (temp < ret_val)
-                    ret_val -= temp;
-                else
-                    ret_val=0;
+                // if block cache allocation exceeds threshold,
+                //  give up some to page cache
+                if (m_BlockCacheThreshold < ret_val)
+                {
+                    uint32_t spare;
+
+                    spare=ret_val-m_BlockCacheThreshold;
+
+                    // use m_SizeCachedFiles as approximation of page cache
+                    //  space needed for full files, i.e. prefer page cache to block cache
+                    //  (must use temp since m_SizeCachedFiles is volatile)
+                    temp = m_SizeCachedFiles;
+                    if (temp < spare)
+                        spare -= temp;
+                    else
+                        spare=0;
+
+                    ret_val=m_BlockCacheThreshold + spare;
+                }   // if
 
                 // always allow for 2Mbyte minimum
+                //   (this minimum overrides m_BlockCacheThreshold)
                 if (ret_val < (2*1024*1024L))
                     ret_val=(2*1024*1024L);
             }   // if
