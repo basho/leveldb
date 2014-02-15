@@ -24,6 +24,7 @@
 #define STORAGE_LEVELDB_INCLUDE_CACHE2_H_
 
 #include <stdint.h>
+#include "leveldb/atomics.h"
 #include "leveldb/cache.h"
 #include "leveldb/options.h"
 #include "leveldb/slice.h"
@@ -59,6 +60,9 @@ public:
 
     bool IsInternalDB() const {return(m_IsInternalDB);};
 
+    void AddFileSize(uint64_t file_size) {add_and_fetch(&m_SizeCachedFiles, file_size);};
+    void SubFileSize(uint64_t file_size) {sub_and_fetch(&m_SizeCachedFiles, file_size);};
+
 protected:
     ShardedLRUCache2 * m_FileCache;   //!< file cache used by db/tablecache.cc
     ShardedLRUCache2 * m_BlockCache;  //!< used by table/table.cc
@@ -68,6 +72,10 @@ protected:
     size_t m_Overhead;          //!< reduce from allocation to better estimate limits
     size_t m_TotalAllocation;
     time_t m_FileTimeout;       //!< seconds to allow file to stay cached.  default 4 days.
+
+    uint64_t m_BlockCacheThreshold; //!< from Options, point where block cache canNOT be
+                                    //!< sacrificed for page cache
+    volatile uint64_t m_SizeCachedFiles; //!< disk size of .sst files in file cache
 
 private:
     DoubleCache();                       //!< no default constructor

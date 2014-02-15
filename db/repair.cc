@@ -58,7 +58,7 @@ class Repairer {
         db_lock_(NULL),
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, &options_, double_cache_.GetFileCache());
+    table_cache_ = new TableCache(dbname_, &options_, double_cache_.GetFileCache(), double_cache_);
 
   }
 

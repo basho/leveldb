@@ -28,6 +28,7 @@ struct Table::Rep {
   Options options;
   Status status;
   RandomAccessFile* file;
+  uint64_t file_size;
   uint64_t cache_id;
   FilterBlockReader* filter;
   const char* filter_data;
@@ -77,6 +78,7 @@ Status Table::Open(const Options& options,
     Rep* rep = new Table::Rep;
     rep->options = options;
     rep->file = file;
+    rep->file_size = size;
     rep->metaindex_handle = footer.metaindex_handle();
     rep->index_block = index_block;
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
@@ -366,6 +368,13 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
   delete index_iter;
   return result;
 }
+
+
+uint64_t 
+Table::GetFileSize()
+{
+    return(rep_->file_size);
+};
 
 Block *
 Table::TEST_GetIndexBlock() {return(rep_->index_block);};

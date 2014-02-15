@@ -94,7 +94,7 @@ main(
             meta.number=strtol(table_name.c_str(), NULL, 10);
 
             options.filter_policy=leveldb::NewBloomFilterPolicy(10);
-            table_cache=new leveldb::TableCache(dbname, &options, double_cache.GetFileCache());
+            table_cache=new leveldb::TableCache(dbname, &options, double_cache.GetFileCache(), double_cache);
             table_name = leveldb::TableFileName(dbname, meta.number, search_level);
 
             // open table, step 1 get file size

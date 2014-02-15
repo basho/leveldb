@@ -171,6 +171,11 @@ struct Options {
   //  Most recent value seen upon database open, wins.  Zero for default.
   uint64_t total_leveldb_mem;
 
+  // Riak specific option specifying block cache space that cannot
+  //  be released for page cache use.  The space may still be
+  //  released for file cache.
+  uint64_t block_cache_threshold;
+
   // Riak option to override most memory modeling and create
   //  smaller memory footprint for developers.  Helps when
   //  running large number of databases and multiple VMs. Do

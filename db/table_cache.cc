@@ -14,6 +14,8 @@ namespace leveldb {
 
 static void DeleteEntry(const Slice& key, void* value) {
   TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
+  if (NULL!=tf->doublecache)
+      tf->doublecache->SubFileSize(tf->table->GetFileSize());
   delete tf->table;
   delete tf->file;
   delete tf;
@@ -27,11 +29,13 @@ static void UnrefEntry(void* arg1, void* arg2) {
 
 TableCache::TableCache(const std::string& dbname,
                        const Options* options,
-                       Cache * file_cache)
+                       Cache * file_cache,
+                       DoubleCache & doublecache)
     : env_(options->env),
       dbname_(dbname),
       options_(options),
-      cache_(file_cache)
+      cache_(file_cache),
+      doublecache_(doublecache)
 {
 }
 
@@ -67,10 +71,12 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
       tf->table = table;
+      tf->doublecache = &doublecache_;
 
       *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
 //      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
       gPerfCounters->Inc(ePerfTableOpened);
+      doublecache_.AddFileSize(table->GetFileSize());
 
       // temporary hardcoding to match number of levels defined as
       //  overlapped in version_set.cc
