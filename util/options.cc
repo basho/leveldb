@@ -35,7 +35,7 @@ Options::Options()
       is_repair(false),
       is_internal_db(false),
       total_leveldb_mem(0),
-      block_cache_threshold(16<<20),
+      block_cache_threshold(32<<20),
       limited_developer_mem(false),
       delete_threshold(1000),
       fadvise_willneed(false)
