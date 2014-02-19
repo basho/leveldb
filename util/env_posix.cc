@@ -45,7 +45,11 @@
 
 namespace leveldb {
 
-volatile size_t gMapSize=20*1024*1024L;
+// FiFo 20M is way to much for having multiple files :(
+// lets go down to 1
+//volatile size_t gMapSize=20*1024*1024L;
+
+volatile size_t gMapSize=1024*1024L;
 
 // ugly global used to change fadvise behaviour
 bool gFadviseWillNeed=false;
