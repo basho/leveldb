@@ -171,6 +171,9 @@ struct Options {
   //  Most recent value seen upon database open, wins.  Zero for default.
   uint64_t total_leveldb_mem;
 
+  // The size of each MMAped file, choose 0 for the default (20M)
+  uint64_t mmap_size;
+
   // Riak specific option specifying block cache space that cannot
   //  be released for page cache use.  The space may still be
   //  released for file cache.
