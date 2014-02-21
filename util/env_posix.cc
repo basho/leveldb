@@ -43,11 +43,15 @@
 #define HAVE_FADVISE
 #endif
 
+// #define DFLT_MMAP_SIZE 20*1024*1024L
+// This is for fifo untill I fixed the dynamic setting
+#define DFLT_MMAP_SIZE 1024*1024L
+
 namespace leveldb {
 
 // FiFo 20M is way to much for having multiple files :(
 // lets go down to 1
-volatile size_t gMapSize=20*1024*1024L;
+volatile size_t gMapSize=DFLT_MMAP_SIZE;
 
   // volatile size_t gMapSize=1024*1024L;
 
