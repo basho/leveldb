@@ -9,6 +9,7 @@
 
 // to properly pull in bits/posix_opt.h on Linux
 #include <unistd.h>
+#include <assert.h>
 
 #undef PLATFORM_IS_LITTLE_ENDIAN
 #if defined(OS_MACOSX)
@@ -94,7 +95,7 @@ class Mutex {
 
   void Lock();
   void Unlock();
-  void AssertHeld() { }
+  void AssertHeld() {assert(0!=pthread_mutex_trylock(&mu_));}
 
  private:
   friend class CondVar;
@@ -114,7 +115,7 @@ class Spin {
 
   void Lock();
   void Unlock();
-  void AssertHeld() { }
+  void AssertHeld() {assert(0!=pthread_spin_trylock(&sp_));}
 
  private:
   friend class CondVar;
