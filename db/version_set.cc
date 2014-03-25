@@ -899,38 +899,38 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     AppendVersion(v);
     log_number_ = edit->log_number_;
     prev_log_number_ = edit->prev_log_number_;
-  }
 
-  // Unlock during expensive MANIFEST log write
-  {
-    mu->Unlock();
-
-    // but only one writer at a time
+    // Unlock during expensive MANIFEST log write
     {
-        MutexLock lock(&manifest_mutex_);
-        // Write new record to MANIFEST log
-        if (s.ok()) {
-            std::string record;
-            edit->EncodeTo(&record);
-            s = descriptor_log_->AddRecord(record);
+        mu->Unlock();
+
+        // but only one writer at a time
+        {
+            MutexLock lock(&manifest_mutex_);
+            // Write new record to MANIFEST log
             if (s.ok()) {
-                s = descriptor_file_->Sync();
+                std::string record;
+                edit->EncodeTo(&record);
+                s = descriptor_log_->AddRecord(record);
+                if (s.ok()) {
+                    s = descriptor_file_->Sync();
+                }
             }
-        }
 
-        // If we just created a new descriptor file, install it by writing a
-        // new CURRENT file that points to it.
-        if (s.ok() && !new_manifest_file.empty()) {
-            s = SetCurrentFile(env_, dbname_, manifest_file_number_);
-        }
-    }   // manifest_lock_
+            // If we just created a new descriptor file, install it by writing a
+            // new CURRENT file that points to it.
+            if (s.ok() && !new_manifest_file.empty()) {
+                s = SetCurrentFile(env_, dbname_, manifest_file_number_);
+            }
+        }   // manifest_lock_
 
-    mu->Lock();
+        mu->Lock();
+    }
   }
 
   // this used to be "else" clause to if(s.ok)
   //  moved on Oct 2013
-  if (!s.ok())
+  else
   {
     delete v;
     if (!new_manifest_file.empty()) {
@@ -1130,7 +1130,7 @@ VersionSet::Finalize(Version* v)
 
                 // special case: hold off on highest overlapped level where possible to
                 //  give more time to landing level
-                if (!gLevelTraits[level+1].m_OverlappedFiles 
+                if (!gLevelTraits[level+1].m_OverlappedFiles
                     && v->files_[level].size()< config::kL0_SlowdownWritesTrigger)
                 {
                     const uint64_t level_bytes = TotalFileSize(v->files_[level+1]);
@@ -1156,8 +1156,8 @@ VersionSet::Finalize(Version* v)
                 {
                     Version::FileMetaDataVector_t::iterator it;
 
-                    for (it=v->files_[level].begin(); 
-                         v->files_[level].end()!=it && !compaction_found; 
+                    for (it=v->files_[level].begin();
+                         v->files_[level].end()!=it && !compaction_found;
                          ++it)
                     {
                         // if number of tombstones in stats exceeds threshold,
