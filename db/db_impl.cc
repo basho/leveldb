@@ -938,6 +938,9 @@ DBImpl::BackgroundImmCompactCall() {
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
+
+      ThreadTask * task=new ImmWriteTask(this);
+      gImmThreads->Submit(task, true);
     }
   }
 
@@ -1833,14 +1836,16 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "waiting 2...\n");
       gPerfCounters->Inc(ePerfWriteWaitImm);
       MaybeScheduleCompaction();
-      bg_cv_.Wait();
+      if (!shutting_down_.Acquire_Load()) 
+          bg_cv_.Wait();
       Log(options_.info_log, "running 2...\n");
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "waiting...\n");
       gPerfCounters->Inc(ePerfWriteWaitLevel0);
       MaybeScheduleCompaction();
-      bg_cv_.Wait();
+      if (!shutting_down_.Acquire_Load()) 
+          bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
     } else {
       // Attempt to switch to a new memtable and trigger compaction of old
