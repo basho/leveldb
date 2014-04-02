@@ -336,7 +336,6 @@ class Repairer {
   }
 
   void ExtractMetaData() {
-    std::vector<TableInfo> kept;
     for (int level=0; level < config::kNumLevels; ++level)
     {
       std::vector<uint64_t> * number_ptr;
