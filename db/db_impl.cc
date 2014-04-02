@@ -1366,8 +1366,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
   Status status;
-  ParsedInternalKey ikey;
-  std::string current_user_key;
 
   KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
 
