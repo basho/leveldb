@@ -133,7 +133,8 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   if (r->sst_counters.Value(eSstCountValueLargest) < value.size())
       r->sst_counters.Set(eSstCountValueLargest, value.size());
 
-  if (kTypeDeletion==ExtractValueType(key))
+  // unit tests use non-standard keys ... must ignore the short ones
+  if (8 < key.size() && kTypeDeletion==ExtractValueType(key))
       r->sst_counters.Inc(eSstCountDeleteKey);
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
