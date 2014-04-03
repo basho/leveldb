@@ -921,12 +921,13 @@ void
 DBImpl::BackgroundImmCompactCall() {
   MutexLock l(&mutex_);
   assert(NULL != imm_);
+  Status s;
 
   ++running_compactions_;
   gPerfCounters->Inc(ePerfBGCompactImm);
 
   if (!shutting_down_.Acquire_Load()) {
-    Status s = CompactMemTable();
+    s = CompactMemTable();
     if (!s.ok()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
@@ -938,9 +939,6 @@ DBImpl::BackgroundImmCompactCall() {
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
-
-      ThreadTask * task=new ImmWriteTask(this);
-      gImmThreads->Submit(task, true);
     }
   }
 
@@ -960,6 +958,13 @@ DBImpl::BackgroundImmCompactCall() {
     imm_ = NULL;
     has_imm_.Release_Store(NULL);
   } // if
+
+  // retry imm compaction if failed and not shutting down
+  else if (!s.ok())
+  {
+      ThreadTask * task=new ImmWriteTask(this);
+      gImmThreads->Submit(task, true);
+  }   // else
 
   bg_cv_.SignalAll();
 }
@@ -1836,7 +1841,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "waiting 2...\n");
       gPerfCounters->Inc(ePerfWriteWaitImm);
       MaybeScheduleCompaction();
-      if (!shutting_down_.Acquire_Load()) 
+      if (!shutting_down_.Acquire_Load())
           bg_cv_.Wait();
       Log(options_.info_log, "running 2...\n");
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
@@ -1844,7 +1849,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "waiting...\n");
       gPerfCounters->Inc(ePerfWriteWaitLevel0);
       MaybeScheduleCompaction();
-      if (!shutting_down_.Acquire_Load()) 
+      if (!shutting_down_.Acquire_Load())
           bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
     } else {
