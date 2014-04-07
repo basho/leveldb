@@ -325,7 +325,8 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
   // Fill levels >= 1 so memtable compaction outputs to level 1
   //  matthewv 1/10/14 - what does "levels" have to do with this,
   //  switching to compaction trigger.
-  for (int level = 1; level < config::kL0_CompactionTrigger; level++) {
+  for (int level = Property("leveldb.num-files-at-level0")+1;
+       level < (config::kL0_CompactionTrigger -1); level++) {
     dbi->Put(WriteOptions(), "", "begin");
     dbi->Put(WriteOptions(), "~", "end");
     dbi->TEST_CompactMemTable();
