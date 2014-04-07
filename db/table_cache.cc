@@ -50,7 +50,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
-    std::string fname = TableFileName(dbname_, file_number, level);
+    std::string fname = TableFileName(*options_, file_number, level);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);

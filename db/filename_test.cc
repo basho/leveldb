@@ -77,6 +77,7 @@ TEST(FileNameTest, Construction) {
   uint64_t number;
   FileType type;
   std::string fname;
+  Options options;
 
   fname = CurrentFileName("foo");
   ASSERT_EQ("foo/", std::string(fname.data(), 4));
@@ -96,12 +97,39 @@ TEST(FileNameTest, Construction) {
   ASSERT_EQ(192, number);
   ASSERT_EQ(kLogFile, type);
 
-  fname = TableFileName("bar", 200, 1);
+  options.tiered_fast_prefix="bar";
+  options.tiered_slow_prefix="bar";
+  fname = TableFileName(options, 200, 1);
   ASSERT_EQ("bar/", std::string(fname.data(), 4));
   ASSERT_EQ("sst_1/", std::string(fname.substr(4,6)));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 10, &number, &type));
   ASSERT_EQ(200, number);
   ASSERT_EQ(kTableFile, type);
+
+  fname = TableFileName(options, 400, 4);
+  ASSERT_EQ("bar/", std::string(fname.data(), 4));
+  ASSERT_EQ("sst_4/", std::string(fname.substr(4,6)));
+  ASSERT_TRUE(ParseFileName(fname.c_str() + 10, &number, &type));
+  ASSERT_EQ(400, number);
+  ASSERT_EQ(kTableFile, type);
+
+  options.tiered_slow_level=4;
+  options.tiered_fast_prefix="fast";
+  options.tiered_slow_prefix="slow";
+  fname = TableFileName(options, 500, 3);
+  ASSERT_EQ("fast/", std::string(fname.data(), 5));
+  ASSERT_EQ("sst_3/", std::string(fname.substr(5,6)));
+  ASSERT_TRUE(ParseFileName(fname.c_str() + 11, &number, &type));
+  ASSERT_EQ(500, number);
+  ASSERT_EQ(kTableFile, type);
+
+  fname = TableFileName(options, 600, 4);
+  ASSERT_EQ("slow/", std::string(fname.data(), 5));
+  ASSERT_EQ("sst_4/", std::string(fname.substr(5,6)));
+  ASSERT_TRUE(ParseFileName(fname.c_str() + 11, &number, &type));
+  ASSERT_EQ(600, number);
+  ASSERT_EQ(kTableFile, type);
+
 
   fname = DescriptorFileName("bar", 100);
   ASSERT_EQ("bar/", std::string(fname.data(), 4));

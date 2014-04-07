@@ -36,7 +36,7 @@ Status BuildTable(const std::string& dbname,
 
   KeyRetirement retire(user_comparator, smallest_snapshot);
 
-  std::string fname = TableFileName(dbname, meta->number, meta->level);
+  std::string fname = TableFileName(options, meta->number, meta->level);
   if (iter->Valid()) {
     WritableFile* file;
     s = env->NewWritableFile(fname, &file);

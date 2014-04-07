@@ -89,13 +89,14 @@ main(
             // make copy since basename() and dirname() may modify
             path_temp=*cursor;
             dbname=dirname((char *)path_temp.c_str());
+            dbname=MakeTieredDbname(dbname, options);
             path_temp=*cursor;
             table_name=basename((char *)path_temp.c_str());
             meta.number=strtol(table_name.c_str(), NULL, 10);
 
             options.filter_policy=leveldb::NewBloomFilterPolicy(10);
             table_cache=new leveldb::TableCache(dbname, &options, double_cache.GetFileCache(), double_cache);
-            table_name = leveldb::TableFileName(dbname, meta.number, search_level);
+            table_name = leveldb::TableFileName(options, meta.number, search_level);
 
             // open table, step 1 get file size
             leveldb::Status status = env->GetFileSize(table_name, &meta.file_size);

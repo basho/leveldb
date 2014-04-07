@@ -122,6 +122,7 @@ Options SanitizeOptions(const std::string& dbname,
                         const InternalFilterPolicy* ipolicy,
                         const Options& src,
                         Cache * block_cache) {
+  std::string tiered_dbname;
   Options result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
@@ -136,11 +137,14 @@ Options SanitizeOptions(const std::string& dbname,
           result.write_buffer_size=2*1024*1024L;
   }   // if
 
+  // Validate tiered storage options
+  tiered_dbname=MakeTieredDbname(dbname, result);
+
   if (result.info_log == NULL) {
     // Open a log file in the same directory as the db
-    src.env->CreateDir(dbname);  // In case it does not exist
-    src.env->RenameFile(InfoLogFileName(dbname), OldInfoLogFileName(dbname));
-    Status s = src.env->NewLogger(InfoLogFileName(dbname), &result.info_log);
+    src.env->CreateDir(tiered_dbname);  // In case it does not exist
+    src.env->RenameFile(InfoLogFileName(tiered_dbname), OldInfoLogFileName(tiered_dbname));
+    Status s = src.env->NewLogger(InfoLogFileName(tiered_dbname), &result.info_log);
     if (!s.ok()) {
       // No place suitable for logging
       result.info_log = NULL;
@@ -150,6 +154,8 @@ Options SanitizeOptions(const std::string& dbname,
   if (result.block_cache == NULL) {
       result.block_cache = block_cache;
   }
+
+
   return result;
 }
 
@@ -163,7 +169,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
           options, block_cache())),
       owns_info_log_(options_.info_log != options.info_log),
       owns_cache_(options_.block_cache != options.block_cache),
-      dbname_(dbname),
+      dbname_(options_.tiered_fast_prefix),
       db_lock_(NULL),
       shutting_down_(NULL),
       bg_cv_(&mutex_),
@@ -298,7 +304,7 @@ void DBImpl::DeleteObsoleteFiles()
           std::string dirname;
 
           filenames.clear();
-          dirname=MakeDirName2(dbname_, level, "sst");
+          dirname=MakeDirName2(options_, level, "sst");
           env_->GetChildren(dirname, &filenames); // Ignoring errors on purpose
           for (size_t i = 0; i < filenames.size(); i++) {
               KeepOrDelete(filenames[i], level, live);
@@ -363,7 +369,7 @@ DBImpl::KeepOrDelete(
           {
               std::string file;
 
-              file=TableFileName(dbname_, number, Level);
+              file=TableFileName(options_, number, Level);
               env_->DeleteFile(file);
           }   // if
           else
@@ -381,7 +387,8 @@ Status DBImpl::Recover(VersionEdit* edit) {
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
-  env_->CreateDir(dbname_);
+  env_->CreateDir(options_.tiered_fast_prefix);
+  env_->CreateDir(options_.tiered_slow_prefix);
   assert(db_lock_ == NULL);
   Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
   if (!s.ok()) {
@@ -409,7 +416,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
   s = versions_->Recover();
 
   // Verify Riak 1.3 directory structure created and ready
-  if (s.ok() && !TestForLevelDirectories(env_, dbname_, versions_->current()))
+  if (s.ok() && !TestForLevelDirectories(env_, options_, versions_->current()))
   {
       int level;
       std::string old_name, new_name;
@@ -417,7 +424,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
       if (options_.create_if_missing)
       {
           // move files from old heirarchy to new
-          s=MakeLevelDirectories(env_, dbname_);
+          s=MakeLevelDirectories(env_, options_);
           if (s.ok())
           {
               for (level=0; level<config::kNumLevels && s.ok(); ++level)
@@ -427,12 +434,12 @@ Status DBImpl::Recover(VersionEdit* edit) {
 
                   for (it=level_files.begin(); level_files.end()!=it && s.ok(); ++it)
                   {
-                      new_name=TableFileName(dbname_, (*it)->number, level);
+                      new_name=TableFileName(options_, (*it)->number, level);
 
                       // test for partial completion
                       if (!env_->FileExists(new_name.c_str()))
                       {
-                          old_name=TableFileName(dbname_, (*it)->number, -2);
+                          old_name=TableFileName(options_, (*it)->number, -2);
                           s=env_->RenameFile(old_name, new_name);
                       }   // if
                   }   // for
@@ -446,7 +453,6 @@ Status DBImpl::Recover(VersionEdit* edit) {
           return Status::InvalidArgument(
               dbname_, "level directories do not exist (create_if_missing is false)");
       }   // else
-
   }   // if
 
 
@@ -704,8 +710,8 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
         {
             std::string old_name, new_name;
 
-            old_name=TableFileName(dbname_, meta.number, 0);
-            new_name=TableFileName(dbname_, meta.number, level);
+            old_name=TableFileName(options_, meta.number, 0);
+            new_name=TableFileName(options_, meta.number, level);
             s=env_->RenameFile(old_name, new_name);
         }   // if
     }
@@ -999,8 +1005,8 @@ Status DBImpl::BackgroundCompaction(
     std::string old_name, new_name;
     FileMetaData* f = c->input(0, 0);
 
-    old_name=TableFileName(dbname_, f->number, c->level());
-    new_name=TableFileName(dbname_, f->number, c->level() +1);
+    old_name=TableFileName(options_, f->number, c->level());
+    new_name=TableFileName(options_, f->number, c->level() +1);
     status=env_->RenameFile(old_name, new_name);
 
     if (status.ok())
@@ -1093,7 +1099,7 @@ Status DBImpl::OpenCompactionOutputFile(
   }
 
   // Make the output file
-  std::string fname = TableFileName(dbname_, file_number, compact->compaction->level()+1);
+  std::string fname = TableFileName(options_, file_number, compact->compaction->level()+1);
   Status s = env_->NewWritableFile(fname, &compact->outfile);
   if (s.ok()) {
       Options options;
@@ -2057,14 +2063,20 @@ Snapshot::~Snapshot() {
 Status DestroyDB(const std::string& dbname, const Options& options) {
   Env* env = options.env;
   std::vector<std::string> filenames;
+  Options options_tiered;
+  std::string dbname_tiered;
+
+  options_tiered=options;
+  dbname_tiered=MakeTieredDbname(dbname, options_tiered);
+
   // Ignore error in case directory does not exist
-  env->GetChildren(dbname, &filenames);
+  env->GetChildren(dbname_tiered, &filenames);
   if (filenames.empty()) {
     return Status::OK();
   }
 
   FileLock* lock;
-  const std::string lockname = LockFileName(dbname);
+  const std::string lockname = LockFileName(dbname_tiered);
   Status result = env->LockFile(lockname, &lock);
   if (result.ok()) {
     uint64_t number;
@@ -2076,7 +2088,7 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
         std::string dirname;
 
         filenames.clear();
-        dirname=MakeDirName2(dbname, level, "sst");
+        dirname=MakeDirName2(options_tiered, level, "sst");
         env->GetChildren(dirname, &filenames); // Ignoring errors on purpose
         for (size_t i = 0; i < filenames.size(); i++) {
             if (ParseFileName(filenames[i], &number, &type)) {
@@ -2090,11 +2102,11 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
     }   // for
 
     filenames.clear();
-    env->GetChildren(dbname, &filenames);
+    env->GetChildren(dbname_tiered, &filenames);
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) &&
           type != kDBLockFile) {  // Lock file will be deleted at end
-        Status del = env->DeleteFile(dbname + "/" + filenames[i]);
+        Status del = env->DeleteFile(dbname_tiered + "/" + filenames[i]);
         if (result.ok() && !del.ok()) {
           result = del;
         }
@@ -2102,7 +2114,8 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
     }
     env->UnlockFile(lock);  // Ignore error since state is already gone
     env->DeleteFile(lockname);
-    env->DeleteDir(dbname);  // Ignore error in case dir contains other files
+    env->DeleteDir(options.tiered_fast_prefix);  // Ignore error in case dir contains other files
+    env->DeleteDir(options.tiered_slow_prefix);  // Ignore error in case dir contains other files
   }
   return result;
 }
