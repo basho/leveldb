@@ -36,6 +36,7 @@ class CorruptionTest {
     tiny_cache_ = NewLRUCache(100);
     options_.env = &env_;
     dbname_ = test::TmpDir() + "/db_test";
+    dbname_ = MakeTieredDbname(dbname_, options_);
     DestroyDB(dbname_, options_);
 
     db_ = NULL;
@@ -122,7 +123,7 @@ class CorruptionTest {
     if (leveldb::kTableFile!=filetype)
         dirname=dbname_;
     else
-        dirname=MakeDirName2(dbname_, level, "sst");
+        dirname=MakeDirName2(options_, level, "sst");
 
     ASSERT_OK(env_.GetChildren(dirname, &filenames));
 

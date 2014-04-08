@@ -29,7 +29,7 @@ static std::string MakeFileName(const std::string& name, uint64_t number,
   return name + buf;
 }
 
-static std::string MakeFileName2(const std::string& name, uint64_t number,
+static std::string MakeFileName2(const Options & options, uint64_t number,
                                  int level, const char* suffix) {
   char buf[100];
   if (0<=level)
@@ -47,11 +47,12 @@ static std::string MakeFileName2(const std::string& name, uint64_t number,
                static_cast<unsigned long long>(number),
                suffix);
 
-  return name + buf;
+  return((level<(int)options.tiered_slow_level ?
+          options.tiered_fast_prefix : options.tiered_slow_prefix) + buf);
 }
 
-std::string MakeDirName2(const std::string& name,
-                                 int level, const char* suffix) {
+std::string MakeDirName2(const Options & options,
+                         int level, const char* suffix) {
   char buf[100];
   if (-1!=level)
       snprintf(buf, sizeof(buf), "/%s_%-d",
@@ -60,7 +61,8 @@ std::string MakeDirName2(const std::string& name,
       snprintf(buf, sizeof(buf), "/%s",
                suffix);
 
-  return name + buf;
+  return((level<(int)options.tiered_slow_level ?
+          options.tiered_fast_prefix : options.tiered_slow_prefix) + buf);
 }
 
 std::string LogFileName(const std::string& name, uint64_t number) {
@@ -68,9 +70,9 @@ std::string LogFileName(const std::string& name, uint64_t number) {
   return MakeFileName(name, number, "log");
 }
 
-std::string TableFileName(const std::string& name, uint64_t number, int level) {
+std::string TableFileName(const Options & options, uint64_t number, int level) {
   assert(number > 0);
-  return MakeFileName2(name, number, level, "sst");
+  return MakeFileName2(options, number, level, "sst");
 }
 
 std::string DescriptorFileName(const std::string& dbname, uint64_t number) {
@@ -177,7 +179,7 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
 
 
 Status
-MakeLevelDirectories(Env * env, const std::string & dbname)
+MakeLevelDirectories(Env * env, const Options & options)
 {
     Status ret_stat;
     int level;
@@ -185,7 +187,7 @@ MakeLevelDirectories(Env * env, const std::string & dbname)
 
     for (level=0; level<config::kNumLevels && ret_stat.ok(); ++level)
     {
-        dirname=MakeDirName2(dbname, level, "sst");
+        dirname=MakeDirName2(options, level, "sst");
 
         // ignoring error since no way to tell if "bad" error, or "already exists" error
         env->CreateDir(dirname.c_str());
@@ -199,7 +201,7 @@ MakeLevelDirectories(Env * env, const std::string & dbname)
 bool
 TestForLevelDirectories(
     Env * env,
-    const std::string & dbname,
+    const Options & options,
     Version * version)
 {
     bool ret_flag, again;
@@ -215,7 +217,7 @@ TestForLevelDirectories(
         again=false;
 
         // does directory exist
-        dirname=MakeDirName2(dbname, level, "sst");
+        dirname=MakeDirName2(options, level, "sst");
         ret_flag=env->FileExists(dirname.c_str());
 
         // do all files exist in level
@@ -228,7 +230,7 @@ TestForLevelDirectories(
 
             for (it=level_files.begin(); level_files.end()!=it && ret_flag; ++it)
             {
-                table_name=TableFileName(dbname, (*it)->number, level);
+                table_name=TableFileName(options, (*it)->number, level);
                 ret_flag=env->FileExists(table_name.c_str());
             }   // for
 
@@ -239,5 +241,30 @@ TestForLevelDirectories(
     return(ret_flag);
 
 }   // TestForLevelDirectories
+
+std::string       // replacement dbname ... potentially tiered
+MakeTieredDbname(
+    const std::string & dbname,    // input ... original dbname from DBImpl constructor
+    Options & options)             // input/output ... writable Options, tiered values changed
+{
+    if (0<(int)options.tiered_slow_level && (int)options.tiered_slow_level<config::kNumLevels
+        && 0!=options.tiered_fast_prefix.size() && 0!=options.tiered_slow_prefix.size())
+    {
+        options.tiered_fast_prefix.append("/");
+        options.tiered_fast_prefix.append(dbname);
+
+        options.tiered_slow_prefix.append("/");
+        options.tiered_slow_prefix.append(dbname);
+    }
+    else
+    {
+        options.tiered_slow_level=0;
+        options.tiered_fast_prefix=dbname; // duplicate as is
+        options.tiered_slow_prefix=dbname;
+    }   // else
+
+    return(options.tiered_fast_prefix);
+
+}   // MakeTieredDbname
 
 }  // namespace leveldb

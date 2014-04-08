@@ -193,6 +193,27 @@ struct Options {
   // should default to WILLNEED instead of DONTNEED.  Default is false
   bool fadvise_willneed;
 
+  // *****
+  // Riak specific options for establishing two tiers of disk arrays.
+  // All three tier options must be valid for the option to activate.
+  // When active, leveldb directories are constructed using either
+  // the fast or slow prefix followed by the database name given
+  // in the DB::Open call.  (a synonym for "prefix" is "mount")
+  // *****
+
+  // Riak specific option setting the level number at which the
+  // "tiered_slow_prefix" should be used.  Default is zero which
+  // disables the option.  Valid values are 1 to 6.  3 or 4 recommended.
+  unsigned tiered_slow_level;
+
+  // Riak specific option with the path prefix used for "fast" disk
+  // array.  levels 0 to tiered_slow_level-1 use this path prefix
+  std::string tiered_fast_prefix;
+
+  // Riak specific option with the path prefix used for "slow" disk
+  // array.  levels tiered_slow_level through 6 use this path prefix
+  std::string tiered_slow_prefix;
+
   // Create an Options object with default values for all fields.
   Options();
 

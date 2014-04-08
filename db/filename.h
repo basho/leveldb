@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 #include <string>
+#include "leveldb/options.h"
 #include "leveldb/slice.h"
 #include "leveldb/status.h"
 #include "port/port.h"
@@ -28,13 +29,19 @@ enum FileType {
   kInfoLogFile  // Either the current one, or an old one
 };
 
-
-std::string MakeDirName2(const std::string& name,
+// Riak specific routine to help create sst_? subdirectory names
+std::string MakeDirName2(const Options & options,
                          int level, const char* suffix);
 
-Status MakeLevelDirectories(Env * env, const std::string & dbname);
+// Riak specific routine to help create sst_? subdirectories
+Status MakeLevelDirectories(Env * env, const Options & options);
 
-bool TestForLevelDirectories(Env * env, const std::string & dbname, class Version *);
+// Riak specific routine to test if sst_? subdirectories exist
+bool TestForLevelDirectories(Env * env, const Options & options, class Version *);
+
+// Riak specific routine to standardize conversion of dbname and
+//  Options' tiered directories (options parameter is MODIFIED)
+std::string MakeTieredDbname(const std::string &dbname, Options & options_rw);
 
 // Return the name of the log file with the specified number
 // in the db named by "dbname".  The result will be prefixed with
@@ -44,7 +51,8 @@ extern std::string LogFileName(const std::string& dbname, uint64_t number);
 // Return the name of the sstable with the specified number
 // in the db named by "dbname".  The result will be prefixed with
 // "dbname".
-extern std::string TableFileName(const std::string& dbname, uint64_t number, int level);
+extern std::string TableFileName(const Options & options, uint64_t number,
+                                 int level);
 
 // Return the name of the descriptor file for the db named by
 // "dbname" and the specified incarnation number.  The result will be
@@ -74,7 +82,7 @@ extern std::string OldInfoLogFileName(const std::string& dbname);
 // If filename is a leveldb file, store the type of the file in *type.
 // The number encoded in the filename is stored in *number.  If the
 // filename was successfully parsed, returns true.  Else return false.
-extern bool ParseFileName(const std::string& filename,
+extern bool ParseFileName(const std::string& tiered_filename,
                           uint64_t* number,
                           FileType* type);
 

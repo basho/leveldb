@@ -46,17 +46,19 @@ class Repairer {
  public:
   Repairer(const std::string& dbname, const Options& options)
       : double_cache_(options),
-        dbname_(dbname),
+        options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options, double_cache_.GetBlockCache())),
+        org_options_(options),
+        dbname_(options_.tiered_fast_prefix),
+        org_dbname_(dbname),
         env_(options.env),
         icmp_(options.comparator),
         ipolicy_(options.filter_policy),
-        options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options, double_cache_.GetBlockCache())),
-        org_options_(options),
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
         has_level_dirs_(false),
         db_lock_(NULL),
-        next_file_number_(1) {
+        next_file_number_(1)
+  {
     // TableCache can be small since we expect each table to be opened once.
     table_cache_ = new TableCache(dbname_, &options_, double_cache_.GetFileCache(), double_cache_);
 
@@ -91,7 +93,7 @@ class Repairer {
     status = env_->LockFile(LockFileName(dbname_), &db_lock_);
 
     if (status.ok())
-        status = MakeLevelDirectories(env_, dbname_);
+        status = MakeLevelDirectories(env_, options_);
 
     if (status.ok()) {
       status = FindFiles();
@@ -144,7 +146,7 @@ class Repairer {
 //        options.block_cache=NULL;  // not reusing for fear of edge cases
         options.is_repair=true;
         options.error_if_exists=false;
-        status=leveldb::DB::Open(options, dbname_, &db_ptr);
+        status=leveldb::DB::Open(options, org_dbname_, &db_ptr);
 
         if (status.ok())
             status=db_ptr->VerifyLevels();
@@ -162,11 +164,11 @@ class Repairer {
   };
 
   DoubleCache double_cache_;
-  std::string const dbname_;
+  Options const options_, org_options_;
+  std::string const dbname_, org_dbname_;
   Env* const env_;
   InternalKeyComparator const icmp_;
   InternalFilterPolicy const ipolicy_;
-  Options const options_, org_options_;
   bool owns_info_log_;
   bool owns_cache_;
   bool has_level_dirs_;
@@ -217,7 +219,7 @@ class Repairer {
       std::string dirname;
 
       filenames.clear();
-      dirname=MakeDirName2(dbname_, level, "sst");
+      dirname=MakeDirName2(options_, level, "sst");
       Status status = env_->GetChildren(dirname, &filenames);
       if (!status.ok()) {
           return status;
@@ -350,7 +352,7 @@ class Repairer {
         Status status = ScanTable(&t);
         if (!status.ok())
         {
-          std::string fname = TableFileName(dbname_, t.meta.number, t.meta.level);
+          std::string fname = TableFileName(options_, t.meta.number, t.meta.level);
           Log(options_.info_log, "Table #%llu: ignoring %s",
               (unsigned long long) t.meta.number,
               status.ToString().c_str());
@@ -363,7 +365,7 @@ class Repairer {
   }
 
   Status ScanTable(TableInfo* t) {
-    std::string fname = TableFileName(dbname_, t->meta.number, t->meta.level);
+    std::string fname = TableFileName(options_, t->meta.number, t->meta.level);
     int counter = 0;
     Status status = env_->GetFileSize(fname, &t->meta.file_size);
     if (status.ok()) {
