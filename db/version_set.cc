@@ -1259,11 +1259,17 @@ VersionSet::UpdatePenalty(
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
             if (config::kNumOverlapLevels!=level)
+            {
                 penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
+                // penalty needs to be non-linear once it exceeds 1.0 (especially for tiered storage)
+                penalty_score *= penalty_score;
+            }   // if
             // first sort layer needs to clear before next dump of overlapped files.
             else
+            {
                 penalty_score = (1<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0);
+            }   // else
 
             if (1.0<=penalty_score)
                 penalty+=(static_cast<int>(penalty_score));
