@@ -360,7 +360,10 @@ class PosixMmapFile : public WritableFile {
 
         ret_val=ftruncate(fd_, file_length);
         if (0!=ret_val)
+        {
             syslog(LOG_ERR,"Close ftruncate failed [%d, %m]", errno);
+            s = IOError(filename_, errno);
+        }   // if
 
         ret_val=close(fd_);
     }  // if

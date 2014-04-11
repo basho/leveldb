@@ -486,7 +486,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
 
     // Recover in the order in which the logs were generated
     std::sort(logs.begin(), logs.end());
-    for (size_t i = 0; i < logs.size(); i++) {
+    for (size_t i = 0; i < logs.size() && s.ok(); i++) {
       s = RecoverLogFile(logs[i], edit, &max_sequence);
 
       // The previous incarnation may not have written any MANIFEST
