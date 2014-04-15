@@ -1262,7 +1262,9 @@ VersionSet::UpdatePenalty(
             {
                 penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
-                // penalty needs to be non-linear once it exceeds 1.0 (especially for tiered storage)
+                // penalty needs to be non-linear once it exceeds 1.0 (especially for tiered storage).
+                //  original values of penalty_score below one are not relevant, hence square of less than one
+                //  is equally ignored.
                 penalty_score *= penalty_score;
             }   // if
             // first sort layer needs to clear before next dump of overlapped files.
