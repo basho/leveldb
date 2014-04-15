@@ -433,9 +433,18 @@ class PosixMmapFile : public WritableFile {
           {
               ret_val=ftruncate(File, *(Count +1));
               if (0!=ret_val)
+              {
                   syslog(LOG_ERR,"ReleaseRef ftruncate failed [%d, %m]", errno);
+                  gPerfCounters->Inc(ePerfBGWriteError);
+              }   // if
 
               ret_val=close(File);
+              if (0!=ret_val)
+              {
+                  syslog(LOG_ERR,"ReleaseRef close failed [%d, %m]", errno);
+                  gPerfCounters->Inc(ePerfBGWriteError);
+              }   // if
+
               gPerfCounters->Inc(ePerfRWFileClose);
 
               delete [] Count;
