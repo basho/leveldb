@@ -1079,6 +1079,8 @@ void Env::Shutdown()
     delete gCompactionThreads;
     gCompactionThreads=NULL;
 
+    PerformanceCounters::Close(gPerfCounters);
+
 }   // Env::Shutdown
 
 
