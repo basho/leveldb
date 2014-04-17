@@ -902,6 +902,11 @@ BGFileUnmapper(void * arg)
     bool err_flag;
     int ret_val;
 
+    //
+    // Reminder:  this could get called multiple times for
+    //            same "arg" due to error retry
+    //
+
     err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
 
@@ -910,12 +915,19 @@ BGFileUnmapper(void * arg)
     if (NULL!=file_ptr->ref_count_)
         gPerfCounters->Inc(ePerfBGCloseUnmap);
 
-    ret_val=munmap(file_ptr->base_, file_ptr->length_);
-    if (0!=ret_val)
+    if (NULL!=file_ptr->base_)
     {
-      syslog(LOG_ERR,"BGFileUnmapper2 munmap failed [%d, %m]", errno);
-      err_flag=true;
-    }  // if
+        ret_val=munmap(file_ptr->base_, file_ptr->length_);
+        if (0==ret_val)
+        {
+            file_ptr->base_=NULL;
+        }   // if
+        else
+        {
+            syslog(LOG_ERR,"BGFileUnmapper2 munmap failed [%d, %m]", errno);
+            err_flag=true;
+        }  // else
+    }   // if
 
 #if defined(HAVE_FADVISE)
     if (0==file_ptr->metadata_

@@ -1429,7 +1429,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok() && shutting_down_.Acquire_Load()) {
     status = Status::IOError("Deleting DB during compaction");
-
+#if 0 // validating this block is redundant  (eleveldb issue #110)
     // cleanup Riak modification that adds extra reference
     //  to overlap levels files.
     if (compact->compaction->level() < config::kNumOverlapLevels)
@@ -1439,6 +1439,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
             versions_->GetTableCache()->Evict(out.number, true);
         }   // for
     }   // if
+#endif
   }
   if (status.ok() && compact->builder != NULL) {
     status = FinishCompactionOutputFile(compact, input);
