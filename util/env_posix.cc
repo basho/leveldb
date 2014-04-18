@@ -455,18 +455,27 @@ class PosixMmapFile : public WritableFile {
                   good=false;
               }   // if
 
-              ret_val=close(File);
-              if (0!=ret_val)
+              if (good)
               {
-                  syslog(LOG_ERR,"ReleaseRef close failed [%d, %m]", errno);
-                  gPerfCounters->Inc(ePerfBGWriteError);
-                  good=false;
+                  ret_val=close(File);
+                  if (0==ret_val)
+                  {
+                      gPerfCounters->Inc(ePerfRWFileClose);
+                  }   // if
+                  else
+                  {
+                      syslog(LOG_ERR,"ReleaseRef close failed [%d, %m]", errno);
+                      gPerfCounters->Inc(ePerfBGWriteError);
+                      good=false;
+                  }   // else
+                  
               }   // if
-
-              gPerfCounters->Inc(ePerfRWFileClose);
 
               if (good)
                   delete [] Count;
+              else
+                  inc_and_fetch(Count); // try again.
+
           }   // if
       }   // if
 
