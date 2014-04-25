@@ -1861,7 +1861,7 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
     //  to meet file open speed goals
     else
     {
-      ret_flag=(75000<key_count);
+      ret_flag=(300000<key_count);
      } // else
   }  // if
 

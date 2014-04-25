@@ -1214,9 +1214,9 @@ DBImpl::MaybeRaiseBlockSize(
         file_data_size=versions_->MaxFileSizeForLevel(CompactionStuff.level());
         keys_per_file=file_data_size / avg_value_size;
 
-        if (75000 < keys_per_file)
+        if (300000 < keys_per_file)
         {
-            keys_per_file = 75000;
+            keys_per_file = 300000;
             file_data_size = avg_value_size * keys_per_file;
         }   // if
 
