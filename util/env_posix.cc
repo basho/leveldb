@@ -384,6 +384,9 @@ class PosixMmapFile : public WritableFile {
                 syslog(LOG_ERR,"ReleaseRef failed in Close");
                 s = IOError(filename_, errno);
                 delete [] ref_count_;
+
+                // force close
+                ret_val=close(fd_);
             }   // if
         }   // if
     }   // else
