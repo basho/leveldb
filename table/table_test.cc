@@ -820,7 +820,7 @@ TEST(TableTest, ApproximateOffsetOfCompressed) {
   KVMap kvmap;
   Options options;
   options.block_size = 1024;
-  options.compression = kSnappyCompression;
+  options.compression = kSnappyCompression2;
   c.Finish(options, &keys, &kvmap);
 
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("abc"),       0,      0));

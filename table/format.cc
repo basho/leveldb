@@ -134,12 +134,25 @@ Status ReadBlock(RandomAccessFile* file,
               // Ok
               break;
 
-          case kSnappyCompression: {
+          case kSnappyCompression2:
+          case kSnappyCompression:
+          {
               size_t ulength = 0;
-              if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
-                  s = Status::Corruption("corrupted compressed block contents");
-              }
 
+              // determine uncompressed size
+              if (kSnappyCompression==data[n])
+              {
+                  if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
+                      s = Status::Corruption("corrupted compressed block contents");
+                  }
+              }   // if
+              else
+              {
+                  n-=4;
+                  ulength=DecodeFixed32(data + n);
+              }   // else
+
+              // decompress
               if (s.ok())
               {
                   ubuf = new char[ulength];

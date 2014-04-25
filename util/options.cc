@@ -30,7 +30,7 @@ Options::Options()
       block_size(4096),
       block_size_steps(16),
       block_restart_interval(16),
-      compression(kSnappyCompression),
+      compression(kSnappyCompression2),
       filter_policy(NULL),
       is_repair(false),
       is_internal_db(false),
