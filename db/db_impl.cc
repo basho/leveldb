@@ -362,9 +362,11 @@ DBImpl::KeepOrDelete(
               //  levels
               table_cache_->Evict(number, (Level<config::kNumOverlapLevels));
           }
+#if 0 // mutex_ held
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
               static_cast<unsigned long long>(number));
+#endif
           if (-1!=Level)
           {
               std::string file;
@@ -664,8 +666,6 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
   pending_outputs_.insert(meta.number);
   Iterator* iter = ((MemTable *)mem)->NewIterator();
   SequenceNumber smallest_snapshot;
-  Log(options_.info_log, "Level-0 table #%llu: started",
-      (unsigned long long) meta.number);
 
   if (snapshots_.empty()) {
     smallest_snapshot = versions_->LastSequence();
@@ -678,6 +678,8 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     Options local_options;
 
     mutex_.Unlock();
+    Log(options_.info_log, "Level-0 table #%llu: started",
+        (unsigned long long) meta.number);
 
     // want the data slammed to disk as fast as possible,
     //  no compression for level 0.
@@ -686,14 +688,14 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     local_options.block_size=current_block_size_;
     s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
+    Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
+        (unsigned long long) meta.number,
+        (unsigned long long) meta.file_size,
+        (unsigned long long) meta.num_entries,
+      s.ToString().c_str());
     mutex_.Lock();
   }
 
-  Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
-      (unsigned long long) meta.number,
-      (unsigned long long) meta.file_size,
-      (unsigned long long) meta.num_entries,
-      s.ToString().c_str());
   delete iter;
   pending_outputs_.erase(meta.number);
 
@@ -1332,12 +1334,16 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
+
+  mutex_.Unlock();
+  // release lock while writing Log entry, could stall
   Log(options_.info_log,  "Compacted %d@%d + %d@%d files => %lld bytes",
       compact->compaction->num_input_files(0),
       compact->compaction->level(),
       compact->compaction->num_input_files(1),
       compact->compaction->level() + 1,
       static_cast<long long>(compact->total_bytes));
+  mutex_.Lock();
 
   // Add compaction outputs
   compact->compaction->AddInputDeletions(compact->compaction->edit());
@@ -1353,12 +1359,6 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
-  Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
-      compact->compaction->num_input_files(0),
-      compact->compaction->level(),
-      compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1);
-
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == NULL);
   assert(compact->outfile == NULL);
@@ -1370,6 +1370,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
+
+  Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
+      compact->compaction->num_input_files(0),
+      compact->compaction->level(),
+      compact->compaction->num_input_files(1),
+      compact->compaction->level() + 1);
 
   bool is_level0_compaction=(0 == compact->compaction->level());
 
@@ -1461,6 +1467,11 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
 
+  // write log before taking mutex_
+  VersionSet::LevelSummaryStorage tmp;
+  Log(options_.info_log,
+      "compacted to: %s", versions_->LevelSummary(&tmp));
+
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
 
@@ -1470,9 +1481,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }
-  VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log,
-      "compacted to: %s", versions_->LevelSummary(&tmp));
   return status;
 }
 

@@ -1285,7 +1285,7 @@ VersionSet::UpdatePenalty(
 
     v->write_penalty_ = penalty;
 
-    Log(options_->info_log,"UpdatePenalty: %d", penalty);
+// mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
 
     return;
 
@@ -1655,6 +1655,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
               current_->GetOverlappingInputs(level+1, &new_start, &new_limit,
                                              &expanded1);
               if (expanded1.size() == c->inputs_[1].size()) {
+#if 0  // mutex_ held
                   Log(options_->info_log,
                       "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
                       level,
@@ -1664,6 +1665,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
                       int(expanded0.size()),
                       int(expanded1.size()),
                       long(expanded0_size), long(inputs1_size));
+#endif
                   smallest = new_start;
                   largest = new_limit;
                   c->inputs_[0] = expanded0;
