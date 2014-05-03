@@ -190,7 +190,7 @@ Status ReadBlock(RandomAccessFile* file,
 
               // create / append file to hold removed blocks
               new_name+="/BLOCKS.bad";
-              s2=options.GetEnv()->NewAppendableFile(new_name, &bad_file);
+              s2=options.GetEnv()->NewAppendableFile(new_name, &bad_file, 4*1024);
               if (s2.ok())
               {
                   // need a try/catch

@@ -248,7 +248,7 @@ Status DBImpl::NewDB() {
 
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
-  Status s = env_->NewWritableFile(manifest, &file);
+  Status s = env_->NewWritableFile(manifest, &file, 4*1024L);
   if (!s.ok()) {
     return s;
   }
@@ -1108,7 +1108,7 @@ Status DBImpl::OpenCompactionOutputFile(
 
   // Make the output file
   std::string fname = TableFileName(options_, file_number, compact->compaction->level()+1);
-  Status s = env_->NewWritableFile(fname, &compact->outfile);
+  Status s = env_->NewWritableFile(fname, &compact->outfile, gMapSize);
   if (s.ok()) {
       Options options;
       options=options_;
@@ -1214,9 +1214,9 @@ DBImpl::MaybeRaiseBlockSize(
         file_data_size=versions_->MaxFileSizeForLevel(CompactionStuff.level());
         keys_per_file=file_data_size / avg_value_size;
 
-        if (75000 < keys_per_file)
+        if (300000 < keys_per_file)
         {
-            keys_per_file = 75000;
+            keys_per_file = 300000;
             file_data_size = avg_value_size * keys_per_file;
         }   // if
 
@@ -1862,9 +1862,18 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
+      size_t map_size;
+
+      // large buffers, try for a little bit bigger than half hoping
+      //  for two writes ... not three
+      if (10*1024*1024 < options_.write_buffer_size)
+          map_size=(options_.write_buffer_size/6)*4;
+      else
+          map_size=(options_.write_buffer_size*12)/10;  // integer multiply 1.2
       WritableFile* lfile = NULL;
       gPerfCounters->Inc(ePerfWriteNewMem);
-      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile);
+      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile,
+                                 map_size);
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
         versions_->ReuseFileNumber(new_log_number);
@@ -2041,8 +2050,17 @@ Status DB::Open(const Options& options, const std::string& dbname,
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
+    size_t map_size;
+
+    // large buffers, try for a little bit bigger than half hoping
+    //  for two writes ... not three
+    if (10*1024*1024 < options.write_buffer_size)
+        map_size=(options.write_buffer_size/6)*4;
+    else
+        map_size=(options.write_buffer_size*12)/10;  // integer multiply 1.2
+
     s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
-                                     &lfile);
+                                      &lfile, map_size);
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
       impl->logfile_ = lfile;
