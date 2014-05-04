@@ -287,9 +287,16 @@ void DBImpl::DeleteObsoleteFiles()
   //  simultaneous compaction
   if (RunningCompactionCount()<2)
   {
+      // each caller has mutex, we need to release it
+      //  since this disk activity can take a while
+      mutex_.AssertHeld();
+
       // Make a set of all of the live files
       std::set<uint64_t> live = pending_outputs_;
       versions_->AddLiveFiles(&live);
+
+      // release lock for disk work
+      mutex_.Unlock();
 
       // prune the database root directory
       std::vector<std::string> filenames;
@@ -310,6 +317,7 @@ void DBImpl::DeleteObsoleteFiles()
               KeepOrDelete(filenames[i], level, live);
           }   // for
       }   // for
+      mutex_.Lock();
   }   // if
 }
 
@@ -322,6 +330,8 @@ DBImpl::KeepOrDelete(
   uint64_t number;
   FileType type;
   bool keep = true;
+
+  // assumes mutex_ unlocked
 
   if (ParseFileName(Filename, &number, &type))
   {
@@ -360,11 +370,14 @@ DBImpl::KeepOrDelete(
           if (type == kTableFile) {
               // temporary hard coding of extra overlapped
               //  levels
+              mutex_.Lock();
               table_cache_->Evict(number, (Level<config::kNumOverlapLevels));
+              mutex_.Unlock();
           }
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
               static_cast<unsigned long long>(number));
+
           if (-1!=Level)
           {
               std::string file;
@@ -486,7 +499,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
 
     // Recover in the order in which the logs were generated
     std::sort(logs.begin(), logs.end());
-    for (size_t i = 0; i < logs.size(); i++) {
+    for (size_t i = 0; i < logs.size() && s.ok(); i++) {
       s = RecoverLogFile(logs[i], edit, &max_sequence);
 
       // The previous incarnation may not have written any MANIFEST
@@ -664,8 +677,6 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
   pending_outputs_.insert(meta.number);
   Iterator* iter = ((MemTable *)mem)->NewIterator();
   SequenceNumber smallest_snapshot;
-  Log(options_.info_log, "Level-0 table #%llu: started",
-      (unsigned long long) meta.number);
 
   if (snapshots_.empty()) {
     smallest_snapshot = versions_->LastSequence();
@@ -678,6 +689,8 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     Options local_options;
 
     mutex_.Unlock();
+    Log(options_.info_log, "Level-0 table #%llu: started",
+        (unsigned long long) meta.number);
 
     // want the data slammed to disk as fast as possible,
     //  no compression for level 0.
@@ -686,14 +699,14 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     local_options.block_size=current_block_size_;
     s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
+    Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
+        (unsigned long long) meta.number,
+        (unsigned long long) meta.file_size,
+        (unsigned long long) meta.num_entries,
+      s.ToString().c_str());
     mutex_.Lock();
   }
 
-  Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
-      (unsigned long long) meta.number,
-      (unsigned long long) meta.file_size,
-      (unsigned long long) meta.num_entries,
-      s.ToString().c_str());
   delete iter;
   pending_outputs_.erase(meta.number);
 
@@ -899,9 +912,9 @@ void DBImpl::BackgroundCall2(
       // chew up resources for failed compactions for the duration of
       // the problem.
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      mutex_.Unlock();
       Log(options_.info_log, "Waiting after background compaction error: %s",
           s.ToString().c_str());
-      mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
     }
@@ -940,9 +953,9 @@ DBImpl::BackgroundImmCompactCall() {
       // chew up resources for failed compactions for the duration of
       // the problem.
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      mutex_.Unlock();
       Log(options_.info_log, "Waiting after background imm compaction error: %s",
           s.ToString().c_str());
-      mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
     }
@@ -1214,9 +1227,9 @@ DBImpl::MaybeRaiseBlockSize(
         file_data_size=versions_->MaxFileSizeForLevel(CompactionStuff.level());
         keys_per_file=file_data_size / avg_value_size;
 
-        if (75000 < keys_per_file)
+        if (300000 < keys_per_file)
         {
-            keys_per_file = 75000;
+            keys_per_file = 300000;
             file_data_size = avg_value_size * keys_per_file;
         }   // if
 
@@ -1332,12 +1345,16 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
+
+  mutex_.Unlock();
+  // release lock while writing Log entry, could stall
   Log(options_.info_log,  "Compacted %d@%d + %d@%d files => %lld bytes",
       compact->compaction->num_input_files(0),
       compact->compaction->level(),
       compact->compaction->num_input_files(1),
       compact->compaction->level() + 1,
       static_cast<long long>(compact->total_bytes));
+  mutex_.Lock();
 
   // Add compaction outputs
   compact->compaction->AddInputDeletions(compact->compaction->edit());
@@ -1353,12 +1370,6 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
-  Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
-      compact->compaction->num_input_files(0),
-      compact->compaction->level(),
-      compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1);
-
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == NULL);
   assert(compact->outfile == NULL);
@@ -1370,6 +1381,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
+
+  Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
+      compact->compaction->num_input_files(0),
+      compact->compaction->level(),
+      compact->compaction->num_input_files(1),
+      compact->compaction->level() + 1);
 
   bool is_level0_compaction=(0 == compact->compaction->level());
 
@@ -1429,7 +1446,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok() && shutting_down_.Acquire_Load()) {
     status = Status::IOError("Deleting DB during compaction");
-
+#if 0 // validating this block is redundant  (eleveldb issue #110)
     // cleanup Riak modification that adds extra reference
     //  to overlap levels files.
     if (compact->compaction->level() < config::kNumOverlapLevels)
@@ -1439,6 +1456,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
             versions_->GetTableCache()->Evict(out.number, true);
         }   // for
     }   // if
+#endif
   }
   if (status.ok() && compact->builder != NULL) {
     status = FinishCompactionOutputFile(compact, input);
@@ -1469,9 +1487,18 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }
-  VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log,
-      "compacted to: %s", versions_->LevelSummary(&tmp));
+
+  // write log with mutex_ released
+  {
+      VersionSet::LevelSummaryStorage tmp;
+      versions_->LevelSummary(&tmp);
+      mutex_.Unlock();
+
+      Log(options_.info_log,
+          "compacted to: %s", tmp.buffer);
+      mutex_.Lock();
+  }
+
   return status;
 }
 

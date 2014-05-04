@@ -432,7 +432,7 @@ DoubleCache::DoubleCache(
     : m_FileCache(NULL), m_BlockCache(NULL),
       m_IsInternalDB(options.is_internal_db), m_PlentySpace(true),
       m_Overhead(0), m_TotalAllocation(0),
-      m_FileTimeout(4*24*60*60),  // default is 4 days
+      m_FileTimeout(10*24*60*60),  // default is 10 days
       m_BlockCacheThreshold(options.block_cache_threshold),
       m_SizeCachedFiles(0)
 {
@@ -598,7 +598,7 @@ Cache::Handle* LRUCache2::Lookup(const Slice& key, uint32_t hash) {
     LRU_Remove(e);
     LRU_Append(e);
 
-    // establish time limit on files in file cache (like 4 days)
+    // establish time limit on files in file cache (like 10 days)
     //  so they do not go stale and steal from block cache
     if (is_file_cache_)
     {
@@ -652,7 +652,7 @@ Cache::Handle* LRUCache2::Insert(
     e->expire_seconds=0;
     memcpy(e->key_data, key.data(), key.size());
 
-    // establish time limit on files in file cache (like 4 days)
+    // establish time limit on files in file cache (like 10 days)
     //  so they do not go stale and steal from block cache
     if (is_file_cache_)
     {
