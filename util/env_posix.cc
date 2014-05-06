@@ -43,9 +43,11 @@
 #define HAVE_FADVISE
 #endif
 
+#define DFLT_MMAP_SIZE 20*1024*1024L
+
 namespace leveldb {
 
-volatile size_t gMapSize=20*1024*1024L;
+volatile size_t gMapSize=DFLT_MMAP_SIZE;
 
 // ugly global used to change fadvise behaviour
 bool gFadviseWillNeed=false;

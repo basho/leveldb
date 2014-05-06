@@ -36,6 +36,7 @@ Options::Options()
       is_internal_db(false),
       total_leveldb_mem(0),
       block_cache_threshold(32<<20),
+      mmap_size(0),
       limited_developer_mem(false),
       delete_threshold(1000),
       fadvise_willneed(false),
@@ -67,6 +68,7 @@ Options::Dump(
     Log(log,"        Options.is_internal_db: %s", is_internal_db ? "true" : "false");
     Log(log,"     Options.total_leveldb_mem: %" PRIu64, total_leveldb_mem);
     Log(log," Options.block_cache_threshold: %" PRIu64, block_cache_threshold);
+    Log(log,"             Options.mmap_size: %" PRIu64, mmap_size);
     Log(log," Options.limited_developer_mem: %s", limited_developer_mem ? "true" : "false");
     Log(log,"      Options.delete_threshold: %" PRIu64, delete_threshold);
     Log(log,"      Options.fadvise_willneed: %s", fadvise_willneed ? "true" : "false");
