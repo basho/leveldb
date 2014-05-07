@@ -71,7 +71,7 @@ class SpecialEnv : public EnvWrapper {
     count_random_reads_ = false;
   }
 
-  Status NewWritableFile(const std::string& f, WritableFile** r) {
+  Status NewWritableFile(const std::string& f, WritableFile** r, size_t map_size) {
     class SSTableFile : public WritableFile {
      private:
       SpecialEnv* env_;
@@ -105,7 +105,7 @@ class SpecialEnv : public EnvWrapper {
       return Status::IOError("simulated write error");
     }
 
-    Status s = target()->NewWritableFile(f, r);
+    Status s = target()->NewWritableFile(f, r, 2<<20);
     if (s.ok()) {
       if (strstr(f.c_str(), ".sst") != NULL) {
         *r = new SSTableFile(this, *r);

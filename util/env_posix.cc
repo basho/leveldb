@@ -779,6 +779,25 @@ class PosixEnv : public Env {
     {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic
           + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
 
+  virtual size_t RecoveryMmapSize(const struct Options * options) const
+    {
+      size_t map_size;
+
+      if (NULL!=options)
+      {
+        // large buffers, try for a little bit bigger than half hoping
+        //  for two writes ... not three
+        if (10*1024*1024 < options->write_buffer_size)
+            map_size=(options->write_buffer_size/6)*4;
+        else
+            map_size=(options->write_buffer_size*12)/10;  // integer multiply 1.2
+      } // if
+      else
+        map_size=2*1024*1024L;
+
+      return(map_size);
+    };
+
  private:
 
   void PthreadCall(const char* label, int result) {

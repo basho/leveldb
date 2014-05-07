@@ -22,13 +22,14 @@
 
 namespace leveldb {
 
+class AppendableFile;
 class FileLock;
+class Options;
 class Logger;
 class RandomAccessFile;
 class SequentialFile;
 class Slice;
 class WritableFile;
-class AppendableFile;
 
 class Env {
  public:
@@ -181,6 +182,10 @@ class Env {
 
   // Riak specific:  Get object that is tracking various software counters
   virtual PerformanceCounters * GetPerformanceCounters() {return(gPerfCounters);};
+
+  // Riak specific:  Request size of recovery memory map, potentially using
+  //  Options data for the decision.  Default 2Mbyte is Google's original size.
+  virtual size_t RecoveryMmapSize(const struct Options *) const {return(2*1024*1024L);};
 
  private:
   // No copying allowed

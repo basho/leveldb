@@ -131,11 +131,14 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.block_size,                1<<10,  4<<20);
 
   if (src.limited_developer_mem)
-  {
       gMapSize=2*1024*1024L;
-      if (2*1024*1024L < result.write_buffer_size) // let unit tests be smaller
-          result.write_buffer_size=2*1024*1024L;
-  }   // if
+
+  // alternate means to change gMapSize ... more generic
+  if (0!=src.mmap_size)
+      gMapSize=src.mmap_size;
+
+  if (gMapSize < result.write_buffer_size) // let unit tests be smaller
+      result.write_buffer_size=gMapSize;
 
   // Validate tiered storage options
   tiered_dbname=MakeTieredDbname(dbname, result);
@@ -154,7 +157,6 @@ Options SanitizeOptions(const std::string& dbname,
   if (result.block_cache == NULL) {
       result.block_cache = block_cache;
   }
-
 
   return result;
 }
@@ -1862,18 +1864,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
-      size_t map_size;
 
-      // large buffers, try for a little bit bigger than half hoping
-      //  for two writes ... not three
-      if (10*1024*1024 < options_.write_buffer_size)
-          map_size=(options_.write_buffer_size/6)*4;
-      else
-          map_size=(options_.write_buffer_size*12)/10;  // integer multiply 1.2
       WritableFile* lfile = NULL;
       gPerfCounters->Inc(ePerfWriteNewMem);
       s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile,
-                                 map_size);
+                                 options_.env->RecoveryMmapSize(&options_));
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
         versions_->ReuseFileNumber(new_log_number);
@@ -2050,17 +2045,8 @@ Status DB::Open(const Options& options, const std::string& dbname,
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
-    size_t map_size;
-
-    // large buffers, try for a little bit bigger than half hoping
-    //  for two writes ... not three
-    if (10*1024*1024 < options.write_buffer_size)
-        map_size=(options.write_buffer_size/6)*4;
-    else
-        map_size=(options.write_buffer_size*12)/10;  // integer multiply 1.2
-
     s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
-                                      &lfile, map_size);
+                                      &lfile, options.env->RecoveryMmapSize(&options));
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
       impl->logfile_ = lfile;

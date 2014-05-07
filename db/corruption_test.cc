@@ -222,7 +222,9 @@ TEST(CorruptionTest, NewFileErrorDuringWrite) {
   const int num = 3 + (Options().write_buffer_size / kValueSize);
   std::string value_storage;
   Status s;
-  for (int i = 0; s.ok() && i < num; i++) {
+  for (int i = 0; 
+       s.ok() && i < num && 0==env_.num_writable_file_errors_; 
+       i++) {
     WriteBatch batch;
     batch.Put("a", Value(100, &value_storage));
     s = db_->Write(WriteOptions(), &batch);

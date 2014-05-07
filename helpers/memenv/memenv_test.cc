@@ -41,7 +41,7 @@ TEST(MemEnvTest, Basics) {
   ASSERT_EQ(0, children.size());
 
   // Create a file.
-  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file, 2<<20));
   delete writable_file;
 
   // Check that the file exists.
@@ -53,7 +53,7 @@ TEST(MemEnvTest, Basics) {
   ASSERT_EQ("f", children[0]);
 
   // Write to the file.
-  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file, 2<<20));
   ASSERT_OK(writable_file->Append("abc"));
   delete writable_file;
 
@@ -98,7 +98,7 @@ TEST(MemEnvTest, ReadWrite) {
 
   ASSERT_OK(env_->CreateDir(dbname + ""));
 
-  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file, 2<<20));
   ASSERT_OK(writable_file->Append("hello "));
   ASSERT_OK(writable_file->Append("world"));
   delete writable_file;
@@ -145,7 +145,7 @@ TEST(MemEnvTest, Misc) {
   ASSERT_TRUE(!test_dir.empty());
 
   WritableFile* writable_file;
-  ASSERT_OK(env_->NewWritableFile("/a/b", &writable_file));
+  ASSERT_OK(env_->NewWritableFile("/a/b", &writable_file, 2<<20));
 
   // These are no-ops, but we test they return success.
   ASSERT_OK(writable_file->Sync());
@@ -167,7 +167,7 @@ TEST(MemEnvTest, LargeWrite) {
   }
 
   WritableFile* writable_file;
-  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile(dbname + "/f", &writable_file, 2<<20));
   ASSERT_OK(writable_file->Append("foo"));
   ASSERT_OK(writable_file->Append(write_data));
   delete writable_file;
