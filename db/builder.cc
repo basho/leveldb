@@ -39,7 +39,9 @@ Status BuildTable(const std::string& dbname,
   std::string fname = TableFileName(options, meta->number, meta->level);
   if (iter->Valid()) {
     WritableFile* file;
-    s = env->NewWritableFile(fname, &file);
+
+    s = env->NewWritableFile(fname, &file,
+                                 env->RecoveryMmapSize(&options));
     if (!s.ok()) {
       return s;
     }

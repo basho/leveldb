@@ -282,11 +282,12 @@ class PosixMmapFile : public WritableFile {
  public:
   PosixMmapFile(const std::string& fname, int fd,
                 size_t page_size, size_t file_offset=0L,
-                bool is_async=false)
+                bool is_async=false,
+                size_t map_size=gMapSize)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
-        map_size_(Roundup(gMapSize, page_size)),
+        map_size_(Roundup(map_size, page_size)),
         base_(NULL),
         limit_(NULL),
         dst_(NULL),
@@ -546,20 +547,22 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) {
+                                 WritableFile** result,
+                                 size_t map_size) {
     Status s;
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
     if (fd < 0) {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
-      *result = new PosixMmapFile(fname, fd, page_size_, 0, false);
+      *result = new PosixMmapFile(fname, fd, page_size_, 0, false, map_size);
     }
     return s;
   }
 
   virtual Status NewAppendableFile(const std::string& fname,
-                                   WritableFile** result) {
+                                   WritableFile** result,
+                                   size_t map_size) {
     Status s;
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR, 0644);
     if (fd < 0) {
@@ -571,7 +574,7 @@ class PosixEnv : public Env {
       s = GetFileSize(fname, &size);
       if (s.ok())
       {
-          *result = new PosixMmapFile(fname, fd, page_size_, size);
+          *result = new PosixMmapFile(fname, fd, page_size_, size, false, map_size);
       }   // if
       else
       {
@@ -583,14 +586,15 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewWriteOnlyFile(const std::string& fname,
-                                 WritableFile** result) {
+                                  WritableFile** result,
+                                  size_t map_size) {
     Status s;
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
     if (fd < 0) {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
-      *result = new PosixMmapFile(fname, fd, page_size_, 0, true);
+      *result = new PosixMmapFile(fname, fd, page_size_, 0, true, map_size);
     }
     return s;
   }
@@ -774,6 +778,25 @@ class PosixEnv : public Env {
   virtual int GetBackgroundBacklog() const
     {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic
           + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
+
+  virtual size_t RecoveryMmapSize(const struct Options * options) const
+    {
+      size_t map_size;
+
+      if (NULL!=options)
+      {
+        // large buffers, try for a little bit bigger than half hoping
+        //  for two writes ... not three
+        if (10*1024*1024 < options->write_buffer_size)
+            map_size=(options->write_buffer_size/6)*4;
+        else
+            map_size=(options->write_buffer_size*12)/10;  // integer multiply 1.2
+      } // if
+      else
+        map_size=2*1024*1024L;
+
+      return(map_size);
+    };
 
  private:
 

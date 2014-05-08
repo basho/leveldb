@@ -131,11 +131,14 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.block_size,                1<<10,  4<<20);
 
   if (src.limited_developer_mem)
-  {
       gMapSize=2*1024*1024L;
-      if (2*1024*1024L < result.write_buffer_size) // let unit tests be smaller
-          result.write_buffer_size=2*1024*1024L;
-  }   // if
+
+  // alternate means to change gMapSize ... more generic
+  if (0!=src.mmap_size)
+      gMapSize=src.mmap_size;
+
+  if (gMapSize < result.write_buffer_size) // let unit tests be smaller
+      result.write_buffer_size=gMapSize;
 
   // Validate tiered storage options
   tiered_dbname=MakeTieredDbname(dbname, result);
@@ -154,7 +157,6 @@ Options SanitizeOptions(const std::string& dbname,
   if (result.block_cache == NULL) {
       result.block_cache = block_cache;
   }
-
 
   return result;
 }
@@ -248,7 +250,7 @@ Status DBImpl::NewDB() {
 
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
-  Status s = env_->NewWritableFile(manifest, &file);
+  Status s = env_->NewWritableFile(manifest, &file, 4*1024L);
   if (!s.ok()) {
     return s;
   }
@@ -1108,7 +1110,7 @@ Status DBImpl::OpenCompactionOutputFile(
 
   // Make the output file
   std::string fname = TableFileName(options_, file_number, compact->compaction->level()+1);
-  Status s = env_->NewWritableFile(fname, &compact->outfile);
+  Status s = env_->NewWritableFile(fname, &compact->outfile, gMapSize);
   if (s.ok()) {
       Options options;
       options=options_;
@@ -1214,9 +1216,9 @@ DBImpl::MaybeRaiseBlockSize(
         file_data_size=versions_->MaxFileSizeForLevel(CompactionStuff.level());
         keys_per_file=file_data_size / avg_value_size;
 
-        if (75000 < keys_per_file)
+        if (300000 < keys_per_file)
         {
-            keys_per_file = 75000;
+            keys_per_file = 300000;
             file_data_size = avg_value_size * keys_per_file;
         }   // if
 
@@ -1862,9 +1864,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
+
       WritableFile* lfile = NULL;
       gPerfCounters->Inc(ePerfWriteNewMem);
-      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile);
+      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile,
+                                 options_.env->RecoveryMmapSize(&options_));
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
         versions_->ReuseFileNumber(new_log_number);
@@ -2042,7 +2046,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
     s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
-                                     &lfile);
+                                      &lfile, options.env->RecoveryMmapSize(&options));
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
       impl->logfile_ = lfile;

@@ -183,6 +183,9 @@ struct Options {
   // Default: false
   bool limited_developer_mem;
 
+  // The size of each MMAped file, choose 0 for the default (20M)
+  uint64_t mmap_size;
+
   // Riak option to adjust aggressive delete behavior.
   //  - zero disables aggressive delete
   //  - positive value indicates how many deletes must exist

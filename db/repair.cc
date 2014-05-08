@@ -408,7 +408,7 @@ class Repairer {
   Status WriteDescriptor() {
     std::string tmp = TempFileName(dbname_, 1);
     WritableFile* file;
-    Status status = env_->NewWritableFile(tmp, &file);
+    Status status = env_->NewWritableFile(tmp, &file, 4096);
     if (!status.ok()) {
       return status;
     }

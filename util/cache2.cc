@@ -432,14 +432,16 @@ DoubleCache::DoubleCache(
     : m_FileCache(NULL), m_BlockCache(NULL),
       m_IsInternalDB(options.is_internal_db), m_PlentySpace(true),
       m_Overhead(0), m_TotalAllocation(0),
-      m_FileTimeout(4*24*60*60),  // default is 4 days
+      m_FileTimeout(10*24*60*60),  // default is 10 days
       m_BlockCacheThreshold(options.block_cache_threshold),
       m_SizeCachedFiles(0)
 {
     // fixed allocation for recovery log and info LOG: 20M each
     //  (with 64 or open databases, this is a serious number)
     // and fixed allocation for two write buffers
-    m_Overhead=options.write_buffer_size*2 + gMapSize*2;
+
+    m_Overhead=options.write_buffer_size*2 
+        + options.env->RecoveryMmapSize(&options) + 4096;
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
 
     if (m_Overhead < m_TotalAllocation)
