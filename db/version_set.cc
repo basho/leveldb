@@ -1259,11 +1259,19 @@ VersionSet::UpdatePenalty(
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
             if (config::kNumOverlapLevels!=level)
+            {
                 penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
+                // penalty needs to be non-linear once it exceeds 1.0 (especially for tiered storage).
+                //  original values of penalty_score below one are not relevant, hence square of less than one
+                //  is equally ignored.
+                penalty_score *= penalty_score;
+            }   // if
             // first sort layer needs to clear before next dump of overlapped files.
             else
+            {
                 penalty_score = (1<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0);
+            }   // else
 
             if (1.0<=penalty_score)
                 penalty+=(static_cast<int>(penalty_score));
@@ -1277,7 +1285,7 @@ VersionSet::UpdatePenalty(
 
     v->write_penalty_ = penalty;
 
-    Log(options_->info_log,"UpdatePenalty: %d", penalty);
+// mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
 
     return;
 
@@ -1647,6 +1655,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
               current_->GetOverlappingInputs(level+1, &new_start, &new_limit,
                                              &expanded1);
               if (expanded1.size() == c->inputs_[1].size()) {
+#if 0  // mutex_ held
                   Log(options_->info_log,
                       "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
                       level,
@@ -1656,6 +1665,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
                       int(expanded0.size()),
                       int(expanded1.size()),
                       long(expanded0_size), long(inputs1_size));
+#endif
                   smallest = new_start;
                   largest = new_limit;
                   c->inputs_[0] = expanded0;

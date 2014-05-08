@@ -600,7 +600,7 @@ Cache::Handle* LRUCache2::Lookup(const Slice& key, uint32_t hash) {
     LRU_Remove(e);
     LRU_Append(e);
 
-    // establish time limit on files in file cache (like 4 days)
+    // establish time limit on files in file cache (like 10 days)
     //  so they do not go stale and steal from block cache
     if (is_file_cache_)
     {
@@ -654,7 +654,7 @@ Cache::Handle* LRUCache2::Insert(
     e->expire_seconds=0;
     memcpy(e->key_data, key.data(), key.size());
 
-    // establish time limit on files in file cache (like 4 days)
+    // establish time limit on files in file cache (like 10 days)
     //  so they do not go stale and steal from block cache
     if (is_file_cache_)
     {
