@@ -39,16 +39,9 @@ Status BuildTable(const std::string& dbname,
   std::string fname = TableFileName(options, meta->number, meta->level);
   if (iter->Valid()) {
     WritableFile* file;
-    size_t map_size;
 
-    // large buffers, try for a little bit bigger than half hoping
-    //  for two writes ... not three
-    if (10*1024*1024 < options.write_buffer_size)
-        map_size=(options.write_buffer_size/6)*4;
-    else
-        map_size=(options.write_buffer_size*12)/10;  // integer multiply 1.2
-
-    s = env->NewWritableFile(fname, &file, map_size);
+    s = env->NewWritableFile(fname, &file,
+                                 env->RecoveryMmapSize(&options));
     if (!s.ok()) {
       return s;
     }
