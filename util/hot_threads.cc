@@ -2,7 +2,7 @@
 //
 // hot_threads.cc
 //
-// Copyright (c) 2011-2013 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2011-2014 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -27,6 +27,7 @@
 // -------------------------------------------------------------------
 
 #include <errno.h>
+#include <sched.h>
 #include <syslog.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
@@ -307,7 +308,7 @@ HotThreadPool::HotThreadPool(
     enum PerformanceCountersEnum Dequeued,
     enum PerformanceCountersEnum Weighted)
     : m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
-      m_Shutdown(false), 
+      m_Shutdown(false),
       m_WorkQueueAtomic(0), m_QueueThread(*this),
       m_DirectCounter(Direct), m_QueuedCounter(Queued),
       m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
@@ -315,6 +316,21 @@ HotThreadPool::HotThreadPool(
     int ret_val;
     size_t loop;
     HotThread * hot_ptr;
+    cpu_set_t set;
+
+    CPU_ZERO(&set);
+    CPU_SET(0, &set);
+    CPU_SET(1, &set);
+    CPU_SET(2, &set);
+    CPU_SET(3, &set);
+    CPU_SET(4, &set);
+    CPU_SET(5, &set);
+    CPU_SET(12, &set);
+    CPU_SET(13, &set);
+    CPU_SET(14, &set);
+    CPU_SET(15, &set);
+    CPU_SET(16, &set);
+    CPU_SET(17, &set);
 
     ret_val=0;
     for (loop=0; loop<PoolSize && 0==ret_val; ++loop)
@@ -323,9 +339,13 @@ HotThreadPool::HotThreadPool(
 
         ret_val=pthread_create(&hot_ptr->m_ThreadId, NULL,  &ThreadStaticEntry, hot_ptr);
         if (0==ret_val)
+        {
+            pthread_setaffinity_np(hot_ptr->m_ThreadId, sizeof(cpu_set_t), &set);
             m_Threads.push_back(hot_ptr);
+        }   // if
         else
             delete hot_ptr;
+
     }   // for
 
     m_Shutdown=(0!=ret_val);
