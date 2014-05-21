@@ -24,10 +24,10 @@ class MemTable {
   explicit MemTable(const InternalKeyComparator& comparator);
 
   // Increase reference count.
-  void Ref() { ++refs_; }
+  void Ref() volatile { ++refs_; }
 
   // Drop reference count.  Delete if no more references exist.
-  void Unref() {
+  void Unref() volatile {
     --refs_;
     assert(refs_ >= 0);
     if (refs_ <= 0) {

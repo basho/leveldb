@@ -33,8 +33,10 @@
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "util/thread_tasks.h"
 #include "util/throttle.h"
 #include "leveldb/perf_count.h"
 
@@ -132,6 +134,7 @@ Options SanitizeOptions(const std::string& dbname,
       result.info_log = NULL;
     }
   }
+
   if (result.block_cache == NULL) {
     result.block_cache = NewLRUCache(8 << 20);
   }
@@ -158,7 +161,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
       manual_compaction_(NULL),
-      level0_good(true)
+      level0_good(true),
+      throttle_end(0),
+      running_compactions_(0)
 {
   mem_->Ref();
   has_imm_.Release_Store(NULL);
@@ -180,7 +185,7 @@ DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
-  while (bg_compaction_scheduled_) {
+  while (IsCompactionScheduled()) {
     bg_cv_.Wait();
   }
   mutex_.Unlock();
@@ -246,30 +251,44 @@ void DBImpl::MaybeIgnoreError(Status* s) const {
   }
 }
 
-void DBImpl::DeleteObsoleteFiles() {
-  // Make a set of all of the live files
-  std::set<uint64_t> live = pending_outputs_;
-  versions_->AddLiveFiles(&live);
-
-  // prune the database root directory
-  std::vector<std::string> filenames;
-  env_->GetChildren(dbname_, &filenames); // Ignoring errors on purpose
-  for (size_t i = 0; i < filenames.size(); i++) {
-      KeepOrDelete(filenames[i], -1, live);
-  }   // for
-
-  // prune the table file directories
-  for (int level=0; level<config::kNumLevels; ++level)
+void DBImpl::DeleteObsoleteFiles()
+{
+  // Only run this routine when down to one
+  //  simultaneous compaction
+  if (RunningCompactionCount()<2)
   {
-      std::string dirname;
+      // each caller has mutex, we need to release it
+      //  since this disk activity can take a while
+      mutex_.AssertHeld();
 
-      filenames.clear();
-      dirname=MakeDirName2(dbname_, level, "sst");
-      env_->GetChildren(dirname, &filenames); // Ignoring errors on purpose
+      // Make a set of all of the live files
+      std::set<uint64_t> live = pending_outputs_;
+      versions_->AddLiveFiles(&live);
+
+      // release lock for disk work
+      mutex_.Unlock();
+
+      // prune the database root directory
+      std::vector<std::string> filenames;
+      env_->GetChildren(dbname_, &filenames); // Ignoring errors on purpose
       for (size_t i = 0; i < filenames.size(); i++) {
-          KeepOrDelete(filenames[i], level, live);
+          KeepOrDelete(filenames[i], -1, live);
       }   // for
-  }   // for
+
+      // prune the table file directories
+      for (int level=0; level<config::kNumLevels; ++level)
+      {
+          std::string dirname;
+
+          filenames.clear();
+          dirname=MakeDirName2(dbname_, level, "sst");
+          env_->GetChildren(dirname, &filenames); // Ignoring errors on purpose
+          for (size_t i = 0; i < filenames.size(); i++) {
+              KeepOrDelete(filenames[i], level, live);
+          }   // for
+      }   // for
+      mutex_.Lock();
+  }   // if
 }
 
 void
@@ -281,6 +300,8 @@ DBImpl::KeepOrDelete(
   uint64_t number;
   FileType type;
   bool keep = true;
+
+  // assumes mutex_ unlocked
 
   if (ParseFileName(Filename, &number, &type))
   {
@@ -319,11 +340,14 @@ DBImpl::KeepOrDelete(
           if (type == kTableFile) {
               // temporary hard coding of extra overlapped
               //  levels
+              mutex_.Lock();
               table_cache_->Evict(number, (Level<config::kNumOverlapLevels));
+              mutex_.Unlock();
           }
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
               static_cast<unsigned long long>(number));
+
           if (-1!=Level)
           {
               std::string file;
@@ -445,7 +469,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
 
     // Recover in the order in which the logs were generated
     std::sort(logs.begin(), logs.end());
-    for (size_t i = 0; i < logs.size(); i++) {
+    for (size_t i = 0; i < logs.size() && s.ok(); i++) {
       s = RecoverLogFile(logs[i], edit, &max_sequence);
 
       // The previous incarnation may not have written any MANIFEST
@@ -483,7 +507,7 @@ void DBImpl::CheckCompactionState()
         int level;
 
         // wait out executing compaction (Wait gives mutex to compactions)
-        if (bg_compaction_scheduled_)
+        if (IsCompactionScheduled())
             bg_cv_.Wait();
 
         for (level=0, need_compaction=false;
@@ -503,7 +527,7 @@ void DBImpl::CheckCompactionState()
             }   //if
         }   // for
 
-    } while(bg_compaction_scheduled_ && need_compaction);
+    } while(IsCompactionScheduled() && need_compaction);
 
     if (log_flag)
         Log(options_.info_log, "Cleanup compactions completed ... DB::Open continuing");
@@ -613,7 +637,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number,
   return status;
 }
 
-Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
+Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
@@ -621,10 +645,8 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   meta.number = versions_->NewFileNumber();
   meta.level = 0;
   pending_outputs_.insert(meta.number);
-  Iterator* iter = mem->NewIterator();
+  Iterator* iter = ((MemTable *)mem)->NewIterator();
   SequenceNumber smallest_snapshot;
-  Log(options_.info_log, "Level-0 table #%llu: started",
-      (unsigned long long) meta.number);
 
   if (snapshots_.empty()) {
     smallest_snapshot = versions_->LastSequence();
@@ -637,6 +659,8 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     Options local_options;
 
     mutex_.Unlock();
+    Log(options_.info_log, "Level-0 table #%llu: started",
+        (unsigned long long) meta.number);
 
     // want the data slammed to disk as fast as possible,
     //  no compression for level 0.
@@ -644,14 +668,14 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     local_options.compression=kNoCompression;
     s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
+    Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
+        (unsigned long long) meta.number,
+        (unsigned long long) meta.file_size,
+        (unsigned long long) meta.num_entries,
+      s.ToString().c_str());
     mutex_.Lock();
   }
 
-  Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
-      (unsigned long long) meta.number,
-      (unsigned long long) meta.file_size,
-      (unsigned long long) meta.num_entries,
-      s.ToString().c_str());
   delete iter;
   pending_outputs_.erase(meta.number);
 
@@ -694,6 +718,13 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       // 2x since mem to disk, not disk to disk
       // env_->SetWriteRate(2*stats.micros/meta.num_entries);
   }   // if
+
+  // Riak adds extra reference to file, must remove it
+  //  in this race condition upon close
+  if (s.ok() && shutting_down_.Acquire_Load()) {
+      versions_->GetTableCache()->Evict(meta.number, true);
+  }
+
 
   return s;
 }
@@ -772,7 +803,7 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
 
   MutexLock l(&mutex_);
   while (!manual.done) {
-    while (manual_compaction_ != NULL || bg_compaction_scheduled_) {
+    while (manual_compaction_ != NULL || IsCompactionScheduled()) {
       bg_cv_.Wait();
     }
     manual_compaction_ = &manual;
@@ -802,112 +833,144 @@ Status DBImpl::TEST_CompactMemTable() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  int state, priority;
-  bool push;
-
-  // decide which background thread gets the compaction job
-  state=0;
-  priority=0;
-  push=false;
-
-  // writing of memory to disk: high priority
-  if (NULL!=imm_)
+  if (!shutting_down_.Acquire_Load())
   {
-      push=true;
-  }   // if
-
-  // merge level 0s to level 1
-  else
-  {
-      Compaction * c_ptr;
-      c_ptr=versions_->PickCompaction();
-
-      // compaction of level 0 files:  high priority
-      if (NULL!=c_ptr && c_ptr->level()==0)
+      if (NULL==manual_compaction_)
       {
-          push=true;
-          priority=versions_->NumLevelFiles(0);
+          // ask versions_ to schedule work to hot threads
+          versions_->PickCompaction(this);
       }   // if
-      else
+
+      else if (!versions_->IsCompactionSubmitted(manual_compaction_->level))
       {
-          priority=versions_->current()->WritePenalty();
-      }   // else
-
-      delete c_ptr;
+          // support manual compaction under hot threads
+          versions_->SetCompactionSubmitted(manual_compaction_->level);
+          ThreadTask * task=new CompactionTask(this, NULL);
+          gCompactionThreads->Submit(task, true);
+      }   // else if
   }   // if
-
-  if (push)
-  {
-      // is something else already on background work queue
-      if (bg_compaction_scheduled_)
-          state=2;
-      else
-          state=1;
-  }   // if
-
-
-  if (bg_compaction_scheduled_ && !push) {
-    // Already scheduled
-  } else if (shutting_down_.Acquire_Load()) {
-    // DB is being deleted; no more background compactions
-  } else if (imm_ == NULL &&
-             manual_compaction_ == NULL &&
-             !versions_->NeedsCompaction()) {
-    // No work to be done
-  } else {
-    bg_compaction_scheduled_ = true;
-    env_->Schedule(&DBImpl::BGWork, this, state, (NULL!=imm_), priority);
-  }
 }
 
-void DBImpl::BGWork(void* db) {
-  reinterpret_cast<DBImpl*>(db)->BackgroundCall();
-}
 
-void DBImpl::BackgroundCall() {
+void DBImpl::BackgroundCall2(
+    Compaction * Compact) {
   MutexLock l(&mutex_);
-  assert(bg_compaction_scheduled_);
+  int level;
+  assert(IsCompactionScheduled());
+
+  ++running_compactions_;
+  if (NULL!=Compact)
+      level=Compact->level();
+  else if (NULL!=manual_compaction_)
+      level=manual_compaction_->level;
+  else
+      level=0;
+
+  if (0==level)
+      gPerfCounters->Inc(ePerfBGCompactLevel0);
+  else
+      gPerfCounters->Inc(ePerfBGNormal);
+
+  versions_->SetCompactionRunning(level);
+
   if (!shutting_down_.Acquire_Load()) {
-    Status s = BackgroundCompaction();
+    Status s = BackgroundCompaction(Compact);
     if (!s.ok()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
       // chew up resources for failed compactions for the duration of
       // the problem.
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      mutex_.Unlock();
       Log(options_.info_log, "Waiting after background compaction error: %s",
           s.ToString().c_str());
-      mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
     }
   }
+  else
+  {
+    delete Compact;
+  }   // else
   bg_compaction_scheduled_ = false;
+  --running_compactions_;
+  versions_->SetCompactionDone(level);
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   if (!options_.is_repair)
       MaybeScheduleCompaction();
   bg_cv_.SignalAll();
+
 }
 
-Status DBImpl::BackgroundCompaction() {
+
+void
+DBImpl::BackgroundImmCompactCall() {
+  MutexLock l(&mutex_);
+  assert(NULL != imm_);
+  Status s;
+
+  ++running_compactions_;
+  gPerfCounters->Inc(ePerfBGCompactImm);
+
+  if (!shutting_down_.Acquire_Load()) {
+    s = CompactMemTable();
+    if (!s.ok()) {
+      // Wait a little bit before retrying background compaction in
+      // case this is an environmental problem and we do not want to
+      // chew up resources for failed compactions for the duration of
+      // the problem.
+      bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      mutex_.Unlock();
+      Log(options_.info_log, "Waiting after background imm compaction error: %s",
+          s.ToString().c_str());
+      env_->SleepForMicroseconds(1000000);
+      mutex_.Lock();
+    }
+  }
+
+  --running_compactions_;
+
+  // Previous compaction may have produced too many files in a level,
+  // so reschedule another compaction if needed.
+  if (!options_.is_repair)
+      MaybeScheduleCompaction();
+
+  // shutdown is waiting for this imm_ to clear
+  if (shutting_down_.Acquire_Load()) {
+
+    // must abandon data in memory ... hope recovery log works
+    if (NULL!=imm_)
+      imm_->Unref();
+    imm_ = NULL;
+    has_imm_.Release_Store(NULL);
+  } // if
+
+  // retry imm compaction if failed and not shutting down
+  else if (!s.ok())
+  {
+      ThreadTask * task=new ImmWriteTask(this);
+      gImmThreads->Submit(task, true);
+  }   // else
+
+  bg_cv_.SignalAll();
+}
+
+
+Status DBImpl::BackgroundCompaction(
+    Compaction * Compact) {
   Status status;
 
   mutex_.AssertHeld();
 
-  if (imm_ != NULL) {
-    pthread_rwlock_rdlock(&gThreadLock0);
-    status=CompactMemTable();
-    pthread_rwlock_unlock(&gThreadLock0);
-    return status;
-  }
-
-  Compaction* c;
+  Compaction* c(Compact);
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
-  if (is_manual) {
-    ManualCompaction* m = manual_compaction_;
+  if (NULL!=c) {
+      // do nothing in this work block
+  } else  if (is_manual) {
+    ManualCompaction* m = (ManualCompaction *) manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == NULL);
     if (c != NULL) {
@@ -920,7 +983,7 @@ Status DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
-    c = versions_->PickCompaction();
+      // c = versions_->PickCompaction();
   }
 
 
@@ -974,7 +1037,7 @@ Status DBImpl::BackgroundCompaction() {
   }
 
   if (is_manual) {
-    ManualCompaction* m = manual_compaction_;
+    ManualCompaction* m = (ManualCompaction *)manual_compaction_;
     if (!status.ok()) {
       m->done = true;
     }
@@ -1109,12 +1172,6 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
-  Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
-      compact->compaction->num_input_files(0),
-      compact->compaction->level(),
-      compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1);
-
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == NULL);
   assert(compact->outfile == NULL);
@@ -1127,10 +1184,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  bool is_level0_compaction=(0 == compact->compaction->level());
+  Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
+      compact->compaction->num_input_files(0),
+      compact->compaction->level(),
+      compact->compaction->num_input_files(1),
+      compact->compaction->level() + 1);
 
-  if (is_level0_compaction)
-      pthread_rwlock_rdlock(&gThreadLock1);
+  bool is_level0_compaction=(0 == compact->compaction->level());
 
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
@@ -1146,11 +1206,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
-    // Prioritize compaction work ... every 100 keys
-    if (NULL==compact->builder
-	|| 0==(compact->builder->NumEntries() % 100))
-      imm_micros+=PrioritizeWork(is_level0_compaction);
-
     Slice key = input->key();
     if (compact->builder != NULL
         && compact->compaction->ShouldStopBefore(key, compact->builder->NumEntries())) {
@@ -1177,28 +1232,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
       compact->current_output()->largest.DecodeFrom(key);
       compact->builder->Add(key, input->value());
-
-      // update throttle ... now, end of compaction may be too late
-      //   but not too often since NowMicros can be costly
-      size_t entry_count;
-      entry_count=compact->num_entries + compact->builder->NumEntries();
-
-      // imm_micros intentional NOT removed from time calculation,
-      //  gives better measure of overall activity / write overhead
-      if (1==(entry_count % 1000) && 1000<entry_count)
-      {
-          // test for priority change
-          if (!is_level0_compaction)
-          {
-              // raise this compaction's priority if it is blocking a
-              //  dire compaction of level 0 files
-              if ((int)config::kL0_SlowdownWritesTrigger < versions_->current()->NumFiles(0))
-              {
-                  pthread_rwlock_rdlock(&gThreadLock1);
-                  is_level0_compaction=true;
-              }   // if
-          }   // if
-      }   // if
 
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
@@ -1248,93 +1281,20 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }
-  VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log,
-      "compacted to: %s", versions_->LevelSummary(&tmp));
+
+  // write log with mutex_ released
+  {
+      VersionSet::LevelSummaryStorage tmp;
+      versions_->LevelSummary(&tmp);
+      mutex_.Unlock();
+
+      Log(options_.info_log,
+          "compacted to: %s", tmp.buffer);
+      mutex_.Lock();
+  }
+
   return status;
 }
-
-
-int64_t
-DBImpl::PrioritizeWork(
-    bool IsLevel0)
-{
-    int64_t start_time;
-    bool again;
-    int ret_val;
-    struct timespec timeout;
-
-    start_time=env_->NowMicros();
-
-    // loop while on hold due to higher priority stuff,
-    //  but keep polling for need to handle imm_
-    do
-    {
-        again=false;
-
-        if (has_imm_.NoBarrier_Load() != NULL) {
-            mutex_.Lock();
-            if (imm_ != NULL) {
-                if (IsLevel0)
-                    pthread_rwlock_unlock(&gThreadLock1);
-                pthread_rwlock_rdlock(&gThreadLock0);
-                CompactMemTable();
-                pthread_rwlock_unlock(&gThreadLock0);
-                if (IsLevel0)
-                    pthread_rwlock_rdlock(&gThreadLock1);
-                bg_cv_.SignalAll();  // Wakeup MakeRoomForWrite() if necessary
-            }   // if
-            mutex_.Unlock();
-        }   // if
-
-        // pause to potentially hand off disk to
-        //  memtable threads
-#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
-        clock_gettime(CLOCK_REALTIME, &timeout);
-        timeout.tv_sec+=1;
-        ret_val=pthread_rwlock_timedwrlock(&gThreadLock0, &timeout);
-#else
-        // ugly spin lock
-        ret_val=pthread_rwlock_trywrlock(&gThreadLock0);
-        if (EBUSY==ret_val)
-        {
-            ret_val=ETIMEDOUT;
-            env_->SleepForMicroseconds(10000);  // 10milliseconds
-        }   // if
-#endif
-        if (0==ret_val)
-            pthread_rwlock_unlock(&gThreadLock0);
-        again=(ETIMEDOUT==ret_val);
-
-        // Give priorities to level 0 compactions, unless
-        //  this compaction is blocking a level 0 in this database
-        if (!IsLevel0 && level0_good && !again)
-        {
-#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
-            clock_gettime(CLOCK_REALTIME, &timeout);
-            timeout.tv_sec+=1;
-            ret_val=pthread_rwlock_timedwrlock(&gThreadLock1, &timeout);
-#else
-            // ugly spin lock
-            ret_val=pthread_rwlock_trywrlock(&gThreadLock1);
-            if (EBUSY==ret_val)
-            {
-                ret_val=ETIMEDOUT;
-                env_->SleepForMicroseconds(10000);  // 10milliseconds
-            }   // if
-#endif
-
-            if (0==ret_val)
-                pthread_rwlock_unlock(&gThreadLock1);
-            again=again || (ETIMEDOUT==ret_val);
-        }   // if
-    } while(again);
-
-    // let caller know how long was spent waiting.
-    return(env_->NowMicros() - start_time);
-
-}  // PrioritizeWork
-
 
 
 namespace {
@@ -1342,7 +1302,7 @@ struct IterState {
   port::Mutex* mu;
   Version* version;
   MemTable* mem;
-  MemTable* imm;
+  volatile MemTable* imm;
 };
 
 static void CleanupIteratorState(void* arg1, void* arg2) {
@@ -1367,7 +1327,7 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
   list.push_back(mem_->NewIterator());
   mem_->Ref();
   if (imm_ != NULL) {
-    list.push_back(imm_->NewIterator());
+     list.push_back(((MemTable *)imm_)->NewIterator());
     imm_->Ref();
   }
   versions_->current()->AddIterators(options, &list);
@@ -1415,7 +1375,7 @@ Status DBImpl::Get(const ReadOptions& options,
   }
 
   MemTable* mem = mem_;
-  MemTable* imm = imm_;
+  volatile MemTable* imm = imm_;
   Version* current = versions_->current();
   mem->Ref();
   if (imm != NULL) imm->Ref();
@@ -1432,7 +1392,7 @@ Status DBImpl::Get(const ReadOptions& options,
     if (mem->Get(lkey, value, &s)) {
       // Done
         gPerfCounters->Inc(ePerfGetMem);
-    } else if (imm != NULL && imm->Get(lkey, value, &s)) {
+    } else if (imm != NULL && ((MemTable *)imm)->Get(lkey, value, &s)) {
       // Done
         gPerfCounters->Inc(ePerfGetImm);
     } else {
@@ -1554,21 +1514,63 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   gPerfCounters->Inc(ePerfApiWrite);
 
   // protect use of versions_ ... still within scope of mutex_ lock
-  throttle=versions_->WriteThrottleUsec(bg_compaction_scheduled_);
+  throttle=versions_->WriteThrottleUsec(IsCompactionScheduled());
   }  // release  MutexLock l(&mutex_)
+
 
   // throttle on exit to reduce possible reordering
   if (0!=throttle)
   {
-      int count;
+      uint64_t now, remaining_wait, new_end, batch_wait;
+      int batch_count;
+
       /// slowing each call down sequentially
       MutexLock l(&throttle_mutex_);
 
+      // server may have been busy since previous write,
+      //  use only the remaining time as throttle
+      now=env_->NowMicros();
+
+      if (now < throttle_end)
+      {
+
+          remaining_wait=throttle_end - now;
+          env_->SleepForMicroseconds(remaining_wait);
+          new_end=now+remaining_wait+throttle;
+
+          gPerfCounters->Add(ePerfThrottleWait, remaining_wait);
+      }   // if
+      else
+      {
+          remaining_wait=0;
+          new_end=now + throttle;
+      }   // else
+
       // throttle is per key write, how many in batch?
-      count=(!options_.is_internal_db && NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
-      env_->SleepForMicroseconds(throttle * count);
-      gPerfCounters->Add(ePerfDebug0, throttle);
+      //  (do not use batch count on internal db because of impact to AAE)
+      batch_count=(!options_.is_internal_db && NULL!=my_batch ? WriteBatchInternal::Count(my_batch) : 1);
+      if (0 < batch_count)  // unclear if Count() could return zero
+          --batch_count;
+      batch_wait=throttle * batch_count;
+
+      // only wait on batch if extends beyond potential wait period
+      if (now + remaining_wait < throttle_end + batch_wait)
+      {
+          remaining_wait=throttle_end + batch_wait - (now + remaining_wait);
+          env_->SleepForMicroseconds(remaining_wait);
+          new_end +=remaining_wait;
+
+          gPerfCounters->Add(ePerfThrottleWait, remaining_wait);
+      }   // if
+
+      throttle_end=new_end;
   }   // if
+
+  // throttle not needed, kill off old wait time
+  else if (0!=throttle_end)
+  {
+      throttle_end=0;
+  }   // else if
 
   return status;
 }
@@ -1666,18 +1668,22 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "waiting 2...\n");
       gPerfCounters->Inc(ePerfWriteWaitImm);
       MaybeScheduleCompaction();
-      bg_cv_.Wait();
+      if (!shutting_down_.Acquire_Load())
+          bg_cv_.Wait();
       Log(options_.info_log, "running 2...\n");
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "waiting...\n");
       gPerfCounters->Inc(ePerfWriteWaitLevel0);
-      bg_cv_.Wait();
+      MaybeScheduleCompaction();
+      if (!shutting_down_.Acquire_Load())
+          bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
     } else {
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
+
       WritableFile* lfile = NULL;
       gPerfCounters->Inc(ePerfWriteNewMem);
       s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile);
@@ -1692,7 +1698,12 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       logfile_number_ = new_log_number;
       log_ = new log::Writer(lfile);
       imm_ = mem_;
-      has_imm_.Release_Store(imm_);
+      has_imm_.Release_Store((MemTable*)imm_);
+      if (NULL!=imm_)
+      {
+         ThreadTask * task=new ImmWriteTask(this);
+         gImmThreads->Submit(task, true);
+      }
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
       force = false;   // Do not force another compaction if have room
@@ -1811,6 +1822,11 @@ Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
 Status DB::Delete(const WriteOptions& opt, const Slice& key) {
   WriteBatch batch;
   batch.Delete(key);
+
+  // Negate the count to "ApiWrite"
+  gPerfCounters->Dec(ePerfApiWrite);
+  gPerfCounters->Inc(ePerfApiDelete);
+
   return Write(opt, &batch);
 }
 
@@ -1963,5 +1979,16 @@ DBImpl::VerifyLevels()
     return(result);
 
 }   // VerifyLevels
+
+
+bool
+DBImpl::IsCompactionScheduled()
+{
+    mutex_.AssertHeld();
+    bool flag(false);
+    for (int level=0; level< config::kNumLevels && !flag; ++level)
+        flag=versions_->IsCompactionSubmitted(level);
+    return(flag || NULL!=imm_);
+}   // DBImpl::IsCompactionScheduled
 
 }  // namespace leveldb

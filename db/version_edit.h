@@ -16,16 +16,17 @@ class VersionSet;
 
 struct FileMetaData {
   int refs;
-  int allowed_seeks;          // Seeks allowed until compaction
+//  int allowed_seeks;          // Seeks allowed until compaction
   uint64_t number;
   uint64_t file_size;         // File size in bytes
-  uint64_t num_entries;
+  uint64_t num_entries;       // count of values in .sst file, only valid during table build
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
   int level;
 
   FileMetaData()
-  : refs(0), allowed_seeks(1 << 30), file_size(0), num_entries(0), level(-1)
+  : refs(0), /*allowed_seeks(1 << 30),*/ file_size(0),
+      num_entries(0), level(-1)
   { }
 };
 

@@ -22,13 +22,14 @@
 
 namespace leveldb {
 
+class AppendableFile;
 class FileLock;
+class Options;
 class Logger;
 class RandomAccessFile;
 class SequentialFile;
 class Slice;
 class WritableFile;
-class AppendableFile;
 
 class Env {
  public:
@@ -41,6 +42,11 @@ class Env {
   //
   // The result of Default() belongs to leveldb and must never be deleted.
   static Env* Default();
+
+  // Riak specific:  Shutdown background work threads and other objects
+  //  to get clean environment for valgrind memory test.  No restart supported
+  //  after this call.  Not thread safe.
+  static void Shutdown();
 
   // Create a brand new sequentially-readable file with the specified name.
   // On success, stores a pointer to the new file in *result and returns OK.
@@ -83,8 +89,8 @@ class Env {
                                    WritableFile** result) = 0;
 
   // Riak specific:
-  // Allows for virtualized version of NewWritableFile that enables write 
-  // and close operations to execute on background threads 
+  // Allows for virtualized version of NewWritableFile that enables write
+  // and close operations to execute on background threads
   //  (where platform supported).
   //
   // The returned file will only be accessed by one thread at a time.
@@ -146,14 +152,11 @@ class Env {
   // serialized.
   virtual void Schedule(
       void (*function)(void* arg),
-      void* arg,
-      int state=0,
-      bool imm_flag=false,
-      int priority=0) = 0;
+      void* arg) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
-  virtual void StartThread(void (*function)(void* arg), void* arg) = 0;
+  virtual pthread_t StartThread(void (*function)(void* arg), void* arg) = 0;
 
   // *path is set to a temporary directory that can be used for testing. It may
   // or many not have just been created. The directory may or may not differ
@@ -229,6 +232,9 @@ class RandomAccessFile {
 
   // Riak optimization:  allows advising Linux page cache
   virtual void SetForCompaction(uint64_t file_size) {};
+
+  // Riak addition:  size of this structure in bytes
+  virtual size_t ObjectSize() {return(sizeof(RandomAccessFile));};
 };
 
 // A file abstraction for sequential writing.  The implementation
@@ -354,10 +360,10 @@ class EnvWrapper : public Env {
     return target_->LockFile(f, l);
   }
   Status UnlockFile(FileLock* l) { return target_->UnlockFile(l); }
-  void Schedule(void (*f)(void*), void* a, int state=0, bool imm=false, int priority=0) {
-      return target_->Schedule(f, a, state, imm, priority);
+  void Schedule(void (*f)(void*), void* a) {
+      return target_->Schedule(f, a);
   }
-  void StartThread(void (*f)(void*), void* a) {
+  pthread_t StartThread(void (*f)(void*), void* a) {
     return target_->StartThread(f, a);
   }
   virtual Status GetTestDirectory(std::string* path) {
