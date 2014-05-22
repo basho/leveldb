@@ -23,18 +23,19 @@
 #include <pthread.h>
 
 
-namespace leveldb 
+namespace leveldb
 {
 
 extern pthread_rwlock_t gThreadLock0;
 extern pthread_rwlock_t gThreadLock1;
 
 
-void ThrottleInit(Env * env);
+void ThrottleInit();
 
 void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Backlog);
 
 uint64_t GetThrottleWriteRate();
 
+void ThrottleShutdown();
 
 }  // namespace leveldb

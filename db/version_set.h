@@ -21,6 +21,7 @@
 #include "db/dbformat.h"
 #include "db/version_edit.h"
 #include "port/port.h"
+#include "leveldb/atomics.h"
 #include "leveldb/env.h"
 #include "util/throttle.h"
 
@@ -103,7 +104,9 @@ class Version {
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
-  int NumFiles(int level) const { return files_[level].size(); }
+  size_t NumFiles(int level) const { return files_[level].size(); }
+
+  typedef std::vector<FileMetaData*> FileMetaDataVector_t;
 
   const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
@@ -130,7 +133,7 @@ class Version {
   // List of files per level
   USED_BY_NESTED_FRIEND(std::vector<FileMetaData*> files_[config::kNumLevels])
 
-  // Next file to compact based on seek stats.
+  // Next file to compact based on seek stats (or Riak delete test)
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
@@ -139,6 +142,7 @@ class Version {
   // are initialized by Finalize().
   double compaction_score_;
   int compaction_level_;
+  bool compaction_grooming_;
   volatile int write_penalty_;
 
   explicit Version(VersionSet* vset)
@@ -183,15 +187,18 @@ class VersionSet {
   uint64_t ManifestFileNumber() const { return manifest_file_number_; }
 
   // Allocate and return a new file number
-  uint64_t NewFileNumber() { return next_file_number_++; }
+  //  (-1 is to "duplicate" old post-increment logic while maintaining
+  //   some threading integrity ... next_file_number_ used naked a bunch)
+  uint64_t NewFileNumber() { return(inc_and_fetch(&next_file_number_) -1); }
 
   // Arrange to reuse "file_number" unless a newer file number has
   // already been allocated.
   // REQUIRES: "file_number" was returned by a call to NewFileNumber().
+  //  (disabled due to threading concerns ... and desire NOT to use mutex, matthewv)
   void ReuseFileNumber(uint64_t file_number) {
-    if (next_file_number_ == file_number + 1) {
-      next_file_number_ = file_number;
-    }
+//    if (next_file_number_ == file_number + 1) {
+//      next_file_number_ = file_number;
+//    }
   }
 
   // Return the number of Table files at the specified level.
@@ -199,6 +206,8 @@ class VersionSet {
 
   // is the specified level overlapped (or if false->sorted)
   bool IsLevelOverlapped(int level) const;
+
+  uint64_t MaxFileSizeForLevel(int level) const;
 
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
@@ -224,9 +233,19 @@ class VersionSet {
 
   int WriteThrottleUsec(bool active_compaction)
   {
-      uint64_t penalty=current_->write_penalty_;
+      uint64_t penalty, throttle;
+      int ret_val;
 
-      return((int)(penalty * GetThrottleWriteRate()));
+      penalty=current_->write_penalty_;
+      throttle=GetThrottleWriteRate();
+
+      ret_val=0;
+      if (0==penalty && 1!=throttle)
+          ret_val=(int)throttle;
+      else if (0!=penalty)
+          ret_val=(int)penalty * throttle;
+
+      return(ret_val);
   }
 
 
@@ -234,7 +253,10 @@ class VersionSet {
   // Returns NULL if there is no compaction to be done.
   // Otherwise returns a pointer to a heap-allocated object that
   // describes the compaction.  Caller should delete the result.
-  Compaction* PickCompaction();
+  //
+  // Riak October 2013:  Pick Compaction now posts work directly
+  //  to hot_thread pools
+  void PickCompaction(class DBImpl * db_impl);
 
   // Return a compaction object for compacting the range [begin,end] in
   // the specified level.  Returns NULL if there is nothing in that
@@ -273,6 +295,22 @@ class VersionSet {
     char buffer[100];
   };
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
+  const char* CompactionSummary(LevelSummaryStorage* scratch) const;
+
+  TableCache* GetTableCache() {return(table_cache_);};
+
+  bool IsCompactionSubmitted(int level)
+  {return(m_CompactionStatus[level].m_Submitted);}
+
+  void SetCompactionSubmitted(int level)
+  {m_CompactionStatus[level].m_Submitted=true;}
+
+  void SetCompactionRunning(int level)
+  {m_CompactionStatus[level].m_Running=true;}
+
+  void SetCompactionDone(int level)
+  {   m_CompactionStatus[level].m_Running=false;
+      m_CompactionStatus[level].m_Submitted=false;}
 
  private:
   class Builder;
@@ -280,7 +318,8 @@ class VersionSet {
   friend class Compaction;
   friend class Version;
 
-  void Finalize(Version* v);
+  bool Finalize(Version* v);
+  void UpdatePenalty(Version *v);
 
   void GetRange(const std::vector<FileMetaData*>& inputs,
                 InternalKey* smallest,
@@ -303,7 +342,7 @@ class VersionSet {
   const Options* const options_;
   TableCache* const table_cache_;
   const InternalKeyComparator icmp_;
-  uint64_t next_file_number_;
+  volatile uint64_t next_file_number_;
   uint64_t manifest_file_number_;
   uint64_t last_sequence_;
   uint64_t log_number_;
@@ -319,6 +358,21 @@ class VersionSet {
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
+
+  // Riak allows multiple compaction threads, this mutex allows
+  //  only one to write to manifest at a time.  Only used in LogAndApply
+  port::Mutex manifest_mutex_;
+
+  struct CompactionStatus_s
+  {
+      bool m_Submitted;     //!< level submitted to hot thread pool
+      bool m_Running;       //!< thread actually running compaction
+
+      CompactionStatus_s()
+      : m_Submitted(false), m_Running(false)
+      {};
+  } m_CompactionStatus[config::kNumLevels];
+
 
   // No copying allowed
   VersionSet(const VersionSet&);

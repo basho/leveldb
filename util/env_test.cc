@@ -32,6 +32,7 @@ TEST(EnvPosixTest, RunImmediately) {
   ASSERT_TRUE(called.NoBarrier_Load() != NULL);
 }
 
+#if 0 // test assumes single thread and queue. No long valid assumption
 TEST(EnvPosixTest, RunMany) {
   port::AtomicPointer last_id (NULL);
 
@@ -63,6 +64,7 @@ TEST(EnvPosixTest, RunMany) {
   void* cur = last_id.Acquire_Load();
   ASSERT_EQ(4, reinterpret_cast<uintptr_t>(cur));
 }
+#endif
 
 struct State {
   port::Mutex mu;
@@ -80,10 +82,12 @@ static void ThreadBody(void* arg) {
 
 TEST(EnvPosixTest, StartThread) {
   State state;
+  pthread_t pid;
   state.val = 0;
   state.num_running = 3;
   for (int i = 0; i < 3; i++) {
-    env_->StartThread(&ThreadBody, &state);
+    pid=env_->StartThread(&ThreadBody, &state);
+    pthread_detach(pid);
   }
   while (true) {
     state.mu.Lock();

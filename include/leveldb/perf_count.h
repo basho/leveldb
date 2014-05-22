@@ -1,8 +1,8 @@
 // -------------------------------------------------------------------
 //
-// perf_count.h:  performance counters LevelDB (http://code.google.com/p/leveldb/)
+// perf_count.h:  performance counters LevelDB
 //
-// Copyright (c) 2012 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2012-2013 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -46,6 +46,9 @@ enum SstCountEnum
     eSstCountKeySmallest=9,    //!< smallest key in sst
     eSstCountValueLargest=10,  //!< largest value in sst
     eSstCountValueSmallest=11, //!< smallest value in sst
+    eSstCountDeleteKey=12,     //!< tombstone count
+    eSstCountBlockSizeUsed=13, //!< Options::block_size used with this file
+    eSstCountUserDataSize=14,  //!< post-compression size of non-metadata (user keys/values/block overhead)
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values
@@ -191,6 +194,37 @@ enum PerformanceCountersEnum
 
     ePerfBGWriteError=66,   //!< error in write/close, see syslog
 
+    ePerfThrottleWait=67,   //!< milliseconds of throttle wait
+    ePerfThreadError=68,    //!< system error on thread related call, no LOG access
+
+    ePerfBGImmDirect=69,    //!< count Imm compactions happened directly
+    ePerfBGImmQueued=70,    //!< count Imm compactions placed on queue
+    ePerfBGImmDequeued=71,  //!< count Imm compactions removed from queue
+    ePerfBGImmWeighted=72,  //!< total microseconds item spent on queue
+
+    ePerfBGUnmapDirect=73,  //!< count Unmap operations happened directly
+    ePerfBGUnmapQueued=74,  //!< count Unmap operations placed on queue
+    ePerfBGUnmapDequeued=75,//!< count Unmap operations removed from queue
+    ePerfBGUnmapWeighted=76,//!< total microseconds item spent on queue
+
+    ePerfBGLevel0Direct=77,  //!< count Level0 compactions happened directly
+    ePerfBGLevel0Queued=78,  //!< count Level0 compactions placed on queue
+    ePerfBGLevel0Dequeued=79,//!< count Level0 compactions removed from queue
+    ePerfBGLevel0Weighted=80,//!< total microseconds item spent on queue
+
+    ePerfBGCompactDirect=81,  //!< count generic compactions happened directly
+    ePerfBGCompactQueued=82,  //!< count generic compactions placed on queue
+    ePerfBGCompactDequeued=83,//!< count generic compactions removed from queue
+    ePerfBGCompactWeighted=84,//!< total microseconds item spent on queue
+
+    ePerfFileCacheInsert=85,  //!< total bytes inserted into file cache
+    ePerfFileCacheRemove=86,  //!< total bytes removed from file cache
+
+    ePerfBlockCacheInsert=87, //!< total bytes inserted into block cache
+    ePerfBlockCacheRemove=88, //!< total bytes removed from block cache
+
+    ePerfApiDelete=89,        //!< Count of DB::Delete
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values
@@ -226,7 +260,12 @@ public:
     bool VersionTest()
         {return(ePerfCountEnumSize<=m_CounterSize && ePerfVersion==m_Version);};
 
+    //!< mostly for perf_count_test.cc
+    void SetVersion(uint32_t Version, uint32_t CounterSize)
+    {m_Version=Version; m_CounterSize=CounterSize;};
+
     static PerformanceCounters * Init(bool IsReadOnly);
+    static int Close(PerformanceCounters * Counts);
 
     uint64_t Inc(unsigned Index);
     uint64_t Dec(unsigned Index);

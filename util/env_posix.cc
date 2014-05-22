@@ -28,9 +28,11 @@
 #include "leveldb/slice.h"
 #include "port/port.h"
 #include "util/crc32c.h"
+#include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"
+#include "util/thread_tasks.h"
 #include "util/throttle.h"
 #include "db/dbformat.h"
 #include "leveldb/perf_count.h"
@@ -55,8 +57,9 @@ static Status IOError(const std::string& context, int err_number) {
 static void BGFileUnmapper2(void* file_info);
 
 // data needed by background routines for close/unmap
-struct BGCloseInfo
+class BGCloseInfo : public ThreadTask
 {
+public:
     int fd_;
     void * base_;
     size_t offset_;
@@ -69,9 +72,24 @@ struct BGCloseInfo
         : fd_(fd), base_(base), offset_(offset), length_(length),
           ref_count_(ref_count), metadata_(metadata)
     {
+        // reference count of independent file object count
         if (NULL!=ref_count_)
             inc_and_fetch(ref_count_);
+
+        // reference count of threads/paths using this object
+        //  (because there is a direct path and a threaded path usage)
+        RefInc();
     };
+
+    virtual ~BGCloseInfo() {};
+
+    virtual void operator()() {BGFileUnmapper2(this);};
+
+private:
+    BGCloseInfo();
+    BGCloseInfo(const BGCloseInfo &);
+    BGCloseInfo & operator=(const BGCloseInfo &);
+
 };
 
 class PosixSequentialFile: public SequentialFile {
@@ -120,11 +138,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
       : filename_(fname), fd_(fd), is_compaction_(false), file_size_(0)
   {
 #if defined(HAVE_FADVISE)
-    // Currently hurts performance instead of helps.  Likely
-    //  requires better interaction with tables already in cache
-    //  that start compaction.  See comment in table_cache.cc.
     posix_fadvise(fd_, 0, file_size_, POSIX_FADV_RANDOM);
 #endif
+    gPerfCounters->Inc(ePerfROFileOpen);
   }
   virtual ~PosixRandomAccessFile()
   {
@@ -135,7 +151,8 @@ class PosixRandomAccessFile: public RandomAccessFile {
 #endif
       }   // if
 
-      close(fd_);
+     gPerfCounters->Inc(ePerfROFileClose);
+     close(fd_);
   }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -160,7 +177,11 @@ class PosixRandomAccessFile: public RandomAccessFile {
 
   };
 
+  // Riak addition:  size of this structure in bytes
+  virtual size_t ObjectSize() {return(sizeof(PosixRandomAccessFile)+filename_.length());};
+
 };
+
 
 // We preallocate up to an extra megabyte and use memcpy to append new
 // data to the file.  This is safe since we either properly close the
@@ -217,7 +238,7 @@ class PosixMmapFile : public WritableFile {
       {
           BGCloseInfo * ptr=new BGCloseInfo(fd_, base_, file_offset_, limit_-base_,
                                             ref_count_, metadata_offset_);
-          Env::Default()->Schedule(&BGFileUnmapper2, ptr, 4);
+          gWriteThreads->Submit(ptr);
       }   // else
 
       file_offset_ += limit_ - base_;
@@ -392,7 +413,7 @@ class PosixMmapFile : public WritableFile {
   {
       // when global set, make entire file use FADV_WILLNEED,
       //  so ignore this setting
-      if (!gFadviseWillNeed)
+      if (!gFadviseWillNeed && 1!=metadata_offset_)
           metadata_offset_=Metadata;
   }   // SetMetadataOffset
 
@@ -413,6 +434,7 @@ class PosixMmapFile : public WritableFile {
                   syslog(LOG_ERR,"ReleaseRef ftruncate failed [%d, %m]", errno);
 
               ret_val=close(File);
+              gPerfCounters->Inc(ePerfRWFileClose);
 
               delete [] Count;
           }   // if
@@ -479,10 +501,7 @@ static PosixLockTable gFileLocks;
 class PosixEnv : public Env {
  public:
   PosixEnv();
-  virtual ~PosixEnv() {
-    fprintf(stderr, "Destroying Env::Default()\n");
-    exit(1);
-  }
+  virtual ~PosixEnv();
 
   virtual Status NewSequentialFile(const std::string& fname,
                                    SequentialFile** result) {
@@ -679,9 +698,9 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual void Schedule(void (*function)(void*), void* arg, int state=0, bool imm_flag=false, int priority=0);
+  virtual void Schedule(void (*function)(void*), void* arg);
 
-  virtual void StartThread(void (*function)(void* arg), void* arg);
+  virtual pthread_t StartThread(void (*function)(void* arg), void* arg);
 
   virtual Status GetTestDirectory(std::string* result) {
     const char* env = getenv("TEST_TMPDIR");
@@ -716,9 +735,18 @@ class PosixEnv : public Env {
   }
 
   virtual uint64_t NowMicros() {
+#if _POSIX_TIMERS >= 200801L
+    struct timespec ts;
+
+    // this is rumored to be faster that gettimeofday(),
+    //  and sometimes shift less ... someday use CLOCK_MONOTONIC_RAW
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000 + ts.tv_nsec/1000;
+#else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+#endif
   }
 
   virtual void SleepForMicroseconds(int micros) {
@@ -744,8 +772,9 @@ class PosixEnv : public Env {
   }  // SleepForMicroSeconds
 
 
-  virtual int GetBackgroundBacklog() const {return(bg_backlog_);};
-
+  virtual int GetBackgroundBacklog() const
+    {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic
+          + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
 
  private:
   void PthreadCall(const char* label, int result) {
@@ -765,37 +794,10 @@ class PosixEnv : public Env {
   size_t page_size_;
   pthread_mutex_t mu_;
   pthread_cond_t bgsignal_;
-  pthread_t bgthread_;     // normal compactions
-  pthread_t bgthread2_;    // level 0 to level 1 compactions
-  pthread_t bgthread3_;    // background unmap / close
-  pthread_t bgthread4_;    // imm_ to level 0 compactions
-  bool started_bgthread_;
-  volatile int bg_backlog_;// count of items on 3 compaction queues
-  volatile int bg_active_; // count of threads actually working compaction
   int64_t clock_res_;
 
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); int priority;};
-  typedef std::deque<BGItem> BGQueue;
-  BGQueue queue_;     //normal compactions
-  BGQueue queue2_;    // level 0 to level 1 compactions
-  BGQueue queue3_;    //background unmap / close
-  BGQueue queue4_;    // imm_ to level 0 compactions
-
-  void InsertQueue0(struct PosixEnv::BGItem & item);
-  void InsertQueue2(struct PosixEnv::BGItem & item);
-
-  void SetBacklog()
-  {
-      uint32_t cur_backlog;
-
-      // mutex mu_ is assumed locked.
-      cur_backlog=queue4_.size()+queue2_.size()+queue_.size()+bg_active_;
-
-      bg_backlog_=cur_backlog;
-
-      return;
-  };
 
   volatile uint64_t write_rate_usec_; // recently experienced average time to
                                       // write one key during background compaction
@@ -804,8 +806,6 @@ class PosixEnv : public Env {
 
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
-                       started_bgthread_(false),
-                       bg_backlog_(0), bg_active_(0),
                        clock_res_(1), write_rate_usec_(0)
 {
   struct timespec ts;
@@ -821,261 +821,18 @@ PosixEnv::PosixEnv() : page_size_(getpagesize()),
   PthreadCall("cvar_init", pthread_cond_init(&bgsignal_, NULL));
 }
 
-// state: 0 - legacy/default, 4 - close/unmap, 2 - test for queue switch, 1 - imm/high priority
-void
-PosixEnv::Schedule(
-    void (*function)(void*),
-    void* arg,
-    int state,
-    bool imm_flag,
-    int priority)
+
+PosixEnv::~PosixEnv()
 {
-    PthreadCall("lock", pthread_mutex_lock(&mu_));
+}   // PosixEnf::~PosixEnv
 
-    // Start background thread if necessary
-    if (!started_bgthread_) {
-        started_bgthread_ = true;
+void PosixEnv::Schedule(void (*function)(void*), void* arg) {
+    ThreadTask * task;
 
-        // future, set SCHED_FIFO ... assume application at priority 50
-        /// legacy compaction thread priority 45, 5 points lower
-        PthreadCall(
-            "create thread",
-            pthread_create(&bgthread_, NULL,  &PosixEnv::BGThreadWrapper, this));
-
-        /// level0 compaction, speed thread priority 60
-        PthreadCall(
-            "create thread 2",
-            pthread_create(&bgthread2_, NULL,  &PosixEnv::BGThreadWrapper, this));
-
-        /// close / unmap thread priority 47, higher than compaction but lower than application
-        PthreadCall(
-            "create thread 3",
-            pthread_create(&bgthread3_, NULL,  &PosixEnv::BGThreadWrapper, this));
-
-        /// imm->level0 dump
-        PthreadCall(
-            "create thread 4",
-            pthread_create(&bgthread4_, NULL,  &PosixEnv::BGThreadWrapper, this));
-    }
-
-    // If the queue is currently empty, the background thread may currently be
-    // waiting.
-// 11/20/12 - have seen background threads stuck with full queues and threads waiting
-//    if (queue_.empty() || queue2_.empty() || queue3_.empty() || queue4_.empty())
-    {
-        PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
-    }
-
-    if (0 != state)
-    {
-        BGQueue::iterator it;
-        bool found;
-
-        found=false;
-
-        // close / unmap memory mapped files
-        if (4==state)
-        {
-            if (queue3_.empty())
-                PthreadCall("broadcast", pthread_cond_broadcast(&bgsignal_));
-
-            queue3_.push_back(BGItem());
-            queue3_.back().function = function;
-            queue3_.back().arg = arg;
-        }   // if
-
-        // only "switch" lists if found waiting on a lower priority compaction list
-        else if (2==state)
-        {
-            for (found=false, it=queue_.begin(); queue_.end()!=it && !found; ++it)
-            {
-                found= (it->arg == arg);
-                if (found)
-                {
-                    BGQueue::iterator del_it;
-
-                    del_it=it;
-                    ++it;
-
-                    queue_.erase(del_it);
-                    if (imm_flag)
-                    {
-                        queue4_.push_back(BGItem());
-                        queue4_.back().function = function;
-                        queue4_.back().arg = arg;
-                    }   // if
-                    else
-                    {
-                        BGItem item={arg, function, priority};
-
-                        InsertQueue2(item);
-                    }   // else
-                }   // if
-            }   // for
-
-            if (!found && imm_flag)
-            {
-                for (found=false, it=queue2_.begin(); queue2_.end()!=it && !found; ++it)
-                {
-                    found= (it->arg == arg);
-                    if (found)
-                    {
-                        BGQueue::iterator del_it;
-
-                        del_it=it;
-                        ++it;
-
-                        queue2_.erase(del_it);
-
-                        queue4_.push_back(BGItem());
-                        queue4_.back().function = function;
-                        queue4_.back().arg = arg;
-                    }   // if
-                }   // for
-            }   // if
-        }   // if
-
-        // state 1, adding imm_ or level 0 (nothing already scheduled)
-        else
-        {
-            if (imm_flag)
-            {
-                queue4_.push_back(BGItem());
-                queue4_.back().function = function;
-                queue4_.back().arg = arg;
-            }   // if
-            else
-            {
-                BGItem item={arg, function, priority};
-
-                InsertQueue2(item);
-            }   // else
-        }   // else
-    }   // if
-    else
-    {
-        // low priority compaction (not imm, not level0)
-        BGItem item={arg, function, priority};
-
-        InsertQueue0(item);
-    }   // else
-
-    SetBacklog();
-
-    PthreadCall("unlock", pthread_mutex_unlock(&mu_));
+    task=new LegacyTask(function,arg);
+    gCompactionThreads->Submit(task, true);
 }
 
-/**
- * Poor man's std::priority_queue.  Said container appeared to not
- * support direct access to underlying type ... which is needed.
- */
-void
-PosixEnv::InsertQueue0(
-    PosixEnv::BGItem & item)
-{
-    BGQueue::iterator it;
-    bool looking;
-
-    // this is slow and painful with deque as underlying container
-    for (it=queue_.begin(), looking=true; queue_.end()!=it && looking; ++it)
-    {
-        if (it->priority<item.priority)
-        {
-            looking=false;
-            queue_.insert(it, item);
-        }   // if
-    }   // for
-
-    if (looking)
-        queue_.push_back(item);
-
-    return;
-
-}   // Posix::InsertQueue0
-
-void
-PosixEnv::InsertQueue2(
-    PosixEnv::BGItem & item)
-{
-    BGQueue::iterator it;
-    bool looking;
-
-    // this is slow and painful with deque as underlying container
-    for (it=queue2_.begin(), looking=true; queue2_.end()!=it && looking; ++it)
-    {
-        if (it->priority<item.priority)
-        {
-            looking=false;
-            queue2_.insert(it, item);
-        }   // if
-    }   // for
-
-    if (looking)
-        queue2_.push_back(item);
-
-    return;
-
-}   // Posix::InsertQueue2
-
-
-void PosixEnv::BGThread()
-{
-    BGQueue * queue_ptr;
-
-    // avoid race condition of whether or not all 4 thread creations
-    //  have completed AND set bgthreadX_ values
-    PthreadCall("lock", pthread_mutex_lock(&mu_));
-
-    // pick source of thread's work
-    if (bgthread4_==pthread_self())
-        queue_ptr=&queue4_;
-    else if (bgthread3_==pthread_self())
-        queue_ptr=&queue3_;
-    else if (bgthread2_==pthread_self())
-        queue_ptr=&queue2_;
-    else
-        queue_ptr=&queue_;
-    PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-
-    while (true)
-    {
-        // Wait until there is an item that is ready to run
-        PthreadCall("lock", pthread_mutex_lock(&mu_));
-
-        // ignore bg_active_ first time through loop (and if somehow corrupted)
-        if (0<bg_active_)
-        {
-            --bg_active_;
-            SetBacklog();
-        }   // if
-        else
-            bg_active_=0;
-
-        while (queue_ptr->empty()) {
-            PthreadCall("wait", pthread_cond_wait(&bgsignal_, &mu_));
-        }
-
-        void (*function)(void*) = queue_ptr->front().function;
-        void* arg = queue_ptr->front().arg;
-        queue_ptr->pop_front();
-
-        ++bg_active_;
-        SetBacklog();
-
-        PthreadCall("unlock", pthread_mutex_unlock(&mu_));
-
-        if (bgthread4_==pthread_self())
-            gPerfCounters->Inc(ePerfBGCompactImm);
-        else if (bgthread3_==pthread_self())
-            gPerfCounters->Inc(ePerfBGCloseUnmap);
-        else if (bgthread2_==pthread_self())
-            gPerfCounters->Inc(ePerfBGCompactLevel0);
-        else
-            gPerfCounters->Inc(ePerfBGNormal);
-
-        (*function)(arg);
-    }   // while
-}
 
 namespace {
 struct StartThreadState {
@@ -1090,13 +847,15 @@ static void* StartThreadWrapper(void* arg) {
   return NULL;
 }
 
-void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
+pthread_t PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
   pthread_t t;
   StartThreadState* state = new StartThreadState;
   state->user_function = function;
   state->arg = arg;
   PthreadCall("start thread",
               pthread_create(&t, NULL,  &StartThreadWrapper, state));
+
+  return(t);
 }
 
 
@@ -1109,6 +868,11 @@ void BGFileUnmapper2(void * arg)
 
     err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
+
+    // non-null implies this is a background job,
+    //  i.e. not on direct thread of compaction.
+    if (NULL!=file_ptr->ref_count_)
+        gPerfCounters->Inc(ePerfBGCloseUnmap);
 
     ret_val=munmap(file_ptr->base_, file_ptr->length_);
     if (0!=ret_val)
@@ -1149,11 +913,14 @@ void BGFileUnmapper2(void * arg)
 
     PosixMmapFile::ReleaseRef(file_ptr->ref_count_, file_ptr->fd_);
 
-    delete file_ptr;
     gPerfCounters->Inc(ePerfRWFileUnmap);
 
     if (err_flag)
         gPerfCounters->Inc(ePerfBGWriteError);
+
+    // routine called directly or via async thread, this
+    //  controls when to delete file_ptr object
+    file_ptr->RefDec();
 
     return;
 
@@ -1163,23 +930,18 @@ void BGFileUnmapper2(void * arg)
 
 // how many blocks of 4 priority background threads/queues
 /// for riak, make sure this is an odd number (and especially not 4)
-#define THREAD_BLOCKS 5
+#define THREAD_BLOCKS 1
 
 static bool HasSSE4_2();
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
-static Env* default_env[THREAD_BLOCKS];
-static unsigned count=0;
+static Env* default_env;
+static volatile bool started=false;
 static void InitDefaultEnv()
 {
-    int loop;
+    default_env=new PosixEnv;
 
-    for (loop=0; loop<THREAD_BLOCKS; ++loop)
-    {
-        default_env[loop]=new PosixEnv;
-    }   // for
-
-    ThrottleInit(default_env[0]);
+    ThrottleInit();
 
     // force the loading of code for both filters in case they
     //  are hidden in a shared library
@@ -1194,13 +956,53 @@ static void InitDefaultEnv()
 
     PerformanceCounters::Init(false);
 
+    gImmThreads=new HotThreadPool(5, "ImmWrite",
+                                  ePerfBGImmDirect, ePerfBGImmQueued,
+                                  ePerfBGImmDequeued, ePerfBGImmWeighted);
+    gWriteThreads=new HotThreadPool(3, "RecoveryWrite",
+                                    ePerfBGUnmapDirect, ePerfBGUnmapQueued,
+                                    ePerfBGUnmapDequeued, ePerfBGUnmapWeighted);
+    gLevel0Threads=new HotThreadPool(3, "Level0Compact",
+                                     ePerfBGLevel0Direct, ePerfBGLevel0Queued,
+                                     ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
+    gCompactionThreads=new HotThreadPool(3, "GeneralCompact",
+                                         ePerfBGCompactDirect, ePerfBGCompactQueued,
+                                         ePerfBGCompactDequeued, ePerfBGCompactWeighted);
+
+    started=true;
 }
 
 Env* Env::Default() {
   pthread_once(&once, InitDefaultEnv);
-  ++count;
-  return default_env[count % THREAD_BLOCKS];
+  return default_env;
 }
+
+
+void Env::Shutdown()
+{
+    if (started)
+    {
+        delete default_env;
+        default_env=NULL;
+
+        ThrottleShutdown();
+    }   // if
+
+    ComparatorShutdown();
+
+    delete gImmThreads;
+    gImmThreads=NULL;
+
+    delete gWriteThreads;
+    gWriteThreads=NULL;
+
+    delete gLevel0Threads;
+    gLevel0Threads=NULL;
+
+    delete gCompactionThreads;
+    gCompactionThreads=NULL;
+
+}   // Env::Shutdown
 
 
 static bool

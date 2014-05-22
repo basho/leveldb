@@ -7,6 +7,10 @@
 #ifndef STORAGE_LEVELDB_PORT_PORT_POSIX_H_
 #define STORAGE_LEVELDB_PORT_PORT_POSIX_H_
 
+// to properly pull in bits/posix_opt.h on Linux
+#include <unistd.h>
+#include <assert.h>
+
 #undef PLATFORM_IS_LITTLE_ENDIAN
 #if defined(OS_MACOSX)
   #include <machine/endian.h>
@@ -91,7 +95,7 @@ class Mutex {
 
   void Lock();
   void Unlock();
-  void AssertHeld() { }
+  void AssertHeld() {assert(0!=pthread_mutex_trylock(&mu_));}
 
  private:
   friend class CondVar;
@@ -101,6 +105,30 @@ class Mutex {
   Mutex(const Mutex&);
   void operator=(const Mutex&);
 };
+
+
+#if defined(_POSIX_SPIN_LOCKS) && 0<_POSIX_SPIN_LOCKS
+class Spin {
+ public:
+  Spin();
+  ~Spin();
+
+  void Lock();
+  void Unlock();
+  void AssertHeld() {assert(0!=pthread_spin_trylock(&sp_));}
+
+ private:
+  friend class CondVar;
+  pthread_spinlock_t sp_;
+
+  // No copying
+  Spin(const Spin&);
+  void operator=(const Spin&);
+};
+#else
+typedef Mutex Spin;
+#endif
+
 
 class CondVar {
  public:
