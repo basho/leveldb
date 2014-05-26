@@ -440,7 +440,7 @@ DoubleCache::DoubleCache(
     //  (with 64 or open databases, this is a serious number)
     // and fixed allocation for two write buffers
 
-    m_Overhead=options.write_buffer_size*2 
+    m_Overhead=options.write_buffer_size*2
         + options.env->RecoveryMmapSize(&options) + 4096;
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
 
@@ -527,7 +527,7 @@ DoubleCache::GetCapacity(
                     uint32_t spare;
 
                     spare=ret_val-m_BlockCacheThreshold;
-
+#if 0
                     // use m_SizeCachedFiles as approximation of page cache
                     //  space needed for full files, i.e. prefer page cache to block cache
                     //  (must use temp since m_SizeCachedFiles is volatile)
@@ -536,7 +536,7 @@ DoubleCache::GetCapacity(
                         spare -= temp;
                     else
                         spare=0;
-
+#endif
                     ret_val=m_BlockCacheThreshold + spare;
                 }   // if
 

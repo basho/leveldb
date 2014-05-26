@@ -341,6 +341,12 @@ int main(int argc, char** argv) {
     // Create new database
     leveldb_close(db);
     leveldb_destroy_db(options, dbname, &err);
+
+    // clean cache since Riak uses filenumber
+    leveldb_cache_destroy(cache);
+    cache = leveldb_cache_create_lru(100000);
+    leveldb_options_set_cache(options, cache);
+
     leveldb_options_set_filter_policy(options, policy);
     db = leveldb_open(options, dbname, &err);
     CheckNoError(err);

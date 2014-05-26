@@ -50,7 +50,7 @@ Status BuildTable(const std::string& dbname,
     //  (compaction of unsorted files causes severe cache misses)
     file->SetMetadataOffset(1);
 
-    TableBuilder* builder = new TableBuilder(options, file);
+    TableBuilder* builder = new TableBuilder(options, file, meta->level, meta->number);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       ++keys_seen;

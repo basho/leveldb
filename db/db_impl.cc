@@ -1175,7 +1175,8 @@ Status DBImpl::OpenCompactionOutputFile(
       //  (compaction of unsorted files causes severe cache misses)
       if (versions_->IsLevelOverlapped(compact->compaction->level()))
           compact->outfile->SetMetadataOffset(1);
-      compact->builder = new TableBuilder(options, compact->outfile);
+      compact->builder = new TableBuilder(options, compact->outfile,
+                                          compact->compaction->level()+1, file_number);
   }   // if
 
   return s;

@@ -55,7 +55,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);
     if (s.ok()) {
-      s = Table::Open(*options_, file, file_size, &table);
+      s = Table::Open(*options_, file, file_size, &table, file_number);
 
       // Riak:  support opportunity to manage Linux page cache
       if (is_compaction)

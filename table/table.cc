@@ -42,7 +42,8 @@ struct Table::Rep {
 Status Table::Open(const Options& options,
                    RandomAccessFile* file,
                    uint64_t size,
-                   Table** table) {
+                   Table** table,
+                   uint64_t file_number) {
   *table = NULL;
   if (size < Footer::kEncodedLength) {
     return Status::InvalidArgument("file is too short to be an sstable");
@@ -81,7 +82,8 @@ Status Table::Open(const Options& options,
     rep->file_size = size;
     rep->metaindex_handle = footer.metaindex_handle();
     rep->index_block = index_block;
-    rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
+    if (0==file_number) file_number=(options.block_cache ? options.block_cache->NewId() : 0);
+    rep->cache_id = file_number;
     rep->filter_data = NULL;
     rep->filter_data_size = 0;
     rep->filter = NULL;
@@ -370,7 +372,7 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
 }
 
 
-uint64_t 
+uint64_t
 Table::GetFileSize()
 {
     return(rep_->file_size);

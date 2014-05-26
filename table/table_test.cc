@@ -247,7 +247,7 @@ class TableConstructor: public Constructor {
     source_ = new StringSource(sink.contents());
     Options table_options;
     table_options.comparator = options.comparator;
-    return Table::Open(table_options, source_, sink.contents().size(), &table_);
+    return Table::Open(table_options, source_, sink.contents().size(), &table_, 0);
   }
 
   virtual Iterator* NewIterator() const {

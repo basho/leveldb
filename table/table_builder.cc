@@ -6,11 +6,13 @@
 
 #include <assert.h>
 #include "db/dbformat.h"
+#include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
 #include "leveldb/perf_count.h"
+#include "table/block.h"
 #include "table/block_builder.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -63,8 +65,10 @@ struct TableBuilder::Rep {
   }
 };
 
-TableBuilder::TableBuilder(const Options& options, WritableFile* file)
-    : rep_(new Rep(options, file)) {
+TableBuilder::TableBuilder(const Options& options, WritableFile* file,
+                           int level, uint64_t file_number)
+    : rep_(new Rep(options, file)), level_(level), file_number_(file_number)
+  {
   if (rep_->filter_block != NULL) {
     rep_->filter_block->StartBlock(0);
   }
@@ -159,6 +163,13 @@ void TableBuilder::Flush() {
   }
 }
 
+static void DeleteCachedBlock(const Slice& key, void* value) {
+  Block* block = reinterpret_cast<Block*>(value);
+  delete block;
+}
+
+
+
 void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]
@@ -170,6 +181,34 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
 
   r->sst_counters.Inc(eSstCountBlocks);
   r->sst_counters.Add(eSstCountBlockSize, raw.size());
+
+  // experimental code to help performance after landing
+  //  zone compactions
+  if (0!=file_number_ && (2==level_ || 3==level_)
+      && NULL!=rep_->options.block_cache)
+  {
+      BlockContents contents;
+
+      Cache::Handle * cache_handle;
+      Cache* block_cache = rep_->options.block_cache;
+      char * data = new char[raw.size()];
+      memcpy(data, raw.data(), raw.size());
+
+      char cache_key_buffer[16];
+      EncodeFixed64(cache_key_buffer, file_number_);
+      EncodeFixed64(cache_key_buffer+8, r->offset);
+      Slice key(cache_key_buffer, sizeof(cache_key_buffer));
+
+      contents.data=Slice(data, raw.size());
+      contents.cachable=true;
+      contents.heap_allocated=true;
+      Block *block=new Block(contents);
+      cache_handle=block_cache->Insert(key, block,
+                                       (block->size() + sizeof(cache_key_buffer)),
+                                       &DeleteCachedBlock);
+      block_cache->Release(cache_handle);
+  }   // if
+
 
   Slice block_contents;
   CompressionType type = r->options.compression;

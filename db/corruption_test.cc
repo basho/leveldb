@@ -56,6 +56,9 @@ class CorruptionTest {
     db_ = NULL;
     Options opt = (options ? *options : options_);
     opt.env = &env_;
+    // riak needs fresh cache on each open since filenumber is key
+    delete tiny_cache_;
+    tiny_cache_ = NewLRUCache(100);
     opt.block_cache = tiny_cache_;
     return DB::Open(opt, dbname_, &db_);
   }
@@ -222,8 +225,8 @@ TEST(CorruptionTest, NewFileErrorDuringWrite) {
   const int num = 3 + (Options().write_buffer_size / kValueSize);
   std::string value_storage;
   Status s;
-  for (int i = 0; 
-       s.ok() && i < num && 0==env_.num_writable_file_errors_; 
+  for (int i = 0;
+       s.ok() && i < num && 0==env_.num_writable_file_errors_;
        i++) {
     WriteBatch batch;
     batch.Put("a", Value(100, &value_storage));
