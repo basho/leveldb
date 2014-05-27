@@ -268,7 +268,7 @@ main(
                             printf("\n");
                         }   // if
 
-                        printf("%s, %llu, %zd, %d,",
+                        printf("%s, %" PRIu64 ", %zd, %d,",
                                table_name.c_str(), meta.file_size, table->TEST_GetIndexBlock()->size(), count);
 
                         printf(" %d, %zd, %zd, %zd, %zd,",
@@ -286,7 +286,7 @@ main(
                             counters=table->GetSstCounters();
 
                             for (loop=0; loop<counters.Size(); ++loop)
-                                printf(", %llu", counters.Value(loop));
+                                printf(", %" PRIu64, counters.Value(loop));
                         }   // if
 
                         printf("\n");
