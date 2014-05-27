@@ -647,7 +647,7 @@ Cache::Handle* LRUCache2::Insert(
 
     e->value = value;
     e->deleter = deleter;
-    e->charge = charge + this_size;  // assumes charge is always byte size
+    e->charge = charge + this_size + sizeof(LRUHandle2 *);  // assumes charge is always byte size
     e->key_length = key.size();
     e->hash = hash;
     e->refs = 2;  // One from LRUCache2, one for the returned handle

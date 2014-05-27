@@ -73,7 +73,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       tf->table = table;
       tf->doublecache = &doublecache_;
 
-      *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
+      *handle = cache_->Insert(key, tf, sizeof(TableAndFile) + table->TableObjectSize(), &DeleteEntry);
 //      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
       gPerfCounters->Inc(ePerfTableOpened);
       doublecache_.AddFileSize(table->GetFileSize());

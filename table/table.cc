@@ -389,8 +389,11 @@ Table::TEST_GetIndexBlock() {return(rep_->index_block);};
 size_t
 Table::TableObjectSize()
 {
-    return(sizeof(Table) + sizeof(Table::Rep) + rep_->index_block->size() + rep_->filter_data_size + rep_->file->ObjectSize()
-           + sizeof(FilterBlockReader) + sizeof(Block));
+    return(sizeof(Table) + sizeof(Table::Rep)
+           + rep_->file->ObjectSize()                           // RandomAccessFile * file
+           + sizeof(FilterBlockReader) + rep_->filter_data_size // FilterBlockReader * filter
+           + sizeof(Block) + rep_->index_block->size());        // Block * index_block
+
 };
 
 size_t
