@@ -228,6 +228,7 @@ static void DeleteBlock(void* arg, void* ignored) {
 static void DeleteCachedBlock(const Slice& key, void* value) {
   Block* block = reinterpret_cast<Block*>(value);
   delete block;
+  gPerfCounters->Inc(ePerfDebug4);
 }
 
 static void ReleaseBlock(void* arg, void* h) {
@@ -273,6 +274,8 @@ Iterator* Table::BlockReader(void* arg,
                 key, block,
                 (sizeof(Block) + block->size() + sizeof(cache_key_buffer)),
                 &DeleteCachedBlock);
+            gPerfCounters->Inc(ePerfDebug3);
+
           }
         }
       }

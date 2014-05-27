@@ -364,6 +364,7 @@ class PosixMmapFile : public WritableFile {
             syslog(LOG_ERR,"Close ftruncate failed [%d, %m]", errno);
 
         ret_val=close(fd_);
+        gPerfCounters->Inc(ePerfRWFileClose);
     }  // if
 
     // async close

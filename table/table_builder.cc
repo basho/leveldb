@@ -166,6 +166,8 @@ void TableBuilder::Flush() {
 static void DeleteCachedBlock(const Slice& key, void* value) {
   Block* block = reinterpret_cast<Block*>(value);
   delete block;
+  gPerfCounters->Inc(ePerfDebug2);
+
 }
 
 
@@ -207,7 +209,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
                                        (sizeof(Block) + block->size() + sizeof(cache_key_buffer)),
                                        &DeleteCachedBlock);
       block_cache->Release(cache_handle);
-      gPerfCounters->Inc(ePerfDebug0);
+      gPerfCounters->Inc(ePerfDebug1);
   }   // if
 
 

@@ -298,7 +298,7 @@ void DBImpl::DeleteObsoleteFiles()
       versions_->AddLiveFiles(&live);
 
       // release lock for disk work
-      mutex_.Unlock();
+//      mutex_.Unlock();
 
       // prune the database root directory
       std::vector<std::string> filenames;
@@ -319,7 +319,7 @@ void DBImpl::DeleteObsoleteFiles()
               KeepOrDelete(filenames[i], level, live);
           }   // for
       }   // for
-      mutex_.Lock();
+//      mutex_.Lock();
   }   // if
 }
 
@@ -372,9 +372,9 @@ DBImpl::KeepOrDelete(
           if (type == kTableFile) {
               // temporary hard coding of extra overlapped
               //  levels
-              mutex_.Lock();
+//              mutex_.Lock();
               table_cache_->Evict(number, (Level<config::kNumOverlapLevels));
-              mutex_.Unlock();
+//              mutex_.Unlock();
           }
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
@@ -1172,8 +1172,8 @@ Status DBImpl::OpenCompactionOutputFile(
 
       // tune fadvise to keep all of this lower level file in page cache
       //  (compaction of unsorted files causes severe cache misses)
-      if (versions_->IsLevelOverlapped(compact->compaction->level()))
-          compact->outfile->SetMetadataOffset(1);
+//      if (versions_->IsLevelOverlapped(compact->compaction->level()))
+//          compact->outfile->SetMetadataOffset(1);
       compact->builder = new TableBuilder(options, compact->outfile,
                                           compact->compaction->level()+1, file_number);
   }   // if
