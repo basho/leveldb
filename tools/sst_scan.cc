@@ -14,6 +14,9 @@
 #include "table/filter_block.h"
 #include "util/cache2.h"
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 //#include "util/logging.h"
 //#include "db/log_reader.h"
 
@@ -26,7 +29,7 @@ main(
 {
     bool error_seen, index_keys, all_keys, block_info, csv_header, counter_info,
         running, no_csv, summary_only;
-    int counter, error_counter;
+    int error_counter;
     char ** cursor;
 
     running=true;
@@ -40,7 +43,6 @@ main(
     no_csv=false;
     summary_only=false;
 
-    counter=0;
     error_counter=0;
 
 
@@ -178,7 +180,7 @@ main(
 
                         if (block_info)
                         {
-                            printf("block %d, offset %llu, size %llu, next %llu\n",
+                            printf("block %d, offset %" PRIu64 ", size %" PRIu64 ", next %" PRIu64 "\n",
                                    block_count, bhandle.offset(), bhandle.size(), bhandle.offset()+bhandle.size());
                         }   // if
 
