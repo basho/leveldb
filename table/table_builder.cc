@@ -184,7 +184,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
 
   // experimental code to help performance after landing
   //  zone compactions
-  if (0!=file_number_ && (2==level_ || 3==level_)
+  if (0!=file_number_ && (level_ <=3)
       && NULL!=rep_->options.block_cache)
   {
       BlockContents contents;
@@ -204,9 +204,10 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       contents.heap_allocated=true;
       Block *block=new Block(contents);
       cache_handle=block_cache->Insert(key, block,
-                                       (block->size() + sizeof(cache_key_buffer)),
+                                       (sizeof(Block) + block->size() + sizeof(cache_key_buffer)),
                                        &DeleteCachedBlock);
       block_cache->Release(cache_handle);
+      gPerfCounters->Inc(ePerfDebug0);
   }   // if
 
 

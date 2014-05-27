@@ -271,7 +271,7 @@ Iterator* Table::BlockReader(void* arg,
           if (contents.cachable && options.fill_cache) {
             cache_handle = block_cache->Insert(
                 key, block,
-                (block->size() + /*block_cache->EntryOverheadSize() +*/ sizeof(cache_key_buffer)),
+                (sizeof(Block) + block->size() + sizeof(cache_key_buffer)),
                 &DeleteCachedBlock);
           }
         }

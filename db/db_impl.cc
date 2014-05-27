@@ -1154,7 +1154,6 @@ Status DBImpl::OpenCompactionOutputFile(
                   // did size change?
                   if (options.block_size!=old_size)
                   {
-                      gPerfCounters->Inc(ePerfDebug0);
                       block_size_changed_=now;
                   }   // if
               }   // if
