@@ -269,6 +269,9 @@ Iterator* Table::BlockReader(void* arg,
         gPerfCounters->Inc(ePerfBlockRead);
         if (s.ok()) {
           block = new Block(contents);
+
+          // 4096 byte rounding necessary on large objects to adjust internal byte
+          //  counts to match probable page rounding for mmap() use in malloc
           if (contents.cachable && options.fill_cache) {
             cache_handle = block_cache->Insert(
                 key, block,
@@ -389,10 +392,14 @@ Table::TEST_GetIndexBlock() {return(rep_->index_block);};
 size_t
 Table::TableObjectSize()
 {
+    // 4096 byte rounding necessary on large objects to adjust internal byte
+    //  counts to match probable page rounding for mmap() use in malloc
     return(sizeof(Table) + sizeof(Table::Rep)
-           + rep_->file->ObjectSize()                           // RandomAccessFile * file
-           + sizeof(FilterBlockReader) + ((rep_->filter_data_size+4096)& ~4095) // FilterBlockReader * filter
-           + sizeof(Block) + ((rep_->index_block->size()+4096)& ~4095));        // Block * index_block
+           + rep_->file->ObjectSize()                       // RandomAccessFile * file
+           + sizeof(FilterBlockReader)                      // FilterBlockReader
+           + ((rep_->filter_data_size+4096)& ~4095)         //  + filter
+           + sizeof(Block)                                  // Block
+           + ((rep_->index_block->size()+4096)& ~4095));    //  + index_block
 
 };
 

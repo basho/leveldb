@@ -205,6 +205,9 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       contents.cachable=true;
       contents.heap_allocated=true;
       Block *block=new Block(contents);
+
+      // 4096 byte rounding necessary on large objects to adjust internal byte
+      //  counts to match probable page rounding for mmap() use in malloc
       cache_handle=block_cache->Insert(key, block,
                                        (sizeof(Block) + ((block->size()+4096)& ~4095) + sizeof(cache_key_buffer)),
                                        &DeleteCachedBlock);
