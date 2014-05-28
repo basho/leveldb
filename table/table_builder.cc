@@ -206,7 +206,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       contents.heap_allocated=true;
       Block *block=new Block(contents);
       cache_handle=block_cache->Insert(key, block,
-                                       (sizeof(Block) + block->size() + sizeof(cache_key_buffer)),
+                                       (sizeof(Block) + ((block->size()+4096)& ~4095) + sizeof(cache_key_buffer)),
                                        &DeleteCachedBlock);
       block_cache->Release(cache_handle);
       gPerfCounters->Inc(ePerfDebug1);

@@ -272,7 +272,7 @@ Iterator* Table::BlockReader(void* arg,
           if (contents.cachable && options.fill_cache) {
             cache_handle = block_cache->Insert(
                 key, block,
-                (sizeof(Block) + block->size() + sizeof(cache_key_buffer)),
+                (sizeof(Block) + ((block->size()+4096)& ~4095) + sizeof(cache_key_buffer)),
                 &DeleteCachedBlock);
             gPerfCounters->Inc(ePerfDebug3);
 
@@ -391,8 +391,8 @@ Table::TableObjectSize()
 {
     return(sizeof(Table) + sizeof(Table::Rep)
            + rep_->file->ObjectSize()                           // RandomAccessFile * file
-           + sizeof(FilterBlockReader) + rep_->filter_data_size // FilterBlockReader * filter
-           + sizeof(Block) + rep_->index_block->size());        // Block * index_block
+           + sizeof(FilterBlockReader) + ((rep_->filter_data_size+4096)& ~4095) // FilterBlockReader * filter
+           + sizeof(Block) + ((rep_->index_block->size()+4096)& ~4095));        // Block * index_block
 
 };
 
