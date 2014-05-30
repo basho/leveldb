@@ -27,7 +27,7 @@ Options::Options()
       write_buffer_size(60<<20),
       max_open_files(1000),
       block_cache(NULL),
-      block_size(4096),
+      block_size(3072),
       block_size_steps(16),
       block_restart_interval(16),
       compression(kSnappyCompression),

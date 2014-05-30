@@ -175,7 +175,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
       is_compaction_=true;
       file_size_=file_size;
 #if defined(HAVE_FADVISE)
-      posix_fadvise(fd_, 0, file_size_, POSIX_FADV_SEQUENTIAL);
+//      posix_fadvise(fd_, 0, file_size_, POSIX_FADV_SEQUENTIAL);
 #endif
 
   };
@@ -989,7 +989,7 @@ static void InitDefaultEnv()
     gLevel0Threads=new HotThreadPool(3, "Level0Compact",
                                      ePerfBGLevel0Direct, ePerfBGLevel0Queued,
                                      ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
-    gCompactionThreads=new HotThreadPool(3, "GeneralCompact",
+    gCompactionThreads=new HotThreadPool(5, "GeneralCompact",
                                          ePerfBGCompactDirect, ePerfBGCompactQueued,
                                          ePerfBGCompactDequeued, ePerfBGCompactWeighted);
 
