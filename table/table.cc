@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <malloc.h>
+
 #include "leveldb/table.h"
 
 #include "leveldb/cache.h"
@@ -275,7 +277,8 @@ Iterator* Table::BlockReader(void* arg,
           if (contents.cachable && options.fill_cache) {
             cache_handle = block_cache->Insert(
                 key, block,
-                (sizeof(Block) + ((block->size()+4096)& ~4095) + sizeof(cache_key_buffer)),
+//                (sizeof(Block) + ((block->size()+4096)& ~4095) + sizeof(cache_key_buffer)),
+                (sizeof(Block) + malloc_usable_size((void*)block->data()) + sizeof(cache_key_buffer)),
                 &DeleteCachedBlock);
             gPerfCounters->Inc(ePerfDebug3);
 
@@ -397,9 +400,11 @@ Table::TableObjectSize()
     return(sizeof(Table) + sizeof(Table::Rep)
            + rep_->file->ObjectSize()                       // RandomAccessFile * file
            + sizeof(FilterBlockReader)                      // FilterBlockReader
-           + ((rep_->filter_data_size+4096)& ~4095)         //  + filter
+//           + ((rep_->filter_data_size+4096)& ~4095)         //  + filter
+           + malloc_usable_size((void*)rep_->filter_data)         //  + filter
            + sizeof(Block)                                  // Block
-           + ((rep_->index_block->size()+4096)& ~4095));    //  + index_block
+//           + ((rep_->index_block->size()+4096)& ~4095));    //  + index_block
+           + malloc_usable_size((void*)rep_->index_block->data()));    //  + index_block
 
 };
 

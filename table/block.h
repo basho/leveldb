@@ -22,6 +22,7 @@ class Block {
   ~Block();
 
   size_t size() const { return size_; }
+  const char * data() const { return data_; };
   Iterator* NewIterator(const Comparator* comparator);
 
   uint32_t NumRestarts() const;

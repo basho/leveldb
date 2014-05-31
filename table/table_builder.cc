@@ -5,6 +5,7 @@
 #include "leveldb/table_builder.h"
 
 #include <assert.h>
+#include <malloc.h>
 #include "db/dbformat.h"
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
@@ -209,7 +210,8 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       // 4096 byte rounding necessary on large objects to adjust internal byte
       //  counts to match probable page rounding for mmap() use in malloc
       cache_handle=block_cache->Insert(key, block,
-                                       (sizeof(Block) + ((block->size()+4096)& ~4095) + sizeof(cache_key_buffer)),
+//                                       (sizeof(Block) + ((block->size()+4096)& ~4095) + sizeof(cache_key_buffer)),
+                                       (sizeof(Block) + malloc_usable_size((void *)block->data()) + sizeof(cache_key_buffer)),
                                        &DeleteCachedBlock);
       block_cache->Release(cache_handle);
       gPerfCounters->Inc(ePerfDebug1);
