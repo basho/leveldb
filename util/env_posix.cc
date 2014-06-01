@@ -175,7 +175,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
       is_compaction_=true;
       file_size_=file_size;
 #if defined(HAVE_FADVISE)
-//      posix_fadvise(fd_, 0, file_size_, POSIX_FADV_SEQUENTIAL);
+      posix_fadvise(fd_, 0, file_size_, POSIX_FADV_SEQUENTIAL);
 #endif
 
   };
