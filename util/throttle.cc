@@ -20,6 +20,8 @@
 //
 // -------------------------------------------------------------------
 
+#include <malloc.h>
+#include <syslog.h>
 #include <sys/time.h>
 
 #include "leveldb/perf_count.h"
@@ -30,6 +32,9 @@
 #include "util/db_list.h"
 #include "util/flexcache.h"
 #include "util/throttle.h"
+
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 
 namespace leveldb {
 
@@ -88,6 +93,7 @@ ThrottleThread(
     uint64_t new_throttle;
     time_t now_seconds, cache_expire;
     struct timespec wait_time;
+    struct mallinfo malloc_stuff;
 
     replace_idx=2;
     gThrottleRunning=true;
@@ -196,6 +202,22 @@ ThrottleThread(
             DBList()->ScanDBs(true,&DBImpl::PurgeExpiredFileCache);
             DBList()->ScanDBs(false, &DBImpl::PurgeExpiredFileCache);
         }   // if
+
+#if 1
+        malloc_stuff=mallinfo();
+        syslog(LOG_ERR, "---, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
+               malloc_stuff.arena, malloc_stuff.ordblks, malloc_stuff.smblks, 
+               malloc_stuff.hblks, malloc_stuff.hblkhd, malloc_stuff.usmblks,
+               malloc_stuff.fsmblks, malloc_stuff.uordblks, malloc_stuff.fordblks,
+               malloc_stuff.keepcost);
+        syslog(LOG_ERR, "2--, " PRIu64 ", " PRIu64 ", " PRIu64 ", " PRIu64 ", " PRIu64 ", "
+               PRIu64 ", " PRIu64,
+               gPerfCounters->Value(ePerfBlockCacheInsert) - gPerfCounters->Value(ePerfBlockCacheRemove),
+               gPerfCounters->Value(ePerfFileCacheInsert) - gPerfCounters->Value(ePerfFileCacheRemove),
+               gPerfCounters->Value(ePerfBlockCacheInsert), gPerfCounters->Value(ePerfBlockCacheRemove),
+               gPerfCounters->Value(ePerfFileCacheInsert), gPerfCounters->Value(ePerfFileCacheRemove));
+#endif        
+
     }   // while
 
     return(NULL);
