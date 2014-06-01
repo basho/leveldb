@@ -210,8 +210,8 @@ ThrottleThread(
                malloc_stuff.hblks, malloc_stuff.hblkhd, malloc_stuff.usmblks,
                malloc_stuff.fsmblks, malloc_stuff.uordblks, malloc_stuff.fordblks,
                malloc_stuff.keepcost);
-        syslog(LOG_ERR, "2--, " PRIu64 ", " PRIu64 ", " PRIu64 ", " PRIu64 ", " PRIu64 ", "
-               PRIu64 ", " PRIu64,
+        syslog(LOG_ERR, "2--, %" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 
+               ", %" PRIu64 ", %" PRIu64,
                gPerfCounters->Value(ePerfBlockCacheInsert) - gPerfCounters->Value(ePerfBlockCacheRemove),
                gPerfCounters->Value(ePerfFileCacheInsert) - gPerfCounters->Value(ePerfFileCacheRemove),
                gPerfCounters->Value(ePerfBlockCacheInsert), gPerfCounters->Value(ePerfBlockCacheRemove),
