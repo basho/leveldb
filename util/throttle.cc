@@ -91,7 +91,6 @@ ThrottleThread(
     uint64_t new_throttle;
     time_t now_seconds, cache_expire;
     struct timespec wait_time;
-    struct mallinfo malloc_stuff;
 
     replace_idx=2;
     gThrottleRunning=true;
