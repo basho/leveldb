@@ -346,6 +346,8 @@ class PosixMmapFile : public WritableFile {
   virtual Status Close() {
     Status s;
     size_t file_length;
+    int ret_val;
+
 
     // compute actual file length before final unmap
     file_length=file_offset_ + (dst_ - base_);
@@ -357,11 +359,12 @@ class PosixMmapFile : public WritableFile {
     // hard code
     if (!is_async_)
     {
-        int ret_val;
-
         ret_val=ftruncate(fd_, file_length);
         if (0!=ret_val)
+        {
             syslog(LOG_ERR,"Close ftruncate failed [%d, %m]", errno);
+            s = IOError(filename_, errno);
+        }   // if
 
         ret_val=close(fd_);
     }  // if
@@ -370,7 +373,23 @@ class PosixMmapFile : public WritableFile {
     else
     {
         *(ref_count_ +1)=file_length;
-        ReleaseRef(ref_count_, fd_);
+        ret_val=ReleaseRef(ref_count_, fd_);
+
+        // retry once if failed
+        if (0!=ret_val)
+        {
+            Env::Default()->SleepForMicroseconds(500000);
+            ret_val=ReleaseRef(ref_count_, fd_);
+            if (0!=ret_val)
+            {
+                syslog(LOG_ERR,"ReleaseRef failed in Close");
+                s = IOError(filename_, errno);
+                delete [] ref_count_;
+
+                // force close
+                ret_val=close(fd_);
+            }   // if
+        }   // if
     }   // else
 
     fd_ = -1;
@@ -420,8 +439,11 @@ class PosixMmapFile : public WritableFile {
 
   // if std::shared_ptr was guaranteed thread safe everywhere
   //  the following function would be best written differently
-  static void ReleaseRef(volatile uint64_t * Count, int File)
+  static int ReleaseRef(volatile uint64_t * Count, int File)
   {
+      bool good;
+
+      good=true;
       if (NULL!=Count)
       {
           int ret_val;
@@ -431,14 +453,38 @@ class PosixMmapFile : public WritableFile {
           {
               ret_val=ftruncate(File, *(Count +1));
               if (0!=ret_val)
+              {
                   syslog(LOG_ERR,"ReleaseRef ftruncate failed [%d, %m]", errno);
+                  gPerfCounters->Inc(ePerfBGWriteError);
+                  good=false;
+              }   // if
 
-              ret_val=close(File);
-              gPerfCounters->Inc(ePerfRWFileClose);
+              if (good)
+              {
+                  ret_val=close(File);
+                  if (0==ret_val)
+                  {
+                      gPerfCounters->Inc(ePerfRWFileClose);
+                  }   // if
+                  else
+                  {
+                      syslog(LOG_ERR,"ReleaseRef close failed [%d, %m]", errno);
+                      gPerfCounters->Inc(ePerfBGWriteError);
+                      good=false;
+                  }   // else
+                  
+              }   // if
 
-              delete [] Count;
+              if (good)
+                  delete [] Count;
+              else
+                  inc_and_fetch(Count); // try again.
+
           }   // if
       }   // if
+
+      return(good ? 0 : -1);
+
   }   // static ReleaseRef
 
 };
@@ -882,12 +928,19 @@ pthread_t PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
 }
 
 
-// this was a new file:  unmap, hold in page cache
-void BGFileUnmapper2(void * arg)
+// Called by BGFileUnmapper which manages retries
+//    this was a new file:  unmap, hold in page cache
+int
+BGFileUnmapper(void * arg)
 {
     BGCloseInfo * file_ptr;
     bool err_flag;
     int ret_val;
+
+    //
+    // Reminder:  this could get called multiple times for
+    //            same "arg" due to error retry
+    //
 
     err_flag=false;
     file_ptr=(BGCloseInfo *)arg;
@@ -897,12 +950,19 @@ void BGFileUnmapper2(void * arg)
     if (NULL!=file_ptr->ref_count_)
         gPerfCounters->Inc(ePerfBGCloseUnmap);
 
-    ret_val=munmap(file_ptr->base_, file_ptr->length_);
-    if (0!=ret_val)
+    if (NULL!=file_ptr->base_)
     {
-      syslog(LOG_ERR,"BGFileUnmapper2 munmap failed [%d, %m]", errno);
-      err_flag=true;
-    }  // if
+        ret_val=munmap(file_ptr->base_, file_ptr->length_);
+        if (0==ret_val)
+        {
+            file_ptr->base_=NULL;
+        }   // if
+        else
+        {
+            syslog(LOG_ERR,"BGFileUnmapper2 munmap failed [%d, %m]", errno);
+            err_flag=true;
+        }  // else
+    }   // if
 
 #if defined(HAVE_FADVISE)
     if (0==file_ptr->metadata_
@@ -934,20 +994,60 @@ void BGFileUnmapper2(void * arg)
     }   // else
 #endif
 
-    PosixMmapFile::ReleaseRef(file_ptr->ref_count_, file_ptr->fd_);
-
-    gPerfCounters->Inc(ePerfRWFileUnmap);
+    // release access to file, maybe close it
+    if (!err_flag)
+    {
+        ret_val=PosixMmapFile::ReleaseRef(file_ptr->ref_count_, file_ptr->fd_);
+        err_flag=(0!=ret_val);
+    }   // if
 
     if (err_flag)
         gPerfCounters->Inc(ePerfBGWriteError);
 
     // routine called directly or via async thread, this
     //  controls when to delete file_ptr object
-    file_ptr->RefDec();
+    if (!err_flag)
+    {
+        gPerfCounters->Inc(ePerfRWFileUnmap);
+        file_ptr->RefDec();
+    }   // if
+
+    return(err_flag ? -1 : 0);
+
+}   // BGFileUnmapper
+
+
+// Thread entry point, and retry loop
+void BGFileUnmapper2(void * arg)
+{
+    int retries, ret_val;
+
+    retries=0;
+    ret_val=0;
+
+    do
+    {
+        if (1<retries)
+            Env::Default()->SleepForMicroseconds(100000);
+
+        ret_val=BGFileUnmapper(arg);
+        ++retries;
+    } while(retries<3 && 0!=ret_val);
+
+    // release object's memory here
+    if (0!=ret_val)
+    {
+        BGCloseInfo * file_ptr;
+
+        file_ptr=(BGCloseInfo *)arg;
+        file_ptr->RefDec();
+    }   // if
 
     return;
 
 }   // BGFileUnmapper2
+
+
 
 }  // namespace
 
@@ -1025,6 +1125,8 @@ void Env::Shutdown()
 
     delete gCompactionThreads;
     gCompactionThreads=NULL;
+
+    PerformanceCounters::Close(gPerfCounters);
 
 }   // Env::Shutdown
 

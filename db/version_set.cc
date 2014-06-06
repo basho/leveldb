@@ -1644,7 +1644,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
       if (!c->inputs_[1].empty()) {
           std::vector<FileMetaData*> expanded0;
           current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
-          const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
+          //const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
           const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
           const int64_t expanded0_size = TotalFileSize(expanded0);
           if (expanded0.size() > c->inputs_[0].size() &&

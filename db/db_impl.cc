@@ -1480,6 +1480,11 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
 
+  // write log before taking mutex_
+  VersionSet::LevelSummaryStorage tmp;
+  Log(options_.info_log,
+      "compacted to: %s", versions_->LevelSummary(&tmp));
+
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
 
@@ -1488,17 +1493,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), compact->num_entries,
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
-  }
-
-  // write log with mutex_ released
-  {
-      VersionSet::LevelSummaryStorage tmp;
-      versions_->LevelSummary(&tmp);
-      mutex_.Unlock();
-
-      Log(options_.info_log,
-          "compacted to: %s", tmp.buffer);
-      mutex_.Lock();
   }
 
   return status;

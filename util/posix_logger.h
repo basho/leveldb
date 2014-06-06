@@ -13,6 +13,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include "leveldb/env.h"
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
