@@ -22,13 +22,14 @@
 
 namespace leveldb {
 
+class AppendableFile;
 class FileLock;
+class Options;
 class Logger;
 class RandomAccessFile;
 class SequentialFile;
 class Slice;
 class WritableFile;
-class AppendableFile;
 
 class Env {
  public:
@@ -74,7 +75,8 @@ class Env {
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) = 0;
+                                 WritableFile** result,
+                                 size_t map_size) = 0;
 
   // Riak specific:
   // Derived from NewWritableFile.  One change: if the file exists,
@@ -85,7 +87,8 @@ class Env {
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewAppendableFile(const std::string& fname,
-                                   WritableFile** result) = 0;
+                                   WritableFile** result,
+                                   size_t map_size) = 0;
 
   // Riak specific:
   // Allows for virtualized version of NewWritableFile that enables write
@@ -94,8 +97,9 @@ class Env {
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWriteOnlyFile(const std::string& fname,
-                                   WritableFile** result)
-  {return(NewWritableFile(fname, result));};
+                                  WritableFile** result,
+                                  size_t map_size)
+  {return(NewWritableFile(fname, result, map_size));};
 
   // Returns true iff the named file exists.
   virtual bool FileExists(const std::string& fname) = 0;
@@ -178,6 +182,10 @@ class Env {
 
   // Riak specific:  Get object that is tracking various software counters
   virtual PerformanceCounters * GetPerformanceCounters() {return(gPerfCounters);};
+
+  // Riak specific:  Request size of recovery memory map, potentially using
+  //  Options data for the decision.  Default 2Mbyte is Google's original size.
+  virtual size_t RecoveryMmapSize(const struct Options *) const {return(2*1024*1024L);};
 
  private:
   // No copying allowed
@@ -333,14 +341,14 @@ class EnvWrapper : public Env {
   Status NewRandomAccessFile(const std::string& f, RandomAccessFile** r) {
     return target_->NewRandomAccessFile(f, r);
   }
-  Status NewWritableFile(const std::string& f, WritableFile** r) {
-    return target_->NewWritableFile(f, r);
+  Status NewWritableFile(const std::string& f, WritableFile** r, size_t s=0) {
+    return target_->NewWritableFile(f, r, s);
   }
-  Status NewAppendableFile(const std::string& f, WritableFile** r) {
-    return target_->NewAppendableFile(f, r);
+  Status NewAppendableFile(const std::string& f, WritableFile** r, size_t s=0) {
+      return target_->NewAppendableFile(f, r, s);
   }
-  Status NewWriteOnlyFile(const std::string& f, WritableFile** r) {
-    return target_->NewWriteOnlyFile(f, r);
+  Status NewWriteOnlyFile(const std::string& f, WritableFile** r, size_t s=0) {
+    return target_->NewWriteOnlyFile(f, r, s);
   }
   bool FileExists(const std::string& f) { return target_->FileExists(f); }
   Status GetChildren(const std::string& dir, std::vector<std::string>* r) {

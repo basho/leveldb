@@ -131,11 +131,14 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.block_size,                1<<10,  4<<20);
 
   if (src.limited_developer_mem)
-  {
       gMapSize=2*1024*1024L;
-      if (2*1024*1024L < result.write_buffer_size) // let unit tests be smaller
-          result.write_buffer_size=2*1024*1024L;
-  }   // if
+
+  // alternate means to change gMapSize ... more generic
+  if (0!=src.mmap_size)
+      gMapSize=src.mmap_size;
+
+  if (gMapSize < result.write_buffer_size) // let unit tests be smaller
+      result.write_buffer_size=gMapSize;
 
   // Validate tiered storage options
   tiered_dbname=MakeTieredDbname(dbname, result);
@@ -154,7 +157,6 @@ Options SanitizeOptions(const std::string& dbname,
   if (result.block_cache == NULL) {
       result.block_cache = block_cache;
   }
-
 
   return result;
 }
@@ -248,7 +250,7 @@ Status DBImpl::NewDB() {
 
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
-  Status s = env_->NewWritableFile(manifest, &file);
+  Status s = env_->NewWritableFile(manifest, &file, 4*1024L);
   if (!s.ok()) {
     return s;
   }
@@ -287,9 +289,16 @@ void DBImpl::DeleteObsoleteFiles()
   //  simultaneous compaction
   if (RunningCompactionCount()<2)
   {
+      // each caller has mutex, we need to release it
+      //  since this disk activity can take a while
+      mutex_.AssertHeld();
+
       // Make a set of all of the live files
       std::set<uint64_t> live = pending_outputs_;
       versions_->AddLiveFiles(&live);
+
+      // release lock for disk work
+      mutex_.Unlock();
 
       // prune the database root directory
       std::vector<std::string> filenames;
@@ -310,6 +319,7 @@ void DBImpl::DeleteObsoleteFiles()
               KeepOrDelete(filenames[i], level, live);
           }   // for
       }   // for
+      mutex_.Lock();
   }   // if
 }
 
@@ -322,6 +332,8 @@ DBImpl::KeepOrDelete(
   uint64_t number;
   FileType type;
   bool keep = true;
+
+  // assumes mutex_ unlocked
 
   if (ParseFileName(Filename, &number, &type))
   {
@@ -360,13 +372,14 @@ DBImpl::KeepOrDelete(
           if (type == kTableFile) {
               // temporary hard coding of extra overlapped
               //  levels
+              mutex_.Lock();
               table_cache_->Evict(number, (Level<config::kNumOverlapLevels));
+              mutex_.Unlock();
           }
-#if 0 // mutex_ held
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
               static_cast<unsigned long long>(number));
-#endif
+
           if (-1!=Level)
           {
               std::string file;
@@ -901,9 +914,9 @@ void DBImpl::BackgroundCall2(
       // chew up resources for failed compactions for the duration of
       // the problem.
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      mutex_.Unlock();
       Log(options_.info_log, "Waiting after background compaction error: %s",
           s.ToString().c_str());
-      mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
     }
@@ -942,9 +955,9 @@ DBImpl::BackgroundImmCompactCall() {
       // chew up resources for failed compactions for the duration of
       // the problem.
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+      mutex_.Unlock();
       Log(options_.info_log, "Waiting after background imm compaction error: %s",
           s.ToString().c_str());
-      mutex_.Unlock();
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
     }
@@ -1110,7 +1123,7 @@ Status DBImpl::OpenCompactionOutputFile(
 
   // Make the output file
   std::string fname = TableFileName(options_, file_number, compact->compaction->level()+1);
-  Status s = env_->NewWritableFile(fname, &compact->outfile);
+  Status s = env_->NewWritableFile(fname, &compact->outfile, gMapSize);
   if (s.ok()) {
       Options options;
       options=options_;
@@ -1481,6 +1494,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
                             is_level0_compaction, env_->GetBackgroundBacklog());
     status = InstallCompactionResults(compact);
   }
+
   return status;
 }
 
@@ -1871,9 +1885,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
+
       WritableFile* lfile = NULL;
       gPerfCounters->Inc(ePerfWriteNewMem);
-      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile);
+      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile,
+                                 options_.env->RecoveryMmapSize(&options_));
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
         versions_->ReuseFileNumber(new_log_number);
@@ -2051,7 +2067,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
     s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
-                                     &lfile);
+                                      &lfile, options.env->RecoveryMmapSize(&options));
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
       impl->logfile_ = lfile;

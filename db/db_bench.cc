@@ -908,7 +908,7 @@ class Benchmark {
     char fname[100];
     snprintf(fname, sizeof(fname), "%s/heap-%04d", FLAGS_db, ++heap_counter_);
     WritableFile* file;
-    Status s = Env::Default()->NewWritableFile(fname, &file);
+    Status s = Env::Default()->NewWritableFile(fname, &file, 2<<20);
     if (!s.ok()) {
       fprintf(stderr, "%s\n", s.ToString().c_str());
       return;

@@ -21,7 +21,6 @@ class PosixLogger : public Logger {
  private:
   FILE* file_;
   uint64_t (*gettid_)();  // Return the thread id for the current thread
-  port::Spin spin_;
 
  public:
   PosixLogger(FILE* f, uint64_t (*gettid)()) : file_(f), gettid_(gettid) { }
@@ -86,11 +85,7 @@ class PosixLogger : public Logger {
       }
 
       assert(p <= limit);
-      // make fwrite single threaded (not fflush!)
-      {
-         SpinLock lock(&spin_);
-         fwrite(base, 1, p - base, file_);
-      }
+      fwrite(base, 1, p - base, file_);
       fflush(file_);
       if (base != buffer) {
         delete[] base;

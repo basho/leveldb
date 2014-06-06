@@ -37,6 +37,7 @@ Options::Options()
       total_leveldb_mem(0),
       block_cache_threshold(32<<20),
       limited_developer_mem(false),
+      mmap_size(0),
       delete_threshold(1000),
       fadvise_willneed(false),
       tiered_slow_level(0)
@@ -68,6 +69,7 @@ Options::Dump(
     Log(log,"     Options.total_leveldb_mem: %" PRIu64, total_leveldb_mem);
     Log(log," Options.block_cache_threshold: %" PRIu64, block_cache_threshold);
     Log(log," Options.limited_developer_mem: %s", limited_developer_mem ? "true" : "false");
+    Log(log,"             Options.mmap_size: %" PRIu64, mmap_size);
     Log(log,"      Options.delete_threshold: %" PRIu64, delete_threshold);
     Log(log,"      Options.fadvise_willneed: %s", fadvise_willneed ? "true" : "false");
     Log(log,"     Options.tiered_slow_level: %d", tiered_slow_level);
