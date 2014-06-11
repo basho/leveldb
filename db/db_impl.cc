@@ -297,9 +297,6 @@ void DBImpl::DeleteObsoleteFiles()
       std::set<uint64_t> live = pending_outputs_;
       versions_->AddLiveFiles(&live);
 
-      // release lock for disk work
-//      mutex_.Unlock();
-
       // prune the database root directory
       std::vector<std::string> filenames;
       env_->GetChildren(dbname_, &filenames); // Ignoring errors on purpose
@@ -319,7 +316,6 @@ void DBImpl::DeleteObsoleteFiles()
               KeepOrDelete(filenames[i], level, live);
           }   // for
       }   // for
-//      mutex_.Lock();
   }   // if
 }
 
@@ -332,8 +328,6 @@ DBImpl::KeepOrDelete(
   uint64_t number;
   FileType type;
   bool keep = true;
-
-  // assumes mutex_ unlocked
 
   if (ParseFileName(Filename, &number, &type))
   {
@@ -372,9 +366,7 @@ DBImpl::KeepOrDelete(
           if (type == kTableFile) {
               // temporary hard coding of extra overlapped
               //  levels
-//              mutex_.Lock();
               table_cache_->Evict(number, (Level<config::kNumOverlapLevels));
-//              mutex_.Unlock();
           }
           Log(options_.info_log, "Delete type=%d #%lld\n",
               int(type),
