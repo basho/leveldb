@@ -49,7 +49,7 @@ public:
     Cache * GetBlockCache() {return((Cache *)m_BlockCache);};
 
     void ResizeCaches();
-    size_t GetCapacity(bool IsFileCache);
+    size_t GetCapacity(bool IsFileCache, bool EstimatePageCache=true);
     time_t GetFileTimeout() {return(m_FileTimeout);};
     void SetFileTimeout(time_t Timeout) {m_FileTimeout=Timeout;};
 

@@ -1101,6 +1101,8 @@ Status DBImpl::OpenCompactionOutputFile(
   assert(compact != NULL);
   assert(compact->builder == NULL);
   uint64_t file_number;
+  bool pagecache_flag;
+
   {
     mutex_.Lock();
     file_number = versions_->NewFileNumber();
@@ -1110,6 +1112,7 @@ Status DBImpl::OpenCompactionOutputFile(
     out.smallest.Clear();
     out.largest.Clear();
     compact->outputs.push_back(out);
+    pagecache_flag=Send2PageCache(compact);
     mutex_.Unlock();
   }
 
@@ -1163,9 +1166,9 @@ Status DBImpl::OpenCompactionOutputFile(
 
       }   // if
 
-      // tune fadvise to keep all of this lower level file in page cache
-      //  (compaction of unsorted files causes severe cache misses)
-      if (versions_->IsLevelOverlapped(compact->compaction->level()))
+      // tune fadvise to keep as much of the file data in RAM as
+      //  reasonably possible
+      if (pagecache_flag)
           compact->outfile->SetMetadataOffset(1);
       compact->builder = new TableBuilder(options, compact->outfile);
   }   // if
@@ -1173,6 +1176,45 @@ Status DBImpl::OpenCompactionOutputFile(
   return s;
 }
 
+
+bool
+DBImpl::Send2PageCache(
+    CompactionState* compact)
+{
+    bool ret_flag;
+
+    mutex_.AssertHeld();
+
+    // tune fadvise to keep all of the lower level file in page cache
+    //  (compaction of unsorted files causes severe cache misses)
+    if (versions_->IsLevelOverlapped(compact->compaction->level()))
+    {
+        ret_flag=true;
+    }   // if
+
+    // look at current RAM availability to decide whether or not to keep
+    //  file data in page cache
+    else
+    {
+        size_t avail_block;
+        int64_t lower_levels;
+        int level;
+
+        // current block cache size without PageCache estimation
+        avail_block=double_cache.GetCapacity(false, false);
+
+        lower_levels=0;
+        for (level=0; level<compact->compaction->level(); ++level)
+            lower_levels+=versions_->NumLevelBytes(level);
+
+        // does the block cache's unadjusted size exceed higher
+        //  volatility file sizes in lower levels?
+        ret_flag=(lower_levels<=avail_block);
+    }   // else
+
+    return(ret_flag);
+
+}   // DbImpl::Send2PageCache
 
 size_t
 DBImpl::MaybeRaiseBlockSize(
