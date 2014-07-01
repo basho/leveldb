@@ -15,6 +15,7 @@
 
 #include <cstdarg>
 #include <string>
+#include <pthread.h>
 #include <vector>
 #include <stdint.h>
 #include "leveldb/perf_count.h"
@@ -24,7 +25,7 @@ namespace leveldb {
 
 class AppendableFile;
 class FileLock;
-class Options;
+struct Options;
 class Logger;
 class RandomAccessFile;
 class SequentialFile;
