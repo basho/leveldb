@@ -1209,7 +1209,7 @@ DBImpl::Send2PageCache(
 
         // does the block cache's unadjusted size exceed higher
         //  volatility file sizes in lower levels?
-        ret_flag=(lower_levels<=avail_block);
+        ret_flag=(lower_levels<=(int64_t)avail_block);
     }   // else
 
     return(ret_flag);
@@ -1433,8 +1433,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
   Status status;
-  ParsedInternalKey ikey;
-  std::string current_user_key;
 
   KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
 
