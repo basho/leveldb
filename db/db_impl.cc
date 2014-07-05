@@ -1205,7 +1205,7 @@ DBImpl::Send2PageCache(
         avail_block=double_cache.GetCapacity(false, false);
 
         lower_levels=0;
-        for (level=0; level<compact->compaction->level(); ++level)
+        for (level=0; level<=compact->compaction->level(); ++level)
             lower_levels+=versions_->NumLevelBytes(level);
 
         // does the block cache's unadjusted size exceed higher
