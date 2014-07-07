@@ -489,7 +489,8 @@ DoubleCache::ResizeCaches()
  */
 size_t
 DoubleCache::GetCapacity(
-    bool IsFileCache)
+    bool IsFileCache,
+    bool EstimatePageCache)
 {
     size_t  ret_val;
 
@@ -520,24 +521,27 @@ DoubleCache::GetCapacity(
                 //  file cache usage
                 ret_val=m_TotalAllocation - temp;
 
-                // if block cache allocation exceeds threshold,
-                //  give up some to page cache
-                if (m_BlockCacheThreshold < ret_val)
+                if (EstimatePageCache)
                 {
-                    uint32_t spare;
+                    // if block cache allocation exceeds threshold,
+                    //  give up some to page cache
+                    if (m_BlockCacheThreshold < ret_val)
+                    {
+                        uint32_t spare;
 
-                    spare=ret_val-m_BlockCacheThreshold;
+                        spare=ret_val-m_BlockCacheThreshold;
 
-                    // use m_SizeCachedFiles as approximation of page cache
-                    //  space needed for full files, i.e. prefer page cache to block cache
-                    //  (must use temp since m_SizeCachedFiles is volatile)
-                    temp = m_SizeCachedFiles;
-                    if (temp < spare)
-                        spare -= temp;
-                    else
-                        spare=0;
+                        // use m_SizeCachedFiles as approximation of page cache
+                        //  space needed for full files, i.e. prefer page cache to block cache
+                        //  (must use temp since m_SizeCachedFiles is volatile)
+                        temp = m_SizeCachedFiles;
+                        if (temp < spare)
+                            spare -= temp;
+                        else
+                            spare=0;
 
-                    ret_val=m_BlockCacheThreshold + spare;
+                        ret_val=m_BlockCacheThreshold + spare;
+                    }   // if
                 }   // if
 
                 // always allow for 2Mbyte minimum
