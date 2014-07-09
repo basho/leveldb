@@ -1139,6 +1139,14 @@ VersionSet::Finalize(Version* v)
                 }   // if
 
                 is_grooming=false;
+
+                // early overlapped compaction
+                //  only occurs if no other compactions running on groomer thread
+                if (0==score && 4<=v->files_[level].size())
+                {
+                    score=1;
+                    is_grooming=true;
+                }   // if
             } else {
                 // Compute the ratio of current size to size limit.
                 const uint64_t level_bytes = TotalFileSize(v->files_[level]);
