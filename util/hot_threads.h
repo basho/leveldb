@@ -138,7 +138,7 @@ public:
 
     static void *ThreadStart(void *args);
 
-    bool FindWaitingThread(ThreadTask * work);
+    bool FindWaitingThread(ThreadTask * work, bool OkToQueue=true);
 
     bool Submit(ThreadTask * item, bool OkToQueue=true);
 

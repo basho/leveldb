@@ -367,8 +367,9 @@ HotThreadPool::~HotThreadPool()
 
 bool                           // returns true if available worker thread found and claimed
 HotThreadPool::FindWaitingThread(
-    ThreadTask * work) // non-NULL to pass current work directly to a thread,
-                               // NULL to potentially nudge an available worker toward backlog queue
+    ThreadTask * work, // non-NULL to pass current work directly to a thread,
+                       // NULL to potentially nudge an available worker toward backlog queue
+    bool OkToQueue)
 {
     bool ret_flag;
     size_t start, index, pool_size;
@@ -378,7 +379,10 @@ HotThreadPool::FindWaitingThread(
     // pick "random" place in thread list.  hopefully
     //  list size is prime number.
     pool_size=m_Threads.size();
-    start=(size_t)pthread_self() % pool_size;
+    if (OkToQueue)
+        start=(size_t)pthread_self() % pool_size;
+    else
+        start=0;
     index=start;
 
     do
@@ -408,7 +412,7 @@ HotThreadPool::FindWaitingThread(
 
         index=(index+1)%pool_size;
 
-    } while(index!=start && !ret_flag);
+    } while(index!=start && !ret_flag && OkToQueue);
 
     return(ret_flag);
 
@@ -435,7 +439,7 @@ HotThreadPool::Submit(
         }   // if
 
         // try to give work to a waiting thread first
-        else if (FindWaitingThread(item))
+        else if (FindWaitingThread(item, OkToQueue))
         {
             IncWorkDirect();
             ret_flag=true;
@@ -453,7 +457,7 @@ HotThreadPool::Submit(
             }
 
             // to address race condition, thread might be waiting now
-            FindWaitingThread(NULL);
+            FindWaitingThread(NULL, true);
 
             // to address second race condition, send in QueueThread
             //   (thread not likely good on OSX)

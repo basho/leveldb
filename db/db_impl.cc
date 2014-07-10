@@ -1187,8 +1187,8 @@ DBImpl::Send2PageCache(
 
     // tune fadvise to keep all of the lower level file in page cache
     //  (compaction of unsorted files causes severe cache misses)
-//    if (versions_->IsLevelOverlapped(compact->compaction->level()))
-    if (0==compact->compaction->level())
+    if (versions_->IsLevelOverlapped(compact->compaction->level()))
+//    if (0==compact->compaction->level())
     {
         ret_flag=true;
     }   // if
