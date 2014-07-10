@@ -1142,7 +1142,7 @@ VersionSet::Finalize(Version* v)
 
                 // early overlapped compaction
                 //  only occurs if no other compactions running on groomer thread
-                if (0==score && 4<=v->files_[level].size())
+                if (0==score && config::kL0_GroomingTrigger<=v->files_[level].size())
                 {
                     score=1;
                     is_grooming=true;
