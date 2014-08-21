@@ -472,7 +472,7 @@ class PosixMmapFile : public WritableFile {
                       gPerfCounters->Inc(ePerfBGWriteError);
                       good=false;
                   }   // else
-                  
+
               }   // if
 
               if (good)
@@ -1111,7 +1111,6 @@ void Env::Shutdown()
         ThrottleShutdown();
     }   // if
 
-    ComparatorShutdown();
     DBListShutdown();
 
     delete gImmThreads;
@@ -1125,6 +1124,10 @@ void Env::Shutdown()
 
     delete gCompactionThreads;
     gCompactionThreads=NULL;
+
+    // wait until compaction threads complete before
+    //  releasing comparator object (else segfault possible)
+    ComparatorShutdown();
 
     PerformanceCounters::Close(gPerfCounters);
 
