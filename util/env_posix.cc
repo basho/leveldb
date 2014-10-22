@@ -988,8 +988,6 @@ void Env::Shutdown()
         ThrottleShutdown();
     }   // if
 
-    ComparatorShutdown();
-
     delete gImmThreads;
     gImmThreads=NULL;
 
@@ -1001,6 +999,8 @@ void Env::Shutdown()
 
     delete gCompactionThreads;
     gCompactionThreads=NULL;
+
+    ComparatorShutdown();
 
 }   // Env::Shutdown
 

@@ -1261,9 +1261,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
 
-  if (is_level0_compaction)
-      pthread_rwlock_unlock(&gThreadLock1);
-
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
 
