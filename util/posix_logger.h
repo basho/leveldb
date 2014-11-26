@@ -19,13 +19,13 @@ namespace leveldb {
 
 class PosixLogger : public Logger {
  private:
-  FILE* file_;
+  int fd_;
   uint64_t (*gettid_)();  // Return the thread id for the current thread
 
  public:
-  PosixLogger(FILE* f, uint64_t (*gettid)()) : file_(f), gettid_(gettid) { }
+  PosixLogger(int fd, uint64_t (*gettid)()) : fd_(fd), gettid_(gettid) { }
   virtual ~PosixLogger() {
-    fclose(file_);
+    close(fd_);
   }
   virtual void Logv(const char* format, va_list ap) {
     const uint64_t thread_id = (*gettid_)();
@@ -85,8 +85,27 @@ class PosixLogger : public Logger {
       }
 
       assert(p <= limit);
-      fwrite(base, 1, p - base, file_);
-      fflush(file_);
+
+      {
+        size_t total=0;
+        ssize_t n_write;
+        size_t count = p - base;
+        size_t remaining = count;
+        while((count - remaining) != count) {
+          n_write = write(fd_, base + total, remaining);
+          if(n_write > 0) {
+            total +=n_write;
+            remaining -=n_write;
+          } else {
+            if(n_write == -1 && errno == EINTR) {
+              continue;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+
       if (base != buffer) {
         delete[] base;
       }
