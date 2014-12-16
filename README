@@ -71,10 +71,9 @@ The key points are:
 - giving different values to options.total_leveldb_mem on subsequent Open
   calls causes memory to rearrange to current value across all databases
 
-- leveldb can readily execute with 100Mbytes or less, but at least 340Mbytes 
-  per database is helpful.  
+- recommended minimum for Basho's leveldb is 340Mbytes per database.  
 
-- there is a performance sweet spot at 2.5Gbytes per database (3.0Gbytes
+- performance improves rapidly from 340Mbytes to 2.5Gbytes per database (3.0Gbytes
   if using Riak's active anti-entropy).  Even more is nice, but not as helpful.
 
 - never assign more than 75% of available RAM to total_leveldb_mem.  There is
