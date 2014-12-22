@@ -986,6 +986,7 @@ DBImpl::BackgroundImmCompactCall() {
 Status DBImpl::BackgroundCompaction(
     Compaction * Compact) {
   Status status;
+  bool do_compact(true);
 
   mutex_.AssertHeld();
 
@@ -1014,7 +1015,9 @@ Status DBImpl::BackgroundCompaction(
 
   if (c == NULL) {
     // Nothing to do
-  } else if (!is_manual && c->IsTrivialMove()) {
+    do_compact=false;
+  } else if (!is_manual && c->IsTrivialMove()
+             && (c->level()+1)!=options_.tiered_slow_level) {
     // Move file to next level
     assert(c->num_input_files(0) == 1);
     std::string old_name, new_name;
@@ -1026,6 +1029,8 @@ Status DBImpl::BackgroundCompaction(
 
     if (status.ok())
     {
+        gPerfCounters->Inc(ePerfBGMove);
+        do_compact=false;
         c->edit()->DeleteFile(c->level(), f->number);
         c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
                            f->smallest, f->largest);
@@ -1040,7 +1045,13 @@ Status DBImpl::BackgroundCompaction(
             status.ToString().c_str(),
             versions_->LevelSummary(&tmp));
     }  // if
-  } else {
+    else {
+        // retry as compaction instead of move
+        do_compact=true; // redundant but safe
+        gPerfCounters->Inc(ePerfBGMoveFail);
+    }   // else
+  }
+  if (do_compact) {
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
     CleanupCompaction(compact);
