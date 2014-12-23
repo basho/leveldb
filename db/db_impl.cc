@@ -1035,6 +1035,7 @@ Status DBImpl::BackgroundCompaction(
         c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
                            f->smallest, f->largest);
         status = versions_->LogAndApply(c->edit(), &mutex_);
+        DeleteObsoleteFiles();
 
         // if LogAndApply fails, should file be renamed back to original spot?
         VersionSet::LevelSummaryStorage tmp;
