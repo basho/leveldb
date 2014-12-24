@@ -130,15 +130,18 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
 
-  if (src.limited_developer_mem)
-      gMapSize=2*1024*1024L;
-
   // alternate means to change gMapSize ... more generic
   if (0!=src.mmap_size)
       gMapSize=src.mmap_size;
 
-  if (gMapSize < result.write_buffer_size) // let unit tests be smaller
-      result.write_buffer_size=gMapSize;
+  // reduce buffer sizes if limited_developer_mem is true
+  if (src.limited_developer_mem)
+  {
+      if (0==src.mmap_size)
+          gMapSize=2*1024*1024L;
+      if (gMapSize < result.write_buffer_size) // let unit tests be smaller
+          result.write_buffer_size=gMapSize;
+  }   // if
 
   // Validate tiered storage options
   tiered_dbname=MakeTieredDbname(dbname, result);
