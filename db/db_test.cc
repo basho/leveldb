@@ -1428,12 +1428,15 @@ TEST(DBTest, ManualCompaction) {
   ASSERT_EQ("3", FilesPerLevel());
 
   // Compaction range falls before files
+  // (Basho compacts all at zero no matter what)
   Compact("", "c");
-  ASSERT_EQ("3", FilesPerLevel());
+  //ASSERT_EQ("3", FilesPerLevel());
+  ASSERT_EQ("0,1", FilesPerLevel());
 
   // Compaction range falls after files
   Compact("r", "z");
-  ASSERT_EQ("3", FilesPerLevel());
+  //ASSERT_EQ("3", FilesPerLevel());
+  ASSERT_EQ("0,1", FilesPerLevel());
 
   // Compaction range overlaps files
   Compact("p1", "p9");
