@@ -1178,6 +1178,17 @@ Status DBImpl::OpenCompactionOutputFile(
 
       }   // if
 
+      // force call to CalcInputState to set IsCompressible
+      compact->compaction->CalcInputStats(*table_cache_);
+
+      // do not attempt compression if data known to not compress
+      if (kSnappyCompression==options.compression && !compact->compaction->IsCompressible())
+      {
+          options.compression=kNoCompressionAutomated;
+          Log(options.info_log, "kNoCompressionAutomated");
+      }   // if
+
+
       // tune fadvise to keep as much of the file data in RAM as
       //  reasonably possible
       if (pagecache_flag)

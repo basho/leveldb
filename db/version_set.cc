@@ -1760,6 +1760,7 @@ Compaction::Compaction(int level)
       overlapped_bytes_(0),
       tot_user_data_(0), tot_index_keys_(0),
       avg_value_size_(0), avg_key_size_(0), avg_block_size_(0),
+      compressible_(true),
       stats_done_(false)
   {
   for (int i = 0; i < config::kNumLevels; i++) {
@@ -1899,6 +1900,7 @@ Compaction::CalcInputStats(
         avg_value_size_=0; value_count=0;
         avg_key_size_=0;   key_count=0;
         avg_block_size_=0; block_count=0;
+        compressible_=(0==level_);
 
         // walk both levels of input files
         for (it=inputs_[0].begin();
@@ -1914,6 +1916,16 @@ Compaction::CalcInputStats(
                 size_t user_est, idx_est;
 
                 fmd=*it;
+
+                // compression test
+                // true if more data blocks than data blocks that did not compress
+                //    or if no statistics available
+                compressible_ = compressible_
+                                || (tables.GetStatisticValue(fmd->number, eSstCountBlocks)
+                                   >tables.GetStatisticValue(fmd->number, eSstCountCompressAborted))
+                                  || 0==tables.GetStatisticValue(fmd->number, eSstCountBlocks);
+
+                // block sizing algorithm
                 temp=0;
                 temp_cnt=0;
                 user_est=0;

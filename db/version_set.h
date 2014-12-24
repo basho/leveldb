@@ -433,6 +433,7 @@ class Compaction {
   size_t AverageValueSize()  const {return(avg_value_size_);};
   size_t AverageKeySize()    const {return(avg_key_size_);};
   size_t AverageBlockSize()  const {return(avg_block_size_);};
+  bool IsCompressible()      const {return(compressible_);};
 
  private:
   friend class Version;
@@ -470,6 +471,7 @@ class Compaction {
   size_t avg_value_size_;
   size_t avg_key_size_;
   size_t avg_block_size_;
+  bool compressible_;
   bool stats_done_;
 };
 
