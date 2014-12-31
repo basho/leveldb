@@ -1782,7 +1782,7 @@ bool Compaction::IsTrivialMove() const {
   return (!gLevelTraits[level_].m_OverlappedFiles &&
           num_input_files(0) == 1 &&
           num_input_files(1) == 0 &&
-          TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
+          (uint64_t)TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
 #else
   // removed this functionality when creating gLevelTraits[].m_OverlappedFiles
   //  flag.  "Move" was intented by Google to delay compaction by moving small

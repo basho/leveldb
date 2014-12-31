@@ -94,6 +94,7 @@ ThrottleThread(
     gThrottleRunning=true;
     now_seconds=0;
     cache_expire=0;
+    new_unadjusted=1;
 
     while(gThrottleRunning)
     {
