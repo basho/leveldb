@@ -509,36 +509,28 @@ void Version::GetOverlappingInputs(
     std::vector<FileMetaData*>* inputs) {
   inputs->clear();
   Slice user_begin, user_end;
+
+  // overlap takes everything
+  bool test_inputs(!gLevelTraits[level].m_OverlappedFiles);
+
   if (begin != NULL) {
-    user_begin = begin->user_key();
+      user_begin = begin->user_key();
   }
   if (end != NULL) {
-    user_end = end->user_key();
+      user_end = end->user_key();
   }
+
   const Comparator* user_cmp = vset_->icmp_.user_comparator();
   for (size_t i = 0; i < files_[level].size(); ) {
     FileMetaData* f = files_[level][i++];
     const Slice file_start = f->smallest.user_key();
     const Slice file_limit = f->largest.user_key();
-    if (begin != NULL && user_cmp->Compare(file_limit, user_begin) < 0) {
+    if (test_inputs && begin != NULL && user_cmp->Compare(file_limit, user_begin) < 0) {
       // "f" is completely before specified range; skip it
-    } else if (end != NULL && user_cmp->Compare(file_start, user_end) > 0) {
+    } else if (test_inputs && end != NULL && user_cmp->Compare(file_start, user_end) > 0) {
       // "f" is completely after specified range; skip it
     } else {
       inputs->push_back(f);
-      if (gLevelTraits[level].m_OverlappedFiles) {
-        // Level files may overlap each other.  So check if the newly
-        // added file has expanded the range.  If so, restart search.
-        if (begin != NULL && user_cmp->Compare(file_start, user_begin) < 0) {
-          user_begin = file_start;
-          inputs->clear();
-          i = 0;
-        } else if (end != NULL && user_cmp->Compare(file_limit, user_end) > 0) {
-          user_end = file_limit;
-          inputs->clear();
-          i = 0;
-        }
-      }
     }
   }
 }
@@ -1768,6 +1760,7 @@ Compaction::Compaction(int level)
       overlapped_bytes_(0),
       tot_user_data_(0), tot_index_keys_(0),
       avg_value_size_(0), avg_key_size_(0), avg_block_size_(0),
+      compressible_(true),
       stats_done_(false)
   {
   for (int i = 0; i < config::kNumLevels; i++) {
@@ -1785,10 +1778,11 @@ bool Compaction::IsTrivialMove() const {
   // Avoid a move if there is lots of overlapping grandparent data.
   // Otherwise, the move could create a parent file that will require
   // a very expensive merge later on.
-#if 0
-  return (num_input_files(0) == 1 &&
+#if 1
+  return (!gLevelTraits[level_].m_OverlappedFiles &&
+          num_input_files(0) == 1 &&
           num_input_files(1) == 0 &&
-          TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
+          (uint64_t)TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
 #else
   // removed this functionality when creating gLevelTraits[].m_OverlappedFiles
   //  flag.  "Move" was intented by Google to delay compaction by moving small
@@ -1906,6 +1900,7 @@ Compaction::CalcInputStats(
         avg_value_size_=0; value_count=0;
         avg_key_size_=0;   key_count=0;
         avg_block_size_=0; block_count=0;
+        compressible_=(0==level_);
 
         // walk both levels of input files
         for (it=inputs_[0].begin();
@@ -1921,6 +1916,16 @@ Compaction::CalcInputStats(
                 size_t user_est, idx_est;
 
                 fmd=*it;
+
+                // compression test
+                // true if more data blocks than data blocks that did not compress
+                //    or if no statistics available
+                compressible_ = compressible_
+                                || (tables.GetStatisticValue(fmd->number, eSstCountBlocks)
+                                   >tables.GetStatisticValue(fmd->number, eSstCountCompressAborted))
+                                  || 0==tables.GetStatisticValue(fmd->number, eSstCountBlocks);
+
+                // block sizing algorithm
                 temp=0;
                 temp_cnt=0;
                 user_est=0;

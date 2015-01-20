@@ -3,6 +3,8 @@ Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
 
 The original Google README is now README.GOOGLE.
 
+** Introduction
+
 This repository contains the Google source code as modified to benefit
 the Riak environment.  The typical Riak environment has two attributes
 that necessitate leveldb adjustments, both in options and code:
@@ -13,13 +15,19 @@ that necessitate leveldb adjustments, both in options and code:
   hardware CRC calculation, increasing Bloom filter accuracy, and
   defaulting to integrity checking enabled.
 
-- multiple databases open: Riak opens 8 to 64 databases
+- multiple databases open: Riak opens 8 to 128 databases
   simultaneously.  Google's leveldb supports this, but its background
   compaction thread can fall behind.  leveldb will "stall" new user
   writes whenever the compaction thread gets too far behind.  Basho's
   leveldb modification include multiple thread blocks that each
   contain prioritized threads for specific compaction activities.
 
+Details for Basho's customizations exist in the leveldb wiki:
+
+  http://github.com/basho/leveldb/wiki
+
+
+** Branch pattern
 
 This repository follows the Basho standard for branch management 
 as of November 28, 2013.  The standard is found here:
@@ -31,6 +39,8 @@ engineering work.  The "master" branch contains the most recently
 released work, i.e. distributed as part of a Riak release.
 
 
+** Basic options needed
+
 Those wishing to truly savor the benefits of Basho's modifications
 need to initialize a new leveldb::Options structure similar to the
 following before each call to leveldb::DB::Open:
@@ -40,47 +50,34 @@ following before each call to leveldb::DB::Open:
     options=new Leveldb::Options;
 
     options.filter_policy=leveldb::NewBloomFilterPolicy2(16);
-    options.block_cache=leveldb::NewLRUCache(536870912);
-    options.max_open_files=500;
-    options.write_buffer_size=62914560;
+    options.write_buffer_size=62914560;  // 60Mbytes
+    options.total_leveldb_mem=2684354560; // 2.5Gbytes (details below)
     options.env=leveldb::Env::Default();
 
 
-Memory usage by leveldb is largely controlled by three
-leveldb::Options variables: write_buffer_size, max_open_files, and
-size used to initial block_cache.
+** Memory plan
 
-- write_buffer_size: Riak randomizes the write_buffer_size across its
-  multiple databases between 30Mbytes and 60Mbytes.  Internal, leveldb
-  could have two of these active for an open database.  Google's
-  default is 4Mbyte.  Basho's leveldb has been tuned to the 30Mbyte to
-  60Mbyte range, but does not block larger values (though larger
-  values are just untested).
+Basho's leveldb dramatically departed from Google's original internal
+memory allotment plan with Riak 2.0.  Basho's leveldb uses a methodology
+called flexcache.  The technical details are here:
 
-- max_open_files: Riak 1.4 simplified calculating the memory impact of
-  max_open_files.  Basho's leveldb now simply multiplies
-  max_open_files by 4Mbytes to establish the file cache limit.  The
-  file cache is therefore really a limit on many files' metadata can
-  fit.  max_open_files was originally a file handle limit, but file
-  metadata is now a much larger resource concern.  The impact of
-  Basho's larger table files and Google's recent addition of Bloom
-  filters made the accounting switch necessary.  Where server
-  resources allow, the value of max_open_files should exceed the count
-  of .sst table files within the database directory.  Memory budgeting
-  for this variable is more important to random read operations than
-  the block_cache.
+   https://github.com/basho/leveldb/wiki/mv-flexcache
 
-- block_cache: The block cache holds data blocks that leveldb has
-  recently retrieved from .sst table files.  Any given block contains
-  one or more complete key/value pairs.  The cache speeds up repeat
-  access to the same key and potential access to adjacent keys.  Basho
-  has tested this as high as 2Gbytes.  (Note: the older leveldb
-  released in Riak 1.2 had a bug that hurt performance with values
-  above 8Mbytes … that was fixed in the Riak 1.3 release)
+The key points are:
 
-So estimated memory usage of a database =
+- options.total_leveldb_mem is an allocation for the entire process,
+  not a single database
 
-    write_buffer_size*2 
-  + max_open_files*4194304 
-  + (size in NewLRUCache initialization)
+- giving different values to options.total_leveldb_mem on subsequent Open
+  calls causes memory to rearrange to current value across all databases
+
+- recommended minimum for Basho's leveldb is 340Mbytes per database.  
+
+- performance improves rapidly from 340Mbytes to 2.5Gbytes per database (3.0Gbytes
+  if using Riak's active anti-entropy).  Even more is nice, but not as helpful.
+
+- never assign more than 75% of available RAM to total_leveldb_mem.  There is
+  too much unaccounted memory overhead (worse if you use tcmalloc library).
+
+- options.max_open_files and options.block_cache should not be used.
   

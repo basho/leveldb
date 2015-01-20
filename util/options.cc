@@ -34,7 +34,7 @@ Options::Options()
       filter_policy(NULL),
       is_repair(false),
       is_internal_db(false),
-      total_leveldb_mem(0),
+      total_leveldb_mem(2684354560ll),
       block_cache_threshold(32<<20),
       limited_developer_mem(false),
       mmap_size(0),
