@@ -225,6 +225,11 @@ enum PerformanceCountersEnum
 
     ePerfApiDelete=89,        //!< Count of DB::Delete
 
+    ePerfBGMove=90,           //!< compaction was a successful move
+    ePerfBGMoveFail=91,       //!< compaction move failed, regular compaction attempted
+
+    ePerfThrottleUnadjusted=92,//!< current unadjusted throttle gauge
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values

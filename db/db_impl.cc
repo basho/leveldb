@@ -130,15 +130,18 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
 
-  if (src.limited_developer_mem)
-      gMapSize=2*1024*1024L;
-
   // alternate means to change gMapSize ... more generic
   if (0!=src.mmap_size)
       gMapSize=src.mmap_size;
 
-  if (gMapSize < result.write_buffer_size) // let unit tests be smaller
-      result.write_buffer_size=gMapSize;
+  // reduce buffer sizes if limited_developer_mem is true
+  if (src.limited_developer_mem)
+  {
+      if (0==src.mmap_size)
+          gMapSize=2*1024*1024L;
+      if (gMapSize < result.write_buffer_size) // let unit tests be smaller
+          result.write_buffer_size=gMapSize;
+  }   // if
 
   // Validate tiered storage options
   tiered_dbname=MakeTieredDbname(dbname, result);
@@ -986,6 +989,7 @@ DBImpl::BackgroundImmCompactCall() {
 Status DBImpl::BackgroundCompaction(
     Compaction * Compact) {
   Status status;
+  bool do_compact(true);
 
   mutex_.AssertHeld();
 
@@ -1014,7 +1018,9 @@ Status DBImpl::BackgroundCompaction(
 
   if (c == NULL) {
     // Nothing to do
-  } else if (!is_manual && c->IsTrivialMove()) {
+    do_compact=false;
+  } else if (!is_manual && c->IsTrivialMove()
+             && (c->level()+1)!=options_.tiered_slow_level) {
     // Move file to next level
     assert(c->num_input_files(0) == 1);
     std::string old_name, new_name;
@@ -1026,10 +1032,13 @@ Status DBImpl::BackgroundCompaction(
 
     if (status.ok())
     {
+        gPerfCounters->Inc(ePerfBGMove);
+        do_compact=false;
         c->edit()->DeleteFile(c->level(), f->number);
         c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
                            f->smallest, f->largest);
         status = versions_->LogAndApply(c->edit(), &mutex_);
+        DeleteObsoleteFiles();
 
         // if LogAndApply fails, should file be renamed back to original spot?
         VersionSet::LevelSummaryStorage tmp;
@@ -1040,7 +1049,13 @@ Status DBImpl::BackgroundCompaction(
             status.ToString().c_str(),
             versions_->LevelSummary(&tmp));
     }  // if
-  } else {
+    else {
+        // retry as compaction instead of move
+        do_compact=true; // redundant but safe
+        gPerfCounters->Inc(ePerfBGMoveFail);
+    }   // else
+  }
+  if (do_compact) {
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
     CleanupCompaction(compact);
@@ -1165,6 +1180,17 @@ Status DBImpl::OpenCompactionOutputFile(
           }   // else if
 
       }   // if
+
+      // force call to CalcInputState to set IsCompressible
+      compact->compaction->CalcInputStats(*table_cache_);
+
+      // do not attempt compression if data known to not compress
+      if (kSnappyCompression==options.compression && !compact->compaction->IsCompressible())
+      {
+          options.compression=kNoCompressionAutomated;
+          Log(options.info_log, "kNoCompressionAutomated");
+      }   // if
+
 
       // tune fadvise to keep as much of the file data in RAM as
       //  reasonably possible
