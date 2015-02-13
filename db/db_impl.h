@@ -10,6 +10,7 @@
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/snapshot.h"
+#include "db/data_dictionary.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
@@ -45,6 +46,8 @@ class DBImpl : public DB {
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
   virtual Status VerifyLevels();
+
+  DataDictionary * GetDataDictionary() { return &data_dict_; }
 
   // Extra methods (for testing) that are not in the public DB interface
 
@@ -159,6 +162,12 @@ class DBImpl : public DB {
   // Queue of writers.
   std::deque<Writer*> writers_;
   WriteBatch* tmp_batch_;
+
+  // Maps small integers to strings used in keys and data.
+  // Data is persisted to disk. Not sure if this object is responsible yet.
+  // Must allow multiple readers without locking. Single writer using locks
+  // is fine, as eventually new writes should be rare.
+  DataDictionary data_dict_;
 
   SnapshotList snapshots_;
 

@@ -109,7 +109,7 @@ void Table::ReadMeta(const Footer& footer) {
   }
   Block* meta = new Block(contents);
 
-  Iterator* iter = meta->NewIterator(BytewiseComparator());
+  Iterator* iter = meta->NewIterator(GetTSComparator());
 
   bool found,first;
   const FilterPolicy * policy, * next;

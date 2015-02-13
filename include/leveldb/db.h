@@ -20,6 +20,7 @@ struct Options;
 struct ReadOptions;
 struct WriteOptions;
 class WriteBatch;
+class DataDictionary;
 
 // Abstract handle to particular state of a DB.
 // A Snapshot is an immutable object and can therefore be safely
@@ -158,6 +159,8 @@ class DB {
   // compactions as necessary to correct.  Assumes DB opened
   // with Options.is_repair=true
   virtual Status VerifyLevels();
+
+  virtual DataDictionary * GetDataDictionary() = 0;
 
  private:
   // No copying allowed

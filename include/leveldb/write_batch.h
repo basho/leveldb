@@ -27,6 +27,7 @@
 namespace leveldb {
 
 class Slice;
+class DB;
 
 class WriteBatch {
  public:
@@ -58,6 +59,8 @@ class WriteBatch {
 
   // Intentionally copyable
 };
+
+Status convert_ts_batch(DB * db, const Slice & bin, WriteBatch * write_batch);
 
 }  // namespace leveldb
 

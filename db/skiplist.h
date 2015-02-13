@@ -24,6 +24,9 @@
 //
 // ... prev vs. next pointer ordering ...
 
+#ifndef LEVELDB_SKIPLIST_H_
+#define LEVELDB_SKIPLIST_H_
+
 #include <assert.h>
 #include <stdlib.h>
 #include "port/port.h"
@@ -75,7 +78,7 @@ class SkipList {
     void Prev();
 
     // Advance to the first entry with a key >= target
-    void Seek(const Key& target);
+    template<typename MaybeKey> void Seek(const MaybeKey& target);
 
     // Position at the first entry in list.
     // Final state of iterator is Valid() iff list is not empty.
@@ -114,21 +117,25 @@ class SkipList {
 
   Node* NewNode(const Key& key, int height);
   int RandomHeight();
-  bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
+  template <class MaybeKey>
+  bool Equal(const MaybeKey& a, const MaybeKey& b) const {
+    return (compare_(a, b) == 0);
+  }
 
   // Return true if key is greater than the data stored in "n"
-  bool KeyIsAfterNode(const Key& key, Node* n) const;
+  template <class MaybeKey>
+  bool KeyIsAfterNode(const MaybeKey& key, Node* n) const;
 
   // Return the earliest node that comes at or after key.
   // Return NULL if there is no such node.
   //
   // If prev is non-NULL, fills prev[level] with pointer to previous
   // node at "level" for every level in [0..max_height_-1].
-  Node* FindGreaterOrEqual(const Key& key, Node** prev) const;
+  template <typename MaybeKey> Node* FindGreaterOrEqual(const MaybeKey& key, Node** prev) const;
 
   // Return the latest node with a key < key.
   // Return head_ if there is no such node.
-  Node* FindLessThan(const Key& key) const;
+  template <typename MaybeKey> Node* FindLessThan(const MaybeKey& key) const;
 
   // Return the last node in the list.
   // Return head_ if list is empty.
@@ -219,7 +226,8 @@ inline void SkipList<Key,Comparator>::Iterator::Prev() {
 }
 
 template<typename Key, class Comparator>
-inline void SkipList<Key,Comparator>::Iterator::Seek(const Key& target) {
+template<typename MaybeKey>
+inline void SkipList<Key,Comparator>::Iterator::Seek(const MaybeKey& target) {
   node_ = list_->FindGreaterOrEqual(target, NULL);
 }
 
@@ -250,13 +258,15 @@ int SkipList<Key,Comparator>::RandomHeight() {
 }
 
 template<typename Key, class Comparator>
-bool SkipList<Key,Comparator>::KeyIsAfterNode(const Key& key, Node* n) const {
+template<typename MaybeKey>
+bool SkipList<Key,Comparator>::KeyIsAfterNode(const MaybeKey& key, Node* n) const {
   // NULL n is considered infinite
   return (n != NULL) && (compare_(n->key, key) < 0);
 }
 
 template<typename Key, class Comparator>
-typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOrEqual(const Key& key, Node** prev)
+template<typename MaybeKey>
+typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOrEqual(const MaybeKey& key, Node** prev)
     const {
   Node* x = head_;
   int level = GetMaxHeight() - 1;
@@ -278,8 +288,9 @@ typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOr
 }
 
 template<typename Key, class Comparator>
+template<typename MaybeKey>
 typename SkipList<Key,Comparator>::Node*
-SkipList<Key,Comparator>::FindLessThan(const Key& key) const {
+SkipList<Key,Comparator>::FindLessThan(const MaybeKey& key) const {
   Node* x = head_;
   int level = GetMaxHeight() - 1;
   while (true) {
@@ -377,3 +388,5 @@ bool SkipList<Key,Comparator>::Contains(const Key& key) const {
 }
 
 }  // namespace leveldb
+
+#endif

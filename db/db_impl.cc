@@ -106,6 +106,16 @@ class StringValue : public Value {
     return *this;
   }
 
+  StringValue& append(const char* data, size_t size) {
+    value_.append(data, size);
+    return *this;
+  }
+
+  StringValue & reserve(size_t size) {
+    value_.reserve(size);
+    return *this;
+  }
+
  private:
   std::string& value_;
 };
@@ -1623,7 +1633,7 @@ Status DBImpl::Get(const ReadOptions& options,
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
-    LookupKey lkey(key, snapshot);
+    LookupKey lkey(key, snapshot, &data_dict_);
     if (mem->Get(lkey, value, &s)) {
       // Done
         gPerfCounters->Inc(ePerfGetMem);
@@ -1674,11 +1684,20 @@ void DBImpl::ReleaseSnapshot(const Snapshot* s) {
 
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
-  return DB::Put(o, key, val);
+  WriteBatch batch;
+  batch.Put(key, val);
+  return Write(o, &batch);
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
-  return DB::Delete(options, key);
+  WriteBatch batch;
+  batch.Delete(key);
+
+  // Negate the count to "ApiWrite"
+  gPerfCounters->Dec(ePerfApiWrite);
+  gPerfCounters->Inc(ePerfApiDelete);
+
+  return Write(options, &batch);
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
