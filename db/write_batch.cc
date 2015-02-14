@@ -146,6 +146,31 @@ void WriteBatchInternal::Append(WriteBatch* dst, const WriteBatch* src) {
 }
 
 
+Status convert_ts_key(DB * db, const Slice & in_key, std::string * out_key)
+{
+    DataDictionary * dict = db->GetDataDictionary();
+    Slice input = in_key;
+    input.remove_prefix(8);
+
+    Slice family;
+    if (!GetLengthPrefixedSlice(&input, &family))
+      return Status::Corruption("Bad family name in TS batch");
+
+    Slice name;
+    if (!GetLengthPrefixedSlice(&input, &name))
+      return Status::Corruption("Bad series name in TS batch");
+
+    uint32_t family_id = dict->ToId(family);
+    uint32_t series_id = dict->ToId(name);
+
+    out_key->resize(0);
+    out_key->append(in_key.data(), 8);
+    PutFixed32(out_key, family_id);
+    PutFixed32(out_key, series_id);
+
+    return Status::OK();
+}
+
 Status convert_ts_batch(DB * db, const Slice & bin, WriteBatch * write_batch) {
     DataDictionary * dict = db->GetDataDictionary();
     Slice input = bin;

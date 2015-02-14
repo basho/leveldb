@@ -61,6 +61,7 @@ class WriteBatch {
 };
 
 Status convert_ts_batch(DB * db, const Slice & bin, WriteBatch * write_batch);
+Status convert_ts_key(DB * db, const Slice & input_key, std::string * out);
 
 }  // namespace leveldb
 
