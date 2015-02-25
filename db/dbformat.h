@@ -202,8 +202,8 @@ class LookupKey {
  public:
   // Initialize *this for looking up user_key at a snapshot with
   // the specified sequence number.
-  LookupKey(const Slice& user_key, SequenceNumber sequence,
-            DataDictionary * dd);
+  LookupKey(const Slice & user_key, SequenceNumber sequence,
+            KeyTranslator * translator);
 
   ~LookupKey();
 
@@ -215,17 +215,6 @@ class LookupKey {
 
   // Return the user key
   Slice user_key() const { return Slice(kstart_, end_ - kstart_ - 8); }
-
-  static Slice GetFamilySlice(const Slice & s) {
-    size_t len = 256u * (unsigned char)s[8] + (unsigned char)s[9];
-    return Slice(s.data() + 8 + 2, len);
-  }
-
-  static Slice GetSeriesSlice(const Slice & s) {
-    size_t fam_len = 256u * (unsigned char)s[8] + (unsigned char)s[9];
-    size_t start = 8 + 2 + fam_len;
-    return Slice(s.data() + start, s.size() - start);
-  }
 
  private:
   // We construct a char array of the form:

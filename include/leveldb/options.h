@@ -17,6 +17,10 @@ class Env;
 class FilterPolicy;
 class Logger;
 class Snapshot;
+class KeyTranslator;
+class BatchTranslator;
+class DataDictionary;
+
 namespace log
 {
     class Writer;
@@ -44,7 +48,17 @@ struct Options {
   // REQUIRES: The client must ensure that the comparator supplied
   // here has the same name and orders keys *exactly* the same as the
   // comparator provided to previous open calls on the same DB.
-  const Comparator* comparator;
+  const Comparator * comparator;
+
+  DataDictionary * data_dictionary;
+
+  // May perform a transformation on keys before they are stored
+  // and when they are returned to the reader in iterations.
+  // This object must be thread safe.
+  KeyTranslator * translator;
+
+  // TODO: Use this or just Key/Value translators?
+  BatchTranslator * batch_translator;
 
   // If true, the database will be created if it is missing.
   // Default: false

@@ -8,6 +8,7 @@
 #include "leveldb/options.h"
 
 #include "leveldb/comparator.h"
+#include "leveldb/translator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "util/cache2.h"
@@ -17,7 +18,10 @@
 namespace leveldb {
 
 Options::Options()
-    : comparator(GetTSComparator()),
+    : comparator(BytewiseComparator()),
+      data_dictionary(NULL),
+      translator(GetDefaultKeyTranslator()),
+      batch_translator(NULL),
       create_if_missing(false),
       error_if_exists(false),
       paranoid_checks(false),

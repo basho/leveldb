@@ -60,9 +60,6 @@ class WriteBatch {
   // Intentionally copyable
 };
 
-Status convert_ts_batch(DB * db, const Slice & bin, WriteBatch * write_batch);
-Status convert_ts_key(DB * db, const Slice & input_key, std::string * out);
-
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_WRITE_BATCH_H_

@@ -1633,7 +1633,7 @@ Status DBImpl::Get(const ReadOptions& options,
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
-    LookupKey lkey(key, snapshot, &data_dict_);
+    LookupKey lkey(key, snapshot, options_.translator);
     if (mem->Get(lkey, value, &s)) {
       // Done
         gPerfCounters->Inc(ePerfGetMem);
@@ -2273,4 +2273,11 @@ DBImpl::IsCompactionScheduled()
     return(flag || NULL!=imm_);
 }   // DBImpl::IsCompactionScheduled
 
+DataDictionary * NewDataDictionary() {
+  return new DataDictionary;
+}
+
+void DeleteDataDictionary(DataDictionary * dd) {
+  delete dd;
+}
 }  // namespace leveldb

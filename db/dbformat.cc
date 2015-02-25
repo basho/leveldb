@@ -8,6 +8,7 @@
 #include "port/port.h"
 #include "util/coding.h"
 #include "db/data_dictionary.h"
+#include "leveldb/translator.h"
 
 namespace leveldb {
 
@@ -131,40 +132,28 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
   return user_policy_->KeyMayMatch(ExtractUserKey(key), f);
 }
 
-LookupKey::LookupKey(const Slice& user_key, SequenceNumber s,
-                     DataDictionary * dd) {
-  size_t usize = user_key.size();
+LookupKey::LookupKey(const Slice & user_key, SequenceNumber s,
+                     KeyTranslator * translator) {
+  size_t usize = translator->GetOutputSize(user_key);
   size_t needed = usize + 13;  // A conservative estimate
   char* dst;
-  // TODO: TS keys are fixed size, so use 200 byte buffer always.
-  if (needed <= sizeof(space_) || dd) {
+  if (needed <= sizeof(space_)) {
     dst = space_;
   } else {
     dst = new char[needed];
   }
   start_ = dst;
-  if (dd) {
-    dst = EncodeVarint32(dst, 8 + 4 + 4 + 8);
-    // TODO: Do in a batch to avoid locking twice for new data.
-    uint32_t family_id = dd->ToId(GetFamilySlice(user_key));
-    uint32_t series_id = dd->ToId(GetSeriesSlice(user_key));
-    EncodeFixed32(dst, family_id);
-    EncodeFixed32(dst + 4, series_id);
-    dst += 8;
-  } else {
-    dst = EncodeVarint32(dst, usize + 8);
-    kstart_ = dst;
-    memcpy(dst, user_key.data(), usize);
-    dst += usize;
-  }
+  dst = EncodeVarint32(dst, usize + 8);
+  kstart_ = dst;
+  translator->TranslateKey(user_key, dst);
+  dst += usize;
   EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
   dst += 8;
   end_ = dst;
 }
 
-
 KeyRetirement::KeyRetirement(
-    const Comparator * Comparator,
+                             const Comparator * Comparator,
     SequenceNumber SmallestSnapshot,
     Compaction * const Compaction)
     : has_current_user_key(false), last_sequence_for_key(kMaxSequenceNumber),

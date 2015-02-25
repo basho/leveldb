@@ -47,7 +47,7 @@ class DBImpl : public DB {
   virtual void CompactRange(const Slice* begin, const Slice* end);
   virtual Status VerifyLevels();
 
-  DataDictionary * GetDataDictionary() { return &data_dict_; }
+  const Options & GetOptions() const { return options_; }
 
   // Extra methods (for testing) that are not in the public DB interface
 
@@ -162,12 +162,6 @@ class DBImpl : public DB {
   // Queue of writers.
   std::deque<Writer*> writers_;
   WriteBatch* tmp_batch_;
-
-  // Maps small integers to strings used in keys and data.
-  // Data is persisted to disk. Not sure if this object is responsible yet.
-  // Must allow multiple readers without locking. Single writer using locks
-  // is fine, as eventually new writes should be rare.
-  DataDictionary data_dict_;
 
   SnapshotList snapshots_;
 

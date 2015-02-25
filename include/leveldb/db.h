@@ -160,7 +160,7 @@ class DB {
   // with Options.is_repair=true
   virtual Status VerifyLevels();
 
-  virtual DataDictionary * GetDataDictionary() = 0;
+  virtual const Options & GetOptions() const = 0;
 
  private:
   // No copying allowed
@@ -177,6 +177,9 @@ Status DestroyDB(const std::string& name, const Options& options);
 // Some data may be lost, so be careful when calling this function
 // on a database that contains important information.
 Status RepairDB(const std::string& dbname, const Options& options);
+
+DataDictionary * NewDataDictionary();
+void DeleteDataDictionary(DataDictionary * dd);
 
 }  // namespace leveldb
 
