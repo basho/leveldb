@@ -50,56 +50,43 @@ void TSTranslator::TranslateKey(const Slice & user_key, char * buffer) const {
 
 Status TSTranslator::TranslateBatch(const Slice & input_bin,
                                     WriteBatch * write_batch) {
-  Slice input = input_bin;
   /*
-   number of series: varint32
-   series 1 name length: varint32
-   series 1 name
-   number  of points: varint32
-      timestamp: 64 bits
-      value: prefixed bytes
+   * Format:
+   * Table : string
+   * Series : string
+   * [Time : uint64, Data : string]
    */
-  uint32_t num_series;
-  if (!GetVarint32(&input, &num_series)) {
-      return Status::Corruption("Bad number of series in TS batch");
-  }
+  Slice input = input_bin;
   std::string key_buffer;
 
-  for (uint32_t s = num_series; s > 0; --s) {
-      Slice family;
-      if (!GetLengthPrefixedSlice(&input, &family))
-          return Status::Corruption("Bad family name in TS batch");
+  Slice family;
+  if (!GetLengthPrefixedSlice(&input, &family))
+    return Status::Corruption("Bad family name in TS batch");
 
-      Slice name;
-      if (!GetLengthPrefixedSlice(&input, &name))
-          return Status::Corruption("Bad series name in TS batch");
+  Slice name;
+  if (!GetLengthPrefixedSlice(&input, &name))
+    return Status::Corruption("Bad series name in TS batch");
 
-      uint32_t num_points;
+  uint32_t family_id = dict_->ToId(family);
+  uint32_t series_id = dict_->ToId(name);
 
-      if (!GetVarint32(&input, &num_points))
-          return Status::Corruption("Bad number of points in TS batch");
+  while(input.size() > 8) {
+    uint64_t timestamp;
+    if (!GetFixed64(&input, &timestamp)) {
+      return Status::Corruption("Bad timestamp in TS batch");
+    }
+    Slice value;
+    if (!GetLengthPrefixedSlice(&input, &value)) {
+      return Status::Corruption("Bad value in TS batch");
+    }
+    key_buffer.resize(0);
+    PutFixed64(&key_buffer, timestamp);
+    PutFixed32(&key_buffer, family_id);
+    PutFixed32(&key_buffer, series_id);
+    Slice key_slice(key_buffer);
+    write_batch->Put(key_slice, value);
+  } // For each point
 
-      uint32_t family_id = dict_->ToId(family);
-      uint32_t series_id = dict_->ToId(name);
-
-      for (uint32_t p = num_points; p > 0; --p) {
-          uint64_t timestamp;
-          if (!GetFixed64(&input, &timestamp)) {
-              return Status::Corruption("Bad timestamp in TS batch");
-          }
-          Slice value;
-          if (!GetLengthPrefixedSlice(&input, &value)) {
-              return Status::Corruption("Bad value in TS batch");
-          }
-          key_buffer.resize(0);
-          PutFixed64(&key_buffer, timestamp);
-          PutFixed32(&key_buffer, family_id);
-          PutFixed32(&key_buffer, series_id);
-          Slice key_slice(key_buffer);
-          write_batch->Put(key_slice, value);
-      } // For each point
-
-  } // For each series
   return Status::OK();
 }
 
