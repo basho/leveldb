@@ -6,6 +6,7 @@
 #define STORAGE_LEVELDB_DB_LOG_WRITER_H_
 
 #include <stdint.h>
+#include <memory>
 #include "db/log_format.h"
 #include "leveldb/slice.h"
 #include "leveldb/status.h"
@@ -17,18 +18,24 @@ namespace log {
 
 class Writer {
  public:
-  // Create a writer that will append data to "*dest".
-  // "*dest" must be initially empty.
-  // "*dest" must remain live while this Writer is in use.
+  // TODO: chack all the usages
+  /// Create a writer that will append data to "*dest".
+  /// \param dest" must be initially empty. created Writer takes ownership of dest
   explicit Writer(WritableFile* dest);
   ~Writer();
 
   Status AddRecord(const Slice& slice);
 
-  void Close() {delete dest_; dest_=NULL;};
+  Status Sync(){
+    return dest_->Sync();
+  }
+
+  void Close() {
+    dest_.reset();
+  };
 
  private:
-  WritableFile* dest_;
+  std::unique_ptr<WritableFile> dest_;
   int block_offset_;       // Current offset in block
 
   // crc32c values for all supported record types.  These are

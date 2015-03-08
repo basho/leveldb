@@ -191,16 +191,6 @@ class VersionSet {
   //   some threading integrity ... next_file_number_ used naked a bunch)
   uint64_t NewFileNumber() { return(inc_and_fetch(&next_file_number_) -1); }
 
-  // Arrange to reuse "file_number" unless a newer file number has
-  // already been allocated.
-  // REQUIRES: "file_number" was returned by a call to NewFileNumber().
-  //  (disabled due to threading concerns ... and desire NOT to use mutex, matthewv)
-  void ReuseFileNumber(uint64_t file_number) {
-//    if (next_file_number_ == file_number + 1) {
-//      next_file_number_ = file_number;
-//    }
-  }
-
   // Return the number of Table files at the specified level.
   size_t NumLevelFiles(int level) const;
 
@@ -355,7 +345,6 @@ class VersionSet {
   uint64_t write_rate_usec_;   // most recent average rate per key
 
   // Opened lazily
-  WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_

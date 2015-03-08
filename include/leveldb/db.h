@@ -66,6 +66,25 @@ class DB {
   DB() { }
   virtual ~DB();
 
+	virtual Status OpenFamily(const Options& options,
+										const std::string& name) = 0;
+  /// you don't have to close opened families before closing the whole DB
+	virtual Status CloseFamily(const std::string& name) = 0;
+
+  virtual Status Put(const std::string& family, const WriteOptions&, const Slice& key, const Slice& value)=0;
+  virtual Status Delete(const std::string& family, const WriteOptions&, const Slice& key)=0;
+  virtual Status Write(const std::string& family, const WriteOptions& options, WriteBatch* updates)=0;
+  virtual Status Get(
+      const std::string& family,
+      const ReadOptions& options,
+      const Slice& key,
+      std::string* value)=0;
+  virtual Status Get(
+      const std::string& family,
+      const ReadOptions& options,
+      const Slice& key,
+      Value* value)=0;
+
   // Set the database entry for "key" to "value".  Returns OK on success,
   // and a non-OK status on error.
   // Note: consider setting options.sync = true.

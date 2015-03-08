@@ -9,9 +9,9 @@ INSTALL_PATH ?= $(CURDIR)
 # Uncomment exactly one of the lines labelled (A), (B), and (C) below
 # to switch between compilation modes.
 
-OPT ?= -O2 -g -DNDEBUG    # (A) Production use (optimized mode)
-# OPT ?= -g2              # (B) Debug mode, w/ full line-level debugging symbols
-# OPT ?= -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
+# OPT ?= -std=c++11 -O2 -g -DNDEBUG    # (A) Production use (optimized mode)
+OPT ?= -std=c++11 -g2             # (B) Debug mode, w/ full line-level debugging symbols
+# OPT ?= -std=c++11 -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
 #-----------------------------------------------
 
 # detect what platform we're building on
@@ -101,6 +101,7 @@ check: all $(PROGRAMS) $(TESTS)
 
 tools: all $(TOOLS)
 
+tests: all $(PROGRAMS)
 
 clean:
 	-rm -f $(PROGRAMS) $(BENCHMARKS) $(LIBRARY) $(SHARED) $(MEMENVLIBRARY) */*.o */*/*.o ios-x86/*/*.o ios-arm/*/*.o build_config.mk

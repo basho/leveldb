@@ -1727,6 +1727,38 @@ class ModelDB: public DB {
     assert(false);      // Not implemented
     return Status::NotFound(key);
   }
+
+  // family interface
+  virtual Status OpenFamily(const Options& options, const std::string& name){
+    return Status::InvalidArgument("not implemented");
+  }
+  virtual Status CloseFamily(const std::string& name){
+    return Status::InvalidArgument("not implemented");
+  }
+
+  virtual Status Put(const std::string& family, const WriteOptions& o, const Slice& k, const Slice& v) {
+    return Status::InvalidArgument("not implemented");
+  }
+  virtual Status Delete(const std::string& family,const WriteOptions& o, const Slice& key) {
+    return Status::InvalidArgument("not implemented");
+  }
+  virtual Status Get(const std::string& family,
+                     const ReadOptions& options,
+                     const Slice& key,
+                     std::string* value) {
+    return Status::InvalidArgument("not implemented");
+  }
+  virtual Status Get(const std::string& family,
+                     const ReadOptions& options,
+                     const Slice& key, Value* value) {
+    return Status::InvalidArgument("not implemented");
+  }
+
+  virtual Status Write(const std::string& family, const WriteOptions& options, WriteBatch* updates){
+    assert(false);      // Not implemented
+    return Status::InvalidArgument("not implemented");
+  }
+
   virtual Iterator* NewIterator(const ReadOptions& options) {
     if (options.snapshot == NULL) {
       KVMap* saved = new KVMap;
@@ -1990,6 +2022,26 @@ void BM_LogAndApply(int iters, int num_base_files) {
   fprintf(stderr,
           "BM_LogAndApply/%-6s   %8d iters : %9u us (%7.0f us / iter)\n",
           buf, iters, us, ((float)us) / iters);
+}
+
+
+TEST(DBTest, Families){
+  Reopen();
+  Options options;
+  options.create_if_missing = true;
+  std::string family_name = "fmltest";
+  ASSERT_OK( db_->OpenFamily(options, family_name) );
+  WriteOptions wo;
+  ReadOptions  ro;
+  ASSERT_OK( db_->Put(family_name, wo, "key", "value") );
+  std::string ret_val;
+  ASSERT_OK( db_->Get(family_name, ro, "key", &ret_val) );
+  ASSERT_TRUE( ret_val == "value" );
+  ASSERT_OK( db_->CloseFamily(family_name) );
+  ASSERT_OK( db_->OpenFamily(options, family_name) );
+  ASSERT_OK( db_->Delete(family_name, wo, "key") );
+  ASSERT_NOTOK( db_->Get(family_name, ro, "key", &ret_val) );
+  Close();
 }
 
 }  // namespace leveldb

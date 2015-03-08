@@ -100,7 +100,7 @@ class LogTest {
     }
   };
 
-  StringDest dest_;
+  StringDest  *dest_;
   StringSource source_;
   ReportCollector report_;
   bool reading_;
@@ -113,7 +113,8 @@ class LogTest {
 
  public:
   LogTest() : reading_(false),
-              writer_(&dest_),
+              dest_(new StringDest()),
+              writer_(dest_),
               reader_(&source_, &report_, true/*checksum*/,
                       0/*initial_offset*/) {
   }
@@ -124,13 +125,13 @@ class LogTest {
   }
 
   size_t WrittenBytes() const {
-    return dest_.contents_.size();
+    return dest_->contents_.size();
   }
 
   std::string Read() {
     if (!reading_) {
       reading_ = true;
-      source_.contents_ = Slice(dest_.contents_);
+      source_.contents_ = Slice(dest_->contents_);
     }
     std::string scratch;
     Slice record;
@@ -142,22 +143,22 @@ class LogTest {
   }
 
   void IncrementByte(int offset, int delta) {
-    dest_.contents_[offset] += delta;
+    dest_->contents_[offset] += delta;
   }
 
   void SetByte(int offset, char new_byte) {
-    dest_.contents_[offset] = new_byte;
+    dest_->contents_[offset] = new_byte;
   }
 
   void ShrinkSize(int bytes) {
-    dest_.contents_.resize(dest_.contents_.size() - bytes);
+    dest_->contents_.resize(dest_->contents_.size() - bytes);
   }
 
   void FixChecksum(int header_offset, int len) {
     // Compute crc of type/len/data
-    uint32_t crc = crc32c::Value(&dest_.contents_[header_offset+6], 1 + len);
+    uint32_t crc = crc32c::Value(&dest_->contents_[header_offset+6], 1 + len);
     crc = crc32c::Mask(crc);
-    EncodeFixed32(&dest_.contents_[header_offset], crc);
+    EncodeFixed32(&dest_->contents_[header_offset], crc);
   }
 
   void ForceError() {
@@ -192,7 +193,7 @@ class LogTest {
   void CheckOffsetPastEndReturnsNoRecords(uint64_t offset_past_end) {
     WriteInitialOffsetLog();
     reading_ = true;
-    source_.contents_ = Slice(dest_.contents_);
+    source_.contents_ = Slice(dest_->contents_);
     Reader* offset_reader = new Reader(&source_, &report_, true/*checksum*/,
                                        WrittenBytes() + offset_past_end);
     Slice record;
@@ -205,7 +206,7 @@ class LogTest {
                                 int expected_record_offset) {
     WriteInitialOffsetLog();
     reading_ = true;
-    source_.contents_ = Slice(dest_.contents_);
+    source_.contents_ = Slice(dest_->contents_);
     Reader* offset_reader = new Reader(&source_, &report_, true/*checksum*/,
                                        initial_offset);
     Slice record;

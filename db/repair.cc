@@ -452,12 +452,9 @@ class Repairer {
       std::string record;
       edit_.EncodeTo(&record);
       status = log.AddRecord(record);
+      if (status.ok())
+        status = file->Close();
     }
-    if (status.ok()) {
-      status = file->Close();
-    }
-    delete file;
-    file = NULL;
 
     if (!status.ok()) {
       env_->DeleteFile(tmp);
