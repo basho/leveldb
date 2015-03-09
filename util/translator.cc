@@ -10,13 +10,18 @@
 
 namespace leveldb {
 
-size_t DefaultKeyTranslator::GetOutputSize(const Slice & user_key) const {
+size_t DefaultKeyTranslator::GetInternalKeySize(const Slice & user_key) const {
   return user_key.size();
 }
 
-void DefaultKeyTranslator::TranslateKey(const Slice & user_key,
+void DefaultKeyTranslator::TranslateExternalKey(const Slice & user_key,
                                    char * buffer) const {
   memcpy(buffer, user_key.data(), user_key.size());
+}
+
+void DefaultKeyTranslator::TranslateInternalKey(const Slice & internal_key,
+                                                std::string * out) const {
+  out->append(internal_key.data(), internal_key.size());
 }
 
 static port::OnceType once = LEVELDB_ONCE_INIT;
@@ -34,11 +39,11 @@ DefaultKeyTranslator * GetDefaultKeyTranslator() {
 // Time series data translator.
 TSTranslator::TSTranslator(DataDictionary * dd) : dict_(dd) {}
 
-size_t TSTranslator::GetOutputSize(const Slice & user_key) const {
+size_t TSTranslator::GetInternalKeySize(const Slice & user_key) const {
   return 8 + 4 + 4;
 }
 
-void TSTranslator::TranslateKey(const Slice & user_key, char * buffer) const {
+void TSTranslator::TranslateExternalKey(const Slice & user_key, char * buffer) const {
   // Copy 64 bit timestamp, 32 bit family id, 32 bit series id
   memcpy(buffer, user_key.data(), 8);
   // TODO: Do in a batch to avoid locking twice for new data.
@@ -46,6 +51,32 @@ void TSTranslator::TranslateKey(const Slice & user_key, char * buffer) const {
   uint32_t series_id = dict_->ToId(GetSeriesSlice(user_key));
   EncodeFixed32(buffer + 8, family_id);
   EncodeFixed32(buffer + 8 + 4, series_id);
+}
+
+/*
+ * Converts internal key with fields:
+ * - 64 bit timestamp
+ * - 32 bit family id
+ * - 32 bit series id
+ * to external key with 
+ * - 64 bit timestamp
+ * - length prefixed family string
+ * - length prefixed series string
+ */
+void TSTranslator::TranslateInternalKey(const Slice & internal_key,
+                                        std::string * out) const {
+  Slice input = internal_key;
+  // Append 64 bit timestamp as is
+  out->append(input.data(), 8);
+  input.remove_prefix(8);
+  uint32_t family_id, series_id;
+  GetFixed32(&input, &family_id);
+  GetFixed32(&input, &series_id);
+  Slice family, series;
+  dict_->ToString(family_id, &family);
+  dict_->ToString(series_id, &series);
+  PutLengthPrefixedSlice(out, family);
+  PutLengthPrefixedSlice(out, series);
 }
 
 Status TSTranslator::TranslateBatch(const Slice & input_bin,

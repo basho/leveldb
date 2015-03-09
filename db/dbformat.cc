@@ -134,7 +134,7 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
 
 LookupKey::LookupKey(const Slice & user_key, SequenceNumber s,
                      KeyTranslator * translator) {
-  size_t usize = translator->GetOutputSize(user_key);
+  size_t usize = translator->GetInternalKeySize(user_key);
   size_t needed = usize + 13;  // A conservative estimate
   char* dst;
   if (needed <= sizeof(space_)) {
@@ -145,7 +145,7 @@ LookupKey::LookupKey(const Slice & user_key, SequenceNumber s,
   start_ = dst;
   dst = EncodeVarint32(dst, usize + 8);
   kstart_ = dst;
-  translator->TranslateKey(user_key, dst);
+  translator->TranslateExternalKey(user_key, dst);
   dst += usize;
   EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
   dst += 8;

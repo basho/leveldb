@@ -18,8 +18,11 @@ class DB;
 class KeyTranslator {
   public:
     virtual ~KeyTranslator(){}
-    virtual size_t GetOutputSize(const Slice & user_key) const = 0;
-    virtual void TranslateKey(const Slice & user_key, char * buffer) const = 0;
+    virtual size_t GetInternalKeySize(const Slice & input_key) const = 0;
+    virtual void TranslateExternalKey(const Slice & input_key,
+                                      char * buffer) const = 0;
+    virtual void TranslateInternalKey(const Slice & internal_key,
+                                      std::string * out) const = 0; 
 };
 
 class BatchTranslator {
@@ -31,8 +34,11 @@ class BatchTranslator {
 class DefaultKeyTranslator : public KeyTranslator {
   public:
     DefaultKeyTranslator() {}
-    size_t GetOutputSize(const Slice & user_key) const;
-    void TranslateKey(const Slice & user_key, char * buffer) const;
+    size_t GetInternalKeySize(const Slice & external_key) const;
+    size_t GetExternalKeySize(const Slice & internal_key) const;
+    void TranslateExternalKey(const Slice & external_key, char * buffer) const;
+    void TranslateInternalKey(const Slice & internal_key,
+                              std::string * out) const;
 };
 
 class TSTranslator : public KeyTranslator, public BatchTranslator {
@@ -40,8 +46,11 @@ class TSTranslator : public KeyTranslator, public BatchTranslator {
     DataDictionary * dict_;
   public:
     TSTranslator(DataDictionary * dict);
-    size_t GetOutputSize(const Slice & user_key) const;
-    void TranslateKey(const Slice & user_key, char * buffer) const;
+    size_t GetInternalKeySize(const Slice & external_key) const;
+    size_t GetExternalKeySize(const Slice & internal_key) const;
+    void TranslateExternalKey(const Slice & input_key, char * buffer) const;
+    void TranslateInternalKey(const Slice & input_key,
+                              std::string * out) const;
     Status TranslateBatch(const Slice & input, WriteBatch * batch);
     static Slice GetFamilySlice(const Slice & s);
     static Slice GetSeriesSlice(const Slice & s);
