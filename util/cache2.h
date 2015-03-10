@@ -24,6 +24,7 @@
 #define STORAGE_LEVELDB_INCLUDE_CACHE2_H_
 
 #include <stdint.h>
+#include <time.h>
 #include "leveldb/atomics.h"
 #include "leveldb/cache.h"
 #include "leveldb/options.h"
