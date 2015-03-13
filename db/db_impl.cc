@@ -2147,7 +2147,7 @@ std::string DBImpl::GetFamilyPath(const std::string &family_name){
 
 static
 Status GetFamilyErrorStatus(std::exception &e){
-  if ( std::out_of_range *erange = dynamic_cast<std::out_of_range*>(&e) ){
+  if ( dynamic_cast<std::out_of_range*>(&e) ){
     return Status::InvalidArgument("no such family was opened. call OpenFamily() first");
   }
   if ( Status *s = dynamic_cast<Status*>(&e) ){
