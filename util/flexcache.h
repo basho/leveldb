@@ -32,11 +32,11 @@ namespace leveldb
 namespace flex
 {
 
-   static const uint64_t kRlimSizeIsSmall = 2*1024*1024*1024L;  // above 2G is lots of ram
-   static const uint64_t kRlimSmall = 256*1024*1024L;
-   static const uint64_t kRlimLargeReserve = 1024*1024*1024L;
-   static const uint64_t kDefaultMemory = 340*1024*1024L;
-   static const uint64_t kMinimumDBMemory = 10*1024*1024L;
+   static const uint64_t kRlimSizeIsSmall = 2*1024*1024*1024ULL;  // above 2G is lots of ram
+   static const uint64_t kRlimSmall = 256*1024*1024ULL;
+   static const uint64_t kRlimLargeReserve = 1024*1024*1024ULL;
+   static const uint64_t kDefaultMemory = 340*1024*1024ULL;
+   static const uint64_t kMinimumDBMemory = 10*1024*1024ULL;
 
 }   // namespace flex
 
