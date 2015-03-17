@@ -12,9 +12,9 @@
 namespace leveldb {
 namespace log {
 
-Writer::Writer(WritableFile* dest)
+Writer::Writer(WritableFile* dest, uint64_t initial_offset)
     : dest_(dest),
-      block_offset_(0) {
+      block_offset_(int(initial_offset % kBlockSize)) {
   for (int i = 0; i <= kMaxRecordType; i++) {
     char t = static_cast<char>(i);
     type_crc_[i] = crc32c::Value(&t, 1);

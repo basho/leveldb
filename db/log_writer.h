@@ -18,9 +18,10 @@ namespace log {
 
 class Writer {
  public:
-  /// Create a writer that will append data to "*dest".
-  /// \param dest must be initially empty. created Writer takes ownership of dest
-  explicit Writer(WritableFile* dest);
+  // Create a writer that will append data to "*dest".
+  // "*dest" must be initially empty.
+  // "*dest" must remain live while this Writer is in use.
+  Writer(WritableFile* dest, uint64_t initial_offset = 0);
   ~Writer();
 
   Status AddRecord(const Slice& slice);

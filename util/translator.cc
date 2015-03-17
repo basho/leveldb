@@ -4,7 +4,7 @@
 
 #include "leveldb/translator.h"
 #include "leveldb/write_batch.h"
-#include "db/data_dictionary.h"
+#include "leveldb/data_dictionary.h"
 #include "db/dbformat.h"
 #include "util/coding.h"
 

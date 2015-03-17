@@ -12,7 +12,6 @@
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/snapshot.h"
-#include "db/data_dictionary.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"

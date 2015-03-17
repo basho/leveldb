@@ -20,7 +20,7 @@
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
 #include "util/coding.h"
-#include "db/data_dictionary.h"
+#include "leveldb/data_dictionary.h"
 
 namespace leveldb {
 

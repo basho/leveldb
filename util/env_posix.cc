@@ -608,6 +608,7 @@ class PosixEnv : public Env {
 
   virtual Status NewAppendableFile(const std::string& fname,
                                    WritableFile** result,
+                                   size_t file_offset,
                                    size_t map_size) {
     Status s;
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR, 0644);
@@ -617,7 +618,11 @@ class PosixEnv : public Env {
     } else
     {
       uint64_t size;
-      s = GetFileSize(fname, &size);
+      if (file_offset > 0) {
+        size = file_offset;
+      } else {
+        s = GetFileSize(fname, &size);
+      }
       if (s.ok())
       {
           *result = new PosixMmapFile(fname, fd, page_size_, size, false, map_size);

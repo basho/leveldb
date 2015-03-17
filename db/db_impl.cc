@@ -2380,11 +2380,4 @@ DBImpl::IsCompactionScheduled()
     return(flag || NULL!=imm_);
 }   // DBImpl::IsCompactionScheduled
 
-DataDictionary * NewDataDictionary() {
-  return new DataDictionary;
-}
-
-void DeleteDataDictionary(DataDictionary * dd) {
-  delete dd;
-}
 }  // namespace leveldb

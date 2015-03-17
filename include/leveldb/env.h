@@ -88,6 +88,7 @@ class Env {
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewAppendableFile(const std::string& fname,
                                    WritableFile** result,
+                                   size_t file_offset,
                                    size_t map_size) = 0;
 
   // Riak specific:
@@ -344,8 +345,9 @@ class EnvWrapper : public Env {
   Status NewWritableFile(const std::string& f, WritableFile** r, size_t s=0) {
     return target_->NewWritableFile(f, r, s);
   }
-  Status NewAppendableFile(const std::string& f, WritableFile** r, size_t s=0) {
-      return target_->NewAppendableFile(f, r, s);
+  Status NewAppendableFile(const std::string& f, WritableFile** r,
+                           size_t ofs=0, size_t s=0) {
+      return target_->NewAppendableFile(f, r, ofs, s);
   }
   Status NewWriteOnlyFile(const std::string& f, WritableFile** r, size_t s=0) {
     return target_->NewWriteOnlyFile(f, r, s);

@@ -7,7 +7,7 @@
 #include "db/version_set.h"
 #include "port/port.h"
 #include "util/coding.h"
-#include "db/data_dictionary.h"
+#include "leveldb/data_dictionary.h"
 #include "leveldb/translator.h"
 
 namespace leveldb {

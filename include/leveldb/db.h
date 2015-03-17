@@ -197,8 +197,6 @@ Status DestroyDB(const std::string& name, const Options& options);
 // on a database that contains important information.
 Status RepairDB(const std::string& dbname, const Options& options);
 
-DataDictionary * NewDataDictionary();
-void DeleteDataDictionary(DataDictionary * dd);
 
 }  // namespace leveldb
 
