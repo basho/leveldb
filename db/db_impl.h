@@ -7,6 +7,8 @@
 
 #include <deque>
 #include <set>
+#include <unordered_map>
+#include <memory>
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/snapshot.h"
@@ -28,6 +30,23 @@ class DBImpl : public DB {
  public:
   DBImpl(const Options& options, const std::string& dbname);
   virtual ~DBImpl();
+
+  virtual Status OpenFamily(const Options& options, const std::string& name);
+  virtual Status CloseFamily(const std::string& name);
+  // Implementations of the DB interface
+  virtual Status Put(const std::string& family, const WriteOptions&, const Slice& key, const Slice& value);
+  virtual Status Delete(const std::string& family, const WriteOptions&, const Slice& key);
+  virtual Status Write(const std::string& family, const WriteOptions& options, WriteBatch* updates);
+  virtual Status Get(
+      const std::string& family,
+      const ReadOptions& options,
+      const Slice& key,
+      std::string* value);
+  virtual Status Get(
+      const std::string& family,
+      const ReadOptions& options,
+      const Slice& key,
+      Value* value);
 
   // Implementations of the DB interface
   virtual Status Put(const WriteOptions&, const Slice& key, const Slice& value);
@@ -66,9 +85,9 @@ class DBImpl : public DB {
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
 
-  void ResizeCaches() {double_cache.ResizeCaches();};
-  size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
-  void PurgeExpiredFileCache() {double_cache.PurgeExpiredFiles();};
+  void ResizeCaches() {double_cache->ResizeCaches();};
+  size_t GetCacheCapacity() {return(double_cache->GetCapacity(false));}
+  void PurgeExpiredFileCache() {double_cache->PurgeExpiredFiles();};
 
   void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
@@ -128,7 +147,7 @@ class DBImpl : public DB {
   Status InstallCompactionResults(CompactionState* compact);
 
   // initialized before options so its block_cache is available
-  class DoubleCache double_cache;
+  std::shared_ptr<DoubleCache> double_cache;
 
   // Constant after construction
   Env* const env_;
@@ -137,7 +156,7 @@ class DBImpl : public DB {
   const Options options_;  // options_.comparator == &internal_comparator_
   bool owns_info_log_;
   bool owns_cache_;
-  const std::string dbname_;
+  const std::string dbname_; // path to DB
 
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;
@@ -155,9 +174,8 @@ class DBImpl : public DB {
   MemTable* mem_;
   volatile MemTable* imm_;                // Memtable being compacted
   port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
-  WritableFile* logfile_;
   uint64_t logfile_number_;
-  log::Writer* log_;
+  std::unique_ptr<log::Writer> log_;
 
   // Queue of writers.
   std::deque<Writer*> writers_;
@@ -214,12 +232,20 @@ class DBImpl : public DB {
   volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
 
   // accessor to new, dynamic block_cache
-  Cache * block_cache() {return(double_cache.GetBlockCache());};
-  Cache * file_cache() {return(double_cache.GetFileCache());};
+  Cache * block_cache() {return(double_cache->GetBlockCache());};
+  Cache * file_cache() {return(double_cache->GetFileCache());};
+
+  std::string GetFamilyPath(const std::string &family_name);
+  std::unordered_map< std::string, std::unique_ptr<DBImpl> > families_;
+  port::RWMutex families_mtx_;
 
   // No copying allowed
   DBImpl(const DBImpl&);
   void operator=(const DBImpl&);
+
+  DBImpl(const Options& options, const std::string& dbname, std::shared_ptr<DoubleCache> cache);
+  /// self destruction mechanism
+  void Destruct();
 
   const Comparator* user_comparator() const {
     return internal_comparator_.user_comparator();

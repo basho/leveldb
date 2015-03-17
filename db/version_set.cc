@@ -818,7 +818,6 @@ VersionSet::VersionSet(const std::string& dbname,
       log_number_(0),
       prev_log_number_(0),
       write_rate_usec_(0),
-      descriptor_file_(NULL),
       descriptor_log_(NULL),
       dummy_versions_(this),
       current_(NULL) {
@@ -832,7 +831,6 @@ VersionSet::~VersionSet() {
   current_->Unref();
   assert(dummy_versions_.next_ == &dummy_versions_);  // List must be empty
   delete descriptor_log_;
-  delete descriptor_file_;
 }
 
 void VersionSet::AppendVersion(Version* v) {
@@ -881,12 +879,12 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (descriptor_log_ == NULL) {
     // No reason to unlock *mu here since we only hit this path in the
     // first call to LogAndApply (when opening the database).
-    assert(descriptor_file_ == NULL);
     new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
     edit->SetNextFile(next_file_number_);
-    s = env_->NewWritableFile(new_manifest_file, &descriptor_file_, 4*1024L);
+    WritableFile* descriptor_file;
+    s = env_->NewWritableFile(new_manifest_file, &descriptor_file, 4*1024L);
     if (s.ok()) {
-      descriptor_log_ = new log::Writer(descriptor_file_);
+      descriptor_log_ = new log::Writer(descriptor_file);
       s = WriteSnapshot(descriptor_log_);
     }
   }
@@ -913,7 +911,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
                 edit->EncodeTo(&record);
                 s = descriptor_log_->AddRecord(record);
                 if (s.ok()) {
-                    s = descriptor_file_->Sync();
+                    s = descriptor_log_->Sync();
                 }
             }
 
@@ -927,17 +925,12 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         mu->Lock();
     }
   }
-
-  // this used to be "else" clause to if(s.ok)
-  //  moved on Oct 2013
   else
   {
     delete v;
     if (!new_manifest_file.empty()) {
       delete descriptor_log_;
-      delete descriptor_file_;
       descriptor_log_ = NULL;
-      descriptor_file_ = NULL;
       env_->DeleteFile(new_manifest_file);
     }
   }

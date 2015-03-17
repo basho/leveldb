@@ -172,7 +172,23 @@ Options SanitizeOptions(const std::string& dbname,
 }
 
 DBImpl::DBImpl(const Options& options, const std::string& dbname)
-    : double_cache(options),
+  :DBImpl( options, dbname, std::make_shared<DoubleCache>(options) )
+{
+
+}
+
+static
+void EnsureOk(Status s){
+  if (!s.ok())
+    throw s;
+}
+
+DBImpl::DBImpl(
+    const Options& options,
+    const std::string& dbname,
+    std::shared_ptr<DoubleCache> cache)
+
+    : double_cache(cache),
       env_(options.env),
       internal_comparator_(options.comparator),
       internal_filter_policy_(options.filter_policy),
@@ -181,15 +197,14 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
           options, block_cache())),
       owns_info_log_(options_.info_log != options.info_log),
       owns_cache_(options_.block_cache != options.block_cache),
+      // TODO: shouldn't be tiered_dbname from SanitizeOptions?
       dbname_(options_.tiered_fast_prefix),
       db_lock_(NULL),
       shutting_down_(NULL),
       bg_cv_(&mutex_),
       mem_(new MemTable(internal_comparator_)),
       imm_(NULL),
-      logfile_(NULL),
       logfile_number_(0),
-      log_(NULL),
       tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
       manual_compaction_(NULL),
@@ -204,7 +219,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
-  table_cache_ = new TableCache(dbname_, &options_, file_cache(), double_cache);
+  table_cache_ = new TableCache(dbname_, &options_, file_cache(), *double_cache.get());
 
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
@@ -215,22 +230,49 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   gFadviseWillNeed=options_.fadvise_willneed;
 
   options_.Dump(options_.info_log);
-  Log(options_.info_log,"               File cache size: %zd", double_cache.GetCapacity(true));
-  Log(options_.info_log,"              Block cache size: %zd", double_cache.GetCapacity(false));
+  Log(options_.info_log,"               File cache size: %zd", double_cache->GetCapacity(true));
+  Log(options_.info_log,"              Block cache size: %zd", double_cache->GetCapacity(false));
 
+  try{
+    MutexLock dbl(&mutex_);
+    VersionEdit edit;
+    Status s;
+    // 4 level0 files at 2Mbytes and 2Mbytes of block cache
+    //  (but first level1 file is likely to thrash)
+    //  ... this value is AFTER write_buffer and 40M for recovery log and LOG
+    //if (!options.limited_developer_mem && impl->GetCacheCapacity() < flex::kMinimumDBMemory)
+    //    s=Status::InvalidArgument("Less than 10Mbytes per database/vnode");
+    s = Recover(&edit); // Handles create_if_missing, error_if_exists
+    EnsureOk(s);
+    uint64_t new_log_number = versions_->NewFileNumber();
+    WritableFile* lfile;
+    s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
+                                      &lfile, options.env->RecoveryMmapSize(&options));
+    EnsureOk(s);
+    log_.reset(new log::Writer(lfile));
+    edit.SetLogNumber(new_log_number);
+    logfile_number_ = new_log_number;
+    s = versions_->LogAndApply(&edit, &mutex_);
+    EnsureOk(s);
+    DeleteObsoleteFiles();
+    CheckCompactionState();
+  }
+  catch(...){
+    Destruct();
+    throw;
+  }
 }
 
-DBImpl::~DBImpl() {
+void DBImpl::Destruct(){
   DBList()->ReleaseDB(this, options_.is_internal_db);
 
   // Wait for background work to finish
-  mutex_.Lock();
-  shutting_down_.Release_Store(this);  // Any non-NULL value is ok
-  while (IsCompactionScheduled()) {
-    bg_cv_.Wait();
+  {
+    MutexLock l(&mutex_);
+    shutting_down_.Release_Store(this);  // Any non-NULL value is ok
+    while (IsCompactionScheduled())
+      bg_cv_.Wait();
   }
-  mutex_.Unlock();
-
   // make sure flex cache knows this db is gone
   //  (must follow ReleaseDB() call ... see above)
   gFlexCache.RecalculateAllocations();
@@ -239,8 +281,7 @@ DBImpl::~DBImpl() {
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
   delete tmp_batch_;
-  delete log_;
-  delete logfile_;
+  log_.reset();
   delete table_cache_;
 
   if (owns_info_log_) {
@@ -249,6 +290,10 @@ DBImpl::~DBImpl() {
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
   }
+}
+
+DBImpl::~DBImpl() {
+  Destruct();
 }
 
 Status DBImpl::NewDB() {
@@ -269,11 +314,9 @@ Status DBImpl::NewDB() {
     std::string record;
     new_db.EncodeTo(&record);
     s = log.AddRecord(record);
-    if (s.ok()) {
+    if (s.ok())
       s = file->Close();
-    }
   }
-  delete file;
   if (s.ok()) {
     // Make "CURRENT" file that points to the new manifest file.
     s = SetCurrentFile(env_, dbname_, 1);
@@ -1142,7 +1185,7 @@ Status DBImpl::OpenCompactionOutputFile(
 
           now=env_->NowMicros();
 
-          if (!double_cache.GetPlentySpace())
+          if (!double_cache->GetPlentySpace())
           {
               // keep track of last time there was lack of space.
               //  use info in block below to revert block_size
@@ -1167,7 +1210,7 @@ Status DBImpl::OpenCompactionOutputFile(
           }   // if
 
           // has system's memory been ok for a while now
-          else if (last_low_mem_+double_cache.GetFileTimeout()*1000000L < now)
+          else if (last_low_mem_+double_cache->GetFileTimeout()*1000000L < now)
           {
               // reset size to original, data could have been deleted and/or old
               //  files no longer need cache space
@@ -1212,7 +1255,7 @@ DBImpl::Send2PageCache(
         int level;
 
         // current block cache size without PageCache estimation
-        avail_block=double_cache.GetCapacity(false, false);
+        avail_block=double_cache->GetCapacity(false, false);
 
         lower_levels=0;
         for (level=0; level<=compact->compaction->level(); ++level)
@@ -1737,7 +1780,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       mutex_.Unlock();
       status = log_->AddRecord(WriteBatchInternal::Contents(updates));
       if (status.ok() && options.sync) {
-        status = logfile_->Sync();
+        status = log_->Sync();
       }
       if (status.ok()) {
         status = WriteBatchInternal::InsertInto(updates, mem_);
@@ -1942,16 +1985,10 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       gPerfCounters->Inc(ePerfWriteNewMem);
       s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile,
                                  options_.env->RecoveryMmapSize(&options_));
-      if (!s.ok()) {
-        // Avoid chewing through file number space in a tight loop.
-        versions_->ReuseFileNumber(new_log_number);
+      if (!s.ok())
         break;
-      }
-      delete log_;
-      delete logfile_;
-      logfile_ = lfile;
       logfile_number_ = new_log_number;
-      log_ = new log::Writer(lfile);
+      log_.reset(new log::Writer(lfile));
       imm_ = mem_;
       has_imm_.Release_Store((MemTable*)imm_);
       if (NULL!=imm_)
@@ -2028,12 +2065,12 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     return true;
   } else if (in == "file-cache") {
     char buf[50];
-    snprintf(buf, sizeof(buf), "%zd", double_cache.GetCapacity(true));
+    snprintf(buf, sizeof(buf), "%zd", double_cache->GetCapacity(true));
     value->append(buf);
     return true;
   } else if (in == "block-cache") {
     char buf[50];
-    snprintf(buf, sizeof(buf), "%zd", double_cache.GetCapacity(false));
+    snprintf(buf, sizeof(buf), "%zd", double_cache->GetCapacity(false));
     value->append(buf);
     return true;
   } else if (-1!=gPerfCounters->LookupCounter(in.ToString().c_str())) {
@@ -2097,51 +2134,121 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 
 DB::~DB() { }
 
+std::string DBImpl::GetFamilyPath(const std::string &family_name){
+  return dbname_ + "/fml_" + family_name;
+}
+
+static
+Status GetFamilyErrorStatus(std::exception &e){
+  if ( dynamic_cast<std::out_of_range*>(&e) ){
+    return Status::InvalidArgument("no such family was opened. call OpenFamily() first");
+  }
+  if ( Status *s = dynamic_cast<Status*>(&e) ){
+    return *s;
+  }
+  return Status::InvalidArgument(e.what());
+}
+
+Status DBImpl::OpenFamily(const Options &options, const std::string &name)
+{
+  try{
+    WriteLock scopedMtx(&families_mtx_);
+    std::string fml_path = GetFamilyPath(name);
+    std::unique_ptr< DBImpl > db(new DBImpl(options, fml_path, double_cache));
+    if ( ! families_.emplace( std::make_pair(name, std::move(db)) ).second ){
+      return Status::InvalidArgument("already opened");
+    }
+  }
+  catch(std::exception &e){
+    return GetFamilyErrorStatus(e);
+  }
+  return Status::OK();
+}
+
+Status DBImpl::CloseFamily(const std::string &name)
+{
+  WriteLock scopedMtx(&families_mtx_);
+  if ( families_.erase(name) == 0 )
+    return Status::InvalidArgument("can't close the family");
+  return Status::OK();
+}
+
+Status DBImpl::Put(const std::string &family, const WriteOptions &opt, const Slice &key, const Slice &value)
+{
+  try{
+    ReadLock scopedMtx(&families_mtx_);
+    DBImpl *fdb = families_.at(family).get();
+    return fdb->Put(opt,key,value);
+  }
+  catch(std::exception &e){
+    return GetFamilyErrorStatus(e);
+  }
+  return Status::OK();
+}
+
+Status DBImpl::Delete(const std::string &family, const WriteOptions &o, const Slice &key)
+{
+  try{
+    ReadLock scopedMtx(&families_mtx_);
+    DBImpl *fdb = families_.at(family).get();
+    return fdb->Delete(o, key);
+  }
+  catch(std::exception &e){
+    return GetFamilyErrorStatus(e);
+  }
+  return Status::OK();
+}
+
+Status DBImpl::Write(const std::string &family, const WriteOptions &o, WriteBatch *updates)
+{
+  try{
+    ReadLock scopedMtx(&families_mtx_);
+    DBImpl *fdb = families_.at(family).get();
+    return fdb->Write(o, updates);
+  }
+  catch(std::exception &e){
+    return GetFamilyErrorStatus(e);
+  }
+  return Status::OK();
+}
+
+Status DBImpl::Get(const std::string &family, const ReadOptions &options, const Slice &key, std::string *value)
+{
+  try{
+    ReadLock scopedMtx(&families_mtx_);
+    DBImpl *fdb = families_.at(family).get();
+    return fdb->Get(options, key, value);
+  }
+  catch(std::exception &e){
+    return GetFamilyErrorStatus(e);
+  }
+  return Status::OK();
+}
+
+Status DBImpl::Get(const std::string &family, const ReadOptions &options, const Slice &key, Value *value)
+{
+  ReadLock scopedMtx(&families_mtx_);
+  try{
+    DBImpl *fdb = families_.at(family).get();
+    return fdb->Get(options, key, value);
+  }
+  catch(std::exception &e){
+    return GetFamilyErrorStatus(e);
+  }
+  return Status::OK();
+}
+
 Status DB::Open(const Options& options, const std::string& dbname,
                 DB** dbptr) {
   *dbptr = NULL;
-
-  DBImpl* impl = new DBImpl(options, dbname);
-  impl->mutex_.Lock();
-  VersionEdit edit;
-  Status s;
-
-  // 4 level0 files at 2Mbytes and 2Mbytes of block cache
-  //  (but first level1 file is likely to thrash)
-  //  ... this value is AFTER write_buffer and 40M for recovery log and LOG
-  //if (!options.limited_developer_mem && impl->GetCacheCapacity() < flex::kMinimumDBMemory)
-  //    s=Status::InvalidArgument("Less than 10Mbytes per database/vnode");
-
-  if (s.ok())
-      s = impl->Recover(&edit); // Handles create_if_missing, error_if_exists
-
-  if (s.ok()) {
-    uint64_t new_log_number = impl->versions_->NewFileNumber();
-    WritableFile* lfile;
-    s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
-                                      &lfile, options.env->RecoveryMmapSize(&options));
-    if (s.ok()) {
-      edit.SetLogNumber(new_log_number);
-      impl->logfile_ = lfile;
-      impl->logfile_number_ = new_log_number;
-      impl->log_ = new log::Writer(lfile);
-      s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
-    }
-    if (s.ok()) {
-      impl->DeleteObsoleteFiles();
-      impl->CheckCompactionState();
-    }
+  try{
+    *dbptr = new DBImpl(options, dbname);
   }
-  impl->mutex_.Unlock();
-  if (s.ok()) {
-    *dbptr = impl;
-  } else {
-    delete impl;
+  catch(Status &s){
+    return s;
   }
-
   gPerfCounters->Inc(ePerfApiOpen);
-
-  return s;
+  return Status::OK();
 }
 
 Snapshot::~Snapshot() {

@@ -18,7 +18,7 @@
 
 namespace leveldb {
 
-class Status {
+class Status : public std::exception {
  public:
   // Create a success status.
   Status() : state_(NULL) { }
