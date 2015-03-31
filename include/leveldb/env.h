@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 #include <stdint.h>
+#include <pthread.h>
 #include "leveldb/perf_count.h"
 #include "leveldb/status.h"
 
