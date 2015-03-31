@@ -140,3 +140,9 @@ util/testutil.h
 util/thread_tasks.h
 util/throttle.cc
 util/throttle.h
+db/compaction_strategy.h
+db/compaction_strategy.cc
+util/at_exit.h
+level_size_cs.cc
+db/level_size_cs.cc
+db/level_size_cs.h

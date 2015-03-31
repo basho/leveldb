@@ -142,7 +142,7 @@ public:
 
     bool Submit(ThreadTask * item, bool OkToQueue=true);
 
-    size_t work_queue_size() const { return m_WorkQueue.size();}
+    size_t work_queue_size() const;
     bool shutdown_pending() const  { return m_Shutdown; }
     leveldb::PerformanceCounters * perf() const {return(leveldb::gPerfCounters);};
 

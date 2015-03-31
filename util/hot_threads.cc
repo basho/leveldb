@@ -486,6 +486,12 @@ HotThreadPool::Submit(
 
     return(ret_flag);
 
-}   // HotThreadPool::Submit
+}
+
+size_t HotThreadPool::work_queue_size() const
+{
+  SpinLock lock(const_cast<port::Spin*>(&m_QueueLock));
+  return m_WorkQueue.size();
+}
 
 };  // namespace leveldb

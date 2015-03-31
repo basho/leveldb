@@ -290,7 +290,8 @@ struct ReadOptions {
   // The items below are internal options, not for external manipulation.
   //  They are populated by VersionSet::MakeInputIterator only during compaction operations
 private:
-  friend class VersionSet;
+  friend class VersionSet;  //TODO: realy need it?
+  friend class DBImpl;
 
   // true when used on background compaction
   bool is_compaction;

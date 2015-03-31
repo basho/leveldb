@@ -110,19 +110,16 @@ private:
 class CompactionTask : public ThreadTask
 {
 protected:
-    DBImpl * m_DBImpl;
-    Compaction * m_Compaction;
+    DBImpl * DBImpl_;
+    int level_;
 
 public:
-    CompactionTask(DBImpl * Db, Compaction * Compact)
-        : m_DBImpl(Db), m_Compaction(Compact) {};
-
-    virtual ~CompactionTask() {delete m_Compaction;};
+    CompactionTask(DBImpl * Db, int level)
+        : DBImpl_(Db), level_(level) {};
 
     virtual void operator()() 
     {
-        m_DBImpl->BackgroundCall2(m_Compaction);
-        m_Compaction=NULL;
+      DBImpl_->compact(level_, DBImpl::DropTheKey( [](Slice, SequenceNumber)->bool{return false;} ));
     };
 
 private:
@@ -132,9 +129,21 @@ private:
 
 };  // class CompactionTask
 
+class CompactionTaskWithDropper : public CompactionTask{
+public:
+  CompactionTaskWithDropper(DBImpl * Db, int level, DBImpl::DropTheKey &&dropper) :
+    CompactionTask(Db, level), dropper_(std::move(dropper)) {}
+  virtual void operator()()
+  {
+    DBImpl_->compact(level_, std::move(dropper_));
+  };
+private:
+  DBImpl::DropTheKey dropper_;
+};
 
 /**
  * Original env_posix.cc task
+ * not really used by anything apart from tests
  */
 
 class LegacyTask : public ThreadTask

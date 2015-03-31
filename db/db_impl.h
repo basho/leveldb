@@ -9,10 +9,13 @@
 #include <set>
 #include <unordered_map>
 #include <memory>
+#include <functional>
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/snapshot.h"
 #include "db/data_dictionary.h"
+#include "db/version_edit.h"
+#include "db/compaction_strategy.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
@@ -63,6 +66,7 @@ class DBImpl : public DB {
   virtual void ReleaseSnapshot(const Snapshot* snapshot);
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
+  /// does nothing. at all
   virtual void CompactRange(const Slice* begin, const Slice* end);
   virtual Status VerifyLevels();
 
@@ -70,8 +74,6 @@ class DBImpl : public DB {
 
   // Extra methods (for testing) that are not in the public DB interface
 
-  // Compact any files in the named level that overlap [*begin,*end]
-  void TEST_CompactRange(int level, const Slice* begin, const Slice* end);
 
   // Force current memtable contents to be compacted.
   Status TEST_CompactMemTable();
@@ -89,14 +91,27 @@ class DBImpl : public DB {
   size_t GetCacheCapacity() {return(double_cache->GetCapacity(false));}
   void PurgeExpiredFileCache() {double_cache->PurgeExpiredFiles();};
 
-  void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
-  bool IsCompactionScheduled();
+  bool IsBackroundJobs();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
 
- private:
+  typedef std::function<void()> OnWrite;
+  void addWriteListener(OnWrite f);
+
+  // argument - level for which compaction had just happened. stuf was just put into level+1
+  typedef std::function<void(int)> OnCompactionFinished;
+  void addCompactionFinishedListener(OnCompactionFinished f);
+  /// decides wheither to drop the user key
+  typedef std::function<bool(Slice, SequenceNumber)> DropTheKey;
+  /// gonna compact \a level into level+1, if one of the levels is under compaction now, the call is ignored
+  void enqueueCompaction( int level );
+  void enqueueCompaction( int level, DropTheKey &&);
+  // called by background thread to do actual compaction
+  void compact( int level, DropTheKey &&dropTheKey );
+private:
   friend class DB;
-  struct CompactionState;
+  friend class LevelSizeCS;
+  friend class CompactionCheckTask;
   struct Writer;
 
   Iterator* NewInternalIterator(const ReadOptions&,
@@ -133,18 +148,7 @@ class DBImpl : public DB {
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
   WriteBatch* BuildBatchGroup(Writer** last_writer);
 
-  void MaybeScheduleCompaction();
-
-  Status BackgroundCompaction(Compaction * Compact=NULL);
-  void CleanupCompaction(CompactionState* compact);
-  Status DoCompactionWork(CompactionState* compact);
   int64_t PrioritizeWork(bool IsLevel0);
-
-  Status OpenCompactionOutputFile(CompactionState* compact, size_t sample_value_size);
-  bool Send2PageCache(CompactionState * compact);
-  size_t MaybeRaiseBlockSize(Compaction & CompactionStuff, size_t SampleValueSize);
-  Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
-  Status InstallCompactionResults(CompactionState* compact);
 
   // initialized before options so its block_cache is available
   std::shared_ptr<DoubleCache> double_cache;
@@ -187,8 +191,6 @@ class DBImpl : public DB {
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
-  // Has a background compaction been scheduled or is running?
-  bool bg_compaction_scheduled_;
 
   // Information for a manual compaction
   struct ManualCompaction {
@@ -198,7 +200,6 @@ class DBImpl : public DB {
     const InternalKey* end;     // NULL means end of key range
     InternalKey tmp_storage;    // Used to keep track of compaction progress
   };
-  volatile ManualCompaction* manual_compaction_;
 
   VersionSet* versions_;
 
@@ -250,6 +251,66 @@ class DBImpl : public DB {
   const Comparator* user_comparator() const {
     return internal_comparator_.user_comparator();
   }
+
+  std::vector<OnWrite> onWrite_;
+  void fireOnWrite();
+
+  std::vector<OnCompactionFinished> onCompactionFinished_;
+  void fireOnCompactionFinished(int level);
+
+  std::vector<bool> isCompactionSubmitted_;
+  bool isCompactionSubmitted(int level);
+  void compactionSubmitted(int level);
+  void compactionFinished(int level);
+
+  std::vector<std::unique_ptr<CompactionStrategy>> compactionStrategies_;
+
+  class CompactionOutput{
+  public:
+    /// will add to the lists all the created files
+    CompactionOutput(
+        std::vector<FileMetaData> *addedFilesList,
+        std::set<uint64_t> *addedFileNumbers,
+        const Options *o,
+        port::Mutex *dbLock,
+        VersionSet *versions,
+        Env *env,
+        int level );
+    ~CompactionOutput();
+    /// creates new output file. closes previous automatically
+    void reset();
+    void add(Slice key, Slice val);
+    uint64_t fileSize();
+    void close();
+  private:
+    std::unique_ptr<TableBuilder> table;
+    std::unique_ptr<WritableFile> file;
+    std::vector<FileMetaData>    *addedFiles;
+    std::set<uint64_t>           *addedFileNumbers;
+    const Options                *options;
+    port::Mutex                  *dbLock;
+    VersionSet                   *versions;
+    Env                          *env;
+    int                           level;
+    void abandone();
+  };
+
+  struct CompactionTargetParams{
+    uint64_t fileSize(int level) const {
+      return fileSizeLimitForLevel1 * ( 1ul << (level -1) );
+    }
+    uint32_t numFilesPerLevel(int level) const {
+      if (level == 0)
+        return 0;
+      if (level < 3)
+        return 10;
+      return 1000;
+    }
+  private:
+    uint64_t fileSizeLimitForLevel1 = 4 * 1024 * 1024;
+  };
+  const CompactionTargetParams compactionTarget_;
+
 };
 
 // Sanitize db options.  The caller should delete result.info_log if

@@ -16,13 +16,11 @@
 
 namespace leveldb {
 
-class Compaction;
-
 // Grouping of constants.  We may want to make some of these
 // parameters set via options.
 namespace config {
 static const int kNumLevels = 7;
-static const int kNumOverlapLevels = 2;
+static const int kNumOverlapLevels = 1;
 
 // Level-0 compaction is started when we hit this many files.
 // Google:  static const size_t kL0_CompactionTrigger = 4;
@@ -177,6 +175,10 @@ class InternalKey {
 
   void Clear() { rep_.clear(); }
 
+  bool valid(){
+    return !rep_.empty();
+  }
+
   std::string DebugString() const;
 };
 
@@ -252,13 +254,11 @@ protected:
     // database values needed for processing
     const Comparator * user_comparator;
     SequenceNumber smallest_snapshot;
-    Compaction * const compaction;
 
     bool valid;
 
 public:
-    KeyRetirement(const Comparator * UserComparator, SequenceNumber SmallestSnapshot,
-                  Compaction * const Compaction=NULL);
+    KeyRetirement(const Comparator * UserComparator, SequenceNumber SmallestSnapshot);
 
     virtual ~KeyRetirement() {};
 

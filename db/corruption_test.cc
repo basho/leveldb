@@ -239,8 +239,6 @@ TEST(CorruptionTest, TableFile) {
   Build(100);
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  dbi->TEST_CompactRange(0, NULL, NULL);
-  dbi->TEST_CompactRange(1, NULL, NULL);
 
   Corrupt(kTableFile, 100, 1, 2);
   Check(95, 99);
@@ -288,7 +286,6 @@ TEST(CorruptionTest, CorruptedDescriptor) {
   ASSERT_OK(db_->Put(WriteOptions(), "foo", "hello"));
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  dbi->TEST_CompactRange(0, NULL, NULL);
 
   Corrupt(kDescriptorFile, 0, 1000);
   Status s = TryReopen();
