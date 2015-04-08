@@ -53,6 +53,10 @@ void *ThreadStaticEntry(void *args)
 
 }   // ThreadStaticEntry
 
+// In a function purely for profiling right now.
+void HotThread::DoWork(ThreadTask * item) {
+  (*item)();
+}
 
 /**
  * Worker threads:  worker threads have 3 states:
@@ -99,7 +103,7 @@ HotThread::ThreadRoutine()
         if (NULL!=submission)
         {
             // execute the job
-            (*submission)();
+            DoWork(submission);
 
             submission->RefDec();
 

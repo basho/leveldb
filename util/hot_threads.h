@@ -70,6 +70,8 @@ public:
     // actual work loop
     void * ThreadRoutine();
 
+    void DoWork(ThreadTask * item);
+
 private:
     HotThread();                              // no default
     HotThread(const HotThread &);             // no copy
@@ -141,6 +143,7 @@ public:
     bool FindWaitingThread(ThreadTask * work, bool OkToQueue=true);
 
     bool Submit(ThreadTask * item, bool OkToQueue=true);
+
 
     size_t work_queue_size() const { return m_WorkQueue.size();}
     bool shutdown_pending() const  { return m_Shutdown; }

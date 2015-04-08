@@ -51,7 +51,6 @@ class DataDictionaryImpl {
     port::Mutex mutex_;
     Name2IdTable name2id_;
     Id2NameTable id2name_;
-    WritableFile * file_;
     log::Writer * writer_;
 };
 
@@ -63,7 +62,6 @@ DataDictionaryImpl::DataDictionaryImpl(const std::string & basedir)
   : id_(0),
   name2id_(Name2IdComparator(), &arena_),
   id2name_(Id2NameComparator(), &arena_),
-  file_(NULL),
   writer_(NULL)
 {
   std::string filename = basedir + "/data_dictionary.dat";
@@ -72,19 +70,16 @@ DataDictionaryImpl::DataDictionaryImpl(const std::string & basedir)
   Env * env = Env::Default();
   // TODO: If file was corrupted, move aside, start new one, assume the system
   // will try to repair it from other sources somehow.
-  Status s = env->NewAppendableFile(filename, &file_, last_record_offset,
+  WritableFile * file;
+  Status s = env->NewAppendableFile(filename, &file, last_record_offset,
                                     4 * 1024);
   if (!s.ok())
     throw "Failed to create data dictionary output file";
 
-  writer_ = new log::Writer(file_, last_record_offset);
+  writer_ = new log::Writer(file, last_record_offset);
 }
 
 DataDictionaryImpl::~DataDictionaryImpl() {
-  if (file_) {
-    file_->Close();
-    delete file_;
-  }
   delete writer_;
 }
 
