@@ -3,6 +3,9 @@
 
 #include "db/compaction_strategy.h"
 #include "port/atomic_pointer.h"
+#include <thread>
+#include <condition_variable>
+#include <chrono>
 
 namespace leveldb{
 
@@ -11,12 +14,9 @@ class LevelSizeCS : public CompactionStrategy
 {
 public:
   LevelSizeCS();
+  ~LevelSizeCS();
   virtual
   void attachTo(DBImpl *thisDB) override;
-  virtual
-  bool isBackgroundJobs() const override;
-private:
-  port::AtomicPointer stopped;
 };
 
 }

@@ -238,11 +238,14 @@ void DBImpl::Destruct(){
   DBList()->ReleaseDB(this, options_.is_internal_db);
 
   // Wait for background work to finish
-  {
-    MutexLock l(&mutex_);
-    shutting_down_.Release_Store(this);  // Any non-NULL value is ok
-    while (IsBackroundJobs())
-      bg_cv_.Wait();
+  shutting_down_.Release_Store(this);  // Any non-NULL value is ok
+  while (true){
+    {
+      MutexLock l(&mutex_);
+      if (!IsBackroundJobs())
+        break;
+    }
+    bg_cv_.Wait();
   }
   // make sure flex cache knows this db is gone
   //  (must follow ReleaseDB() call ... see above)
@@ -1670,10 +1673,7 @@ bool
 DBImpl::IsBackroundJobs()
 {
   mutex_.AssertHeld();
-  bool ret = false;
-  for ( auto &cs : compactionStrategies_)
-    ret |= cs->isBackgroundJobs();
-  ret |= std::accumulate(isCompactionSubmitted_.begin(), isCompactionSubmitted_.end(), false);
+  bool ret = std::accumulate(isCompactionSubmitted_.begin(), isCompactionSubmitted_.end(), false);
   return ret;
 }
 
@@ -1741,7 +1741,6 @@ void DBImpl::compactionFinished(int level)
   fireOnCompactionFinished(level);
 }
 
-
 void DBImpl::enqueueCompaction(int level)
 {
   mutex_.AssertHeld();
@@ -1749,7 +1748,13 @@ void DBImpl::enqueueCompaction(int level)
     return;
   if ( isCompactionSubmitted(level) )
     return; // No!
-  auto *task=new CompactionTask(this, level);
+  auto fileList = [=](const Version *v) -> std::vector<FileMetaData*> {
+    return v->GetFileList(level);
+  };
+  DBImpl::DropTheKey neverDrop = [](Slice, SequenceNumber) -> bool {
+    return false;
+  };
+  auto *task = new CompactionTask(this, level, move(neverDrop), move(fileList));
   gCompactionThreads->Submit(task, true);
   compactionSubmitted(level);
 }
@@ -1761,13 +1766,37 @@ void DBImpl::enqueueCompaction(int level, DBImpl::DropTheKey && drop)
     return;
   if ( isCompactionSubmitted(level) )
     return; // No!
-  auto *task=new CompactionTaskWithDropper(this, level, move(drop));
+  auto fileList = [=](const Version *v) -> std::vector<FileMetaData*> {
+    return v->GetFileList(level);
+  };
+  auto *task = new CompactionTask(this, level, move(drop), move(fileList));
+  gCompactionThreads->Submit(task, true);
+  compactionSubmitted(level);
+}
+
+bool DBImpl::enqueueCompaction(int level, const string &ikeyStart, const string &ikeyEnd)
+{
+  mutex_.AssertHeld();
+  if ( isCompactionSubmitted(level) )
+    return false;
+  auto fileList = [=](const Version *v) -> std::vector<FileMetaData*> {
+    std::vector<FileMetaData*> ret;
+    InternalKey s, e;
+    s.DecodeFrom(ikeyStart);
+    e.DecodeFrom(ikeyEnd);
+    v->GetOverlappingInputs(level, &s, &e, &ret);
+    return ret;
+  };
+  DBImpl::DropTheKey neverDrop = [](Slice, SequenceNumber) -> bool {
+    return false;
+  };
+  auto *task = new CompactionTask(this, level, move(neverDrop), move(fileList));
   gCompactionThreads->Submit(task, true);
   compactionSubmitted(level);
 }
 
 
-void DBImpl::compact(int level, DBImpl::DropTheKey &&drop)
+void DBImpl::compact(int level, DBImpl::DropTheKey &&drop, GetFileList &&filesToCompact)
 {
   try{
     AtExit signal([&]{
@@ -1786,9 +1815,9 @@ void DBImpl::compact(int level, DBImpl::DropTheKey &&drop)
 
     const Version *currentVersion;
     {
-        MutexLock l(&mutex_);
-        currentVersion = versions_->current();
-        const_cast<Version*>(currentVersion)->Ref();
+      MutexLock l(&mutex_);
+      currentVersion = versions_->current();
+      const_cast<Version*>(currentVersion)->Ref();
     }
     AtExit releaseVer([&]{
       MutexLock l(&mutex_);
@@ -1813,7 +1842,7 @@ void DBImpl::compact(int level, DBImpl::DropTheKey &&drop)
       options.dbname = dbname_;
       options.env = env_;
 
-      vector<FileMetaData*> inputs = currentVersion->GetFileList(level);
+      vector<FileMetaData*> inputs = filesToCompact(currentVersion);
       set<FileMetaData*> levelNextInputs;
       vector<FileMetaData*> overlappedInputs;
       vector<unique_ptr<Iterator>> itList;
@@ -2003,6 +2032,5 @@ void DBImpl::CompactionOutput::abandone()
   string fname = TableFileName(*options, fileNum, level);
   env->DeleteFile(fname);
 }
-
 
 }  // namespace leveldb

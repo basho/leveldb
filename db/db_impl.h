@@ -103,15 +103,17 @@ class DBImpl : public DB {
   void addCompactionFinishedListener(OnCompactionFinished f);
   /// decides wheither to drop the user key
   typedef std::function<bool(Slice, SequenceNumber)> DropTheKey;
+  typedef std::function<std::vector<FileMetaData*>(const Version *)> GetFileList;
   /// gonna compact \a level into level+1, if one of the levels is under compaction now, the call is ignored
   void enqueueCompaction( int level );
   void enqueueCompaction( int level, DropTheKey &&);
+  /// gonna compact \a level into level+1, if one of the levels is under compaction now, the call is ignored and false is returned
+  bool enqueueCompaction( int level, const std::string &ikeyStart, const std::string &ikeyEnd );
   // called by background thread to do actual compaction
-  void compact( int level, DropTheKey &&dropTheKey );
+  void compact( int level, DropTheKey &&dropTheKey, GetFileList &&filesToCompact );
 private:
   friend class DB;
   friend class LevelSizeCS;
-  friend class CompactionCheckTask;
   struct Writer;
 
   Iterator* NewInternalIterator(const ReadOptions&,
@@ -263,7 +265,6 @@ private:
   void compactionSubmitted(int level);
   void compactionFinished(int level);
 
-  std::vector<std::unique_ptr<CompactionStrategy>> compactionStrategies_;
 
   class CompactionOutput{
   public:
@@ -297,7 +298,7 @@ private:
 
   struct CompactionTargetParams{
     uint64_t fileSize(int level) const {
-      return fileSizeLimitForLevel1 * ( 1ul << (level -1) );
+      return fileSizeLimitForLevel0 << level;
     }
     uint32_t numFilesPerLevel(int level) const {
       if (level == 0)
@@ -307,9 +308,11 @@ private:
       return 1000;
     }
   private:
-    uint64_t fileSizeLimitForLevel1 = 4 * 1024 * 1024;
+    uint64_t fileSizeLimitForLevel0 = 4 * 1024 * 1024;
   };
   const CompactionTargetParams compactionTarget_;
+
+  std::vector<std::unique_ptr<CompactionStrategy>> compactionStrategies_;
 
 };
 

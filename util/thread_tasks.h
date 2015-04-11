@@ -107,38 +107,19 @@ private:
  * Background compaction 
  */
 
-class CompactionTask : public ThreadTask
-{
-protected:
-    DBImpl * DBImpl_;
-    int level_;
-
+class CompactionTask : public ThreadTask{
 public:
-    CompactionTask(DBImpl * Db, int level)
-        : DBImpl_(Db), level_(level) {};
-
-    virtual void operator()() 
-    {
-      DBImpl_->compact(level_, DBImpl::DropTheKey( [](Slice, SequenceNumber)->bool{return false;} ));
-    };
-
-private:
-    CompactionTask();
-    CompactionTask(const CompactionTask &);
-    CompactionTask & operator=(const CompactionTask &);
-
-};  // class CompactionTask
-
-class CompactionTaskWithDropper : public CompactionTask{
-public:
-  CompactionTaskWithDropper(DBImpl * Db, int level, DBImpl::DropTheKey &&dropper) :
-    CompactionTask(Db, level), dropper_(std::move(dropper)) {}
+  CompactionTask(DBImpl * Db, int level, DBImpl::DropTheKey &&dropper, DBImpl::GetFileList &&filesToCompact) :
+    DBImpl_(Db), level_(level), dropper_(std::move(dropper)), filesToCompact_(std::move(filesToCompact)) {}
   virtual void operator()()
   {
-    DBImpl_->compact(level_, std::move(dropper_));
+    DBImpl_->compact(level_, std::move(dropper_), std::move(filesToCompact_));
   };
 private:
-  DBImpl::DropTheKey dropper_;
+  DBImpl * DBImpl_;
+  int      level_;
+  DBImpl::DropTheKey  dropper_;
+  DBImpl::GetFileList filesToCompact_;
 };
 
 /**

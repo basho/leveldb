@@ -17,8 +17,6 @@ public:
    */
   virtual
   void attachTo(DBImpl *thisDB) =0;
-  virtual
-  bool isBackgroundJobs() const = 0;
 };
 
 }
