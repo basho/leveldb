@@ -20,6 +20,7 @@
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "util/cache2.h"
+#include "util/once_in.h"
 
 namespace leveldb {
 
@@ -107,8 +108,8 @@ class DBImpl : public DB {
   /// gonna compact \a level into level+1, if one of the levels is under compaction now, the call is ignored
   void enqueueCompaction( int level );
   void enqueueCompaction( int level, DropTheKey &&);
-  /// gonna compact \a level into level+1, if one of the levels is under compaction now, the call is ignored and false is returned
-  bool enqueueCompaction( int level, const std::string &ikeyStart, const std::string &ikeyEnd );
+  /// gonna compact files with the key range on the \a level into level+1, none of the levels should be under compaction now
+  void enqueueCompaction( int level, const std::string &ikeyStart, const std::string &ikeyEnd );
   // called by background thread to do actual compaction
   void compact( int level, DropTheKey &&dropTheKey, GetFileList &&filesToCompact );
 private:
@@ -230,9 +231,6 @@ private:
 
   volatile uint64_t throttle_end;
   volatile uint32_t running_compactions_;
-  volatile size_t current_block_size_;    // last dynamic block size computed
-  volatile uint64_t block_size_changed_;  // NowMicros() when block size computed
-  volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache->GetBlockCache());};
@@ -260,11 +258,39 @@ private:
   std::vector<OnCompactionFinished> onCompactionFinished_;
   void fireOnCompactionFinished(int level);
 
+  int               current_block_size_step_;    // last dynamic block size computed
+  OnceIn            increaseBlockSizeInterval_;
   std::vector<bool> isCompactionSubmitted_;
   bool isCompactionSubmitted(int level);
   void compactionSubmitted(int level);
   void compactionFinished(int level);
 
+  struct CompactionStatistics{
+    uint64_t AvgKeySize = 0;
+    uint64_t KeysCount  = 0;
+    uint64_t AvgDataSize =0;
+    
+    void countIn(Slice key, Slice val){
+      auto newCount = KeysCount + 1;
+      AvgKeySize = (AvgKeySize * KeysCount + key.size()) / newCount;
+      AvgDataSize = (AvgDataSize * KeysCount + val.size()) / newCount;
+      KeysCount = newCount;
+    }
+    // merges two statistics. resets \a
+    void countIn(CompactionStatistics &a){
+      auto totalKeys = KeysCount + a.KeysCount;
+      if ( totalKeys == 0 )
+        return; // both empty
+      AvgKeySize = (AvgKeySize * KeysCount + a.AvgKeySize * a.KeysCount) / totalKeys;
+      AvgDataSize = (AvgDataSize * KeysCount + a.AvgDataSize * a.KeysCount) / totalKeys;
+      KeysCount = totalKeys;
+      a = CompactionStatistics();
+    }
+  };
+
+  CompactionStatistics compactionStats_;
+
+  size_t blockSize(int level);
 
   class CompactionOutput{
   public:
@@ -276,7 +302,8 @@ private:
         port::Mutex *dbLock,
         VersionSet *versions,
         Env *env,
-        int level );
+        int level,
+        CompactionStatistics *stats);
     ~CompactionOutput();
     /// creates new output file. closes previous automatically
     void reset();
@@ -293,6 +320,8 @@ private:
     VersionSet                   *versions;
     Env                          *env;
     int                           level;
+    CompactionStatistics         *stats;
+    CompactionStatistics          localStats;
     void abandone();
   };
 

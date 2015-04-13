@@ -55,7 +55,7 @@ public:
 
     void Flush();
     void SetPlentySpace(bool PlentySpace) {m_PlentySpace=PlentySpace;};
-    bool GetPlentySpace() const {return(m_PlentySpace);};
+    bool IsPlentySpaceAvailable() const {return(m_PlentySpace);};
     void PurgeExpiredFiles();
 
     bool IsInternalDB() const {return(m_IsInternalDB);};

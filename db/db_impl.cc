@@ -179,9 +179,9 @@ DBImpl::DBImpl(
       level0_good(true),
       throttle_end(0),
       running_compactions_(0),
-      block_size_changed_(0), last_low_mem_(0)
+      increaseBlockSizeInterval_(std::chrono::minutes(5)),
+      current_block_size_step_(0)
 {
-  current_block_size_=options_.block_size;
   DBList()->AddDB(this, options_.is_internal_db);
 
   mem_->Ref();
@@ -708,6 +708,9 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
   Status s;
   {
     Options local_options;
+    local_options=options_;
+    local_options.compression=kNoCompression;
+    local_options.block_size=blockSize(0);
 
     mutex_.Unlock();
     Log(options_.info_log, "Level-0 table #%llu: started",
@@ -715,9 +718,6 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
 
     // want the data slammed to disk as fast as possible,
     //  no compression for level 0.
-    local_options=options_;
-    local_options.compression=kNoCompression;
-    local_options.block_size=current_block_size_;
     s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
     Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
@@ -1774,11 +1774,10 @@ void DBImpl::enqueueCompaction(int level, DBImpl::DropTheKey && drop)
   compactionSubmitted(level);
 }
 
-bool DBImpl::enqueueCompaction(int level, const string &ikeyStart, const string &ikeyEnd)
+void DBImpl::enqueueCompaction(int level, const string &ikeyStart, const string &ikeyEnd)
 {
   mutex_.AssertHeld();
-  if ( isCompactionSubmitted(level) )
-    return false;
+  assert( !isCompactionSubmitted(level) );
   auto fileList = [=](const Version *v) -> std::vector<FileMetaData*> {
     std::vector<FileMetaData*> ret;
     InternalKey s, e;
@@ -1795,6 +1794,15 @@ bool DBImpl::enqueueCompaction(int level, const string &ikeyStart, const string 
   compactionSubmitted(level);
 }
 
+size_t DBImpl::blockSize(int level)
+{
+  mutex_.AssertHeld();
+  if ( increaseBlockSizeInterval_.isTime() && !double_cache->IsPlentySpaceAvailable()){
+    if ( current_block_size_step_ < options_.block_size_steps )
+          current_block_size_step_++;
+  }
+  return options_.block_size << (current_block_size_step_ + level/3); //every 3rd level increases block size *2
+}
 
 void DBImpl::compact(int level, DBImpl::DropTheKey &&drop, GetFileList &&filesToCompact)
 {
@@ -1827,6 +1835,7 @@ void DBImpl::compact(int level, DBImpl::DropTheKey &&drop, GetFileList &&filesTo
     Log(options_.info_log,
       "Started compacting level %d to %d", level, level+1 );
 
+    Options outOpt;
     const Comparator *userCmp;
     vector<FileMetaData*> filesToDelete;
     vector<FileMetaData> filesToAdd;
@@ -1862,9 +1871,11 @@ void DBImpl::compact(int level, DBImpl::DropTheKey &&drop, GetFileList &&filesTo
       mergingIterator.reset( NewMergingIterator(&internal_comparator_, &it.front(), it.size()) );
       for (auto &p : itList)
         p.release();
+      outOpt = options_;
+      outOpt.block_size = blockSize(level+1);
     }
     {
-      CompactionOutput out(&filesToAdd, &pending_outputs_, &options_, &mutex_, versions_, env_, level + 1);
+      CompactionOutput out(&filesToAdd, &pending_outputs_, &outOpt, &mutex_, versions_, env_, level + 1, &compactionStats_);
       out.reset();
       string outKey;
       string outVal;
@@ -1938,7 +1949,8 @@ DBImpl::CompactionOutput::CompactionOutput(
     port::Mutex *dbLock,
     VersionSet *versions,
     Env *env,
-    int level
+    int level,
+    CompactionStatistics *stats
 ){
   this->addedFiles = addedFilesList;
   this->addedFileNumbers = addedFileNumbers;
@@ -1947,6 +1959,7 @@ DBImpl::CompactionOutput::CompactionOutput(
   this->versions = versions;
   this->env = env;
   this->level = level;
+  this->stats = stats;
 }
 
 DBImpl::CompactionOutput::~CompactionOutput()
@@ -1968,6 +1981,7 @@ void DBImpl::CompactionOutput::reset()
     f.number = fileNum;
     f.level = level;
     addedFileNumbers->insert(fileNum);
+    stats->countIn( localStats );
   }
   string fname = TableFileName(*options, fileNum, level);
   WritableFile *wf;
@@ -1985,6 +1999,7 @@ void DBImpl::CompactionOutput::add(Slice key, Slice val)
   if ( !f.smallest.valid() )
     f.smallest.DecodeFrom(key);
   f.largest.DecodeFrom(key);
+  localStats.countIn(key, val);
 }
 
 uint64_t DBImpl::CompactionOutput::fileSize()
