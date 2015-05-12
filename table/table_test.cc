@@ -318,16 +318,10 @@ class MemTableConstructor: public Constructor {
   explicit MemTableConstructor(const Comparator* cmp)
       : Constructor(cmp),
         internal_comparator_(cmp) {
-    memtable_ = new MemTable(internal_comparator_);
-    memtable_->Ref();
-  }
-  ~MemTableConstructor() {
-    memtable_->Unref();
+    memtable_ = std::make_shared<MemTable>(internal_comparator_);
   }
   virtual Status FinishImpl(const Options& options, const KVMap& data) {
-    memtable_->Unref();
-    memtable_ = new MemTable(internal_comparator_);
-    memtable_->Ref();
+    memtable_ = std::make_shared<MemTable>(internal_comparator_);
     int seq = 1;
     for (KVMap::const_iterator it = data.begin();
          it != data.end();
@@ -343,7 +337,7 @@ class MemTableConstructor: public Constructor {
 
  private:
   InternalKeyComparator internal_comparator_;
-  MemTable* memtable_;
+  std::shared_ptr<MemTable> memtable_;
 };
 
 class DBConstructor: public Constructor {
@@ -731,15 +725,14 @@ class MemTableTest { };
 
 TEST(MemTableTest, Simple) {
   InternalKeyComparator cmp(BytewiseComparator());
-  MemTable* memtable = new MemTable(cmp);
-  memtable->Ref();
+  std::shared_ptr<MemTable> memtable = std::make_unique<MemTable>(cmp);
   WriteBatch batch;
   WriteBatchInternal::SetSequence(&batch, 100);
   batch.Put(std::string("k1"), std::string("v1"));
   batch.Put(std::string("k2"), std::string("v2"));
   batch.Put(std::string("k3"), std::string("v3"));
   batch.Put(std::string("largekey"), std::string("vlarge"));
-  ASSERT_TRUE(WriteBatchInternal::InsertInto(&batch, memtable).ok());
+  ASSERT_TRUE(WriteBatchInternal::InsertInto(&batch, memtable.get()).ok());
 
   Iterator* iter = memtable->NewIterator();
   iter->SeekToFirst();
@@ -751,7 +744,6 @@ TEST(MemTableTest, Simple) {
   }
 
   delete iter;
-  memtable->Unref();
 }
 
 static bool Between(uint64_t val, uint64_t low, uint64_t high) {

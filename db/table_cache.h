@@ -45,8 +45,7 @@ class TableCache {
              uint64_t file_size,
              int level,
              const Slice& k,
-             void* arg,
-             bool (*handle_result)(void*, const Slice&, const Slice&));
+             std::function<bool(const Slice&, const Slice&)> &&saver);
 
   // Evict any entry for the specified file number
   void Evict(uint64_t file_number, bool is_overlapped);

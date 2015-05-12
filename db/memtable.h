@@ -23,18 +23,6 @@ class MemTable {
   // is zero and the caller must call Ref() at least once.
   explicit MemTable(const InternalKeyComparator& comparator);
 
-  // Increase reference count.
-  void Ref() volatile { ++refs_; }
-
-  // Drop reference count.  Delete if no more references exist.
-  void Unref() volatile {
-    --refs_;
-    assert(refs_ >= 0);
-    if (refs_ <= 0) {
-      delete this;
-    }
-  }
-
   // Returns an estimate of the number of bytes of data in use by this
   // data structure.
   //
@@ -61,11 +49,10 @@ class MemTable {
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
   // Else, return false.
-  bool Get(const LookupKey& key, Value* value, Status* s);
+  bool Get(const LookupKey& key, Value* value, SequenceNumber *seq, Status* s);
 
+  ~MemTable();
  private:
-  ~MemTable();  // Private since only Unref() should be used to delete it
-
   struct KeyComparator {
     const InternalKeyComparator comparator;
     explicit KeyComparator(const InternalKeyComparator& c) : comparator(c) { }

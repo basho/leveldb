@@ -78,30 +78,6 @@ private:
 };  // class ThreadTask
 
 
-/**
- * Background write of imm buffer to Level-0 file
- */
-
-class ImmWriteTask : public ThreadTask
-{
-protected:
-    DBImpl * m_DBImpl;
-
-public:
-    explicit ImmWriteTask(DBImpl * Db)
-        : m_DBImpl(Db) {};
-
-    virtual ~ImmWriteTask() {};
-
-    virtual void operator()() {m_DBImpl->BackgroundImmCompactCall();};
-
-private:
-    ImmWriteTask();
-    ImmWriteTask(const ImmWriteTask &);
-    ImmWriteTask & operator=(const ImmWriteTask &);
-
-};  // class ImmWriteTask
-
 
 /**
  * Background compaction 
@@ -109,17 +85,15 @@ private:
 
 class CompactionTask : public ThreadTask{
 public:
-  CompactionTask(DBImpl * Db, int level, DBImpl::DropTheKey &&dropper, DBImpl::GetFileList &&filesToCompact) :
-    DBImpl_(Db), level_(level), dropper_(std::move(dropper)), filesToCompact_(std::move(filesToCompact)) {}
+  CompactionTask(DBImpl * Db, int level) :
+    DBImpl_(Db), level_(level) {}
   virtual void operator()()
   {
-    DBImpl_->compact(level_, std::move(dropper_), std::move(filesToCompact_));
+    DBImpl_->compact(level_);
   };
 private:
   DBImpl * DBImpl_;
   int      level_;
-  DBImpl::DropTheKey  dropper_;
-  DBImpl::GetFileList filesToCompact_;
 };
 
 /**

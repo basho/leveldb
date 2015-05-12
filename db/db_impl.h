@@ -16,11 +16,13 @@
 #include "db/data_dictionary.h"
 #include "db/version_edit.h"
 #include "db/compaction_strategy.h"
+#include "db/range_deletes.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "util/cache2.h"
 #include "util/once_in.h"
+#include "util/task_queue.h"
 
 namespace leveldb {
 
@@ -40,6 +42,7 @@ class DBImpl : public DB {
   // Implementations of the DB interface
   virtual Status Put(const std::string& family, const WriteOptions&, const Slice& key, const Slice& value);
   virtual Status Delete(const std::string& family, const WriteOptions&, const Slice& key);
+  virtual Status Delete(const std::string& family, const WriteOptions&, const Slice& fromKey, const Slice& toKey);
   virtual Status Write(const std::string& family, const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(
       const std::string& family,
@@ -55,6 +58,7 @@ class DBImpl : public DB {
   // Implementations of the DB interface
   virtual Status Put(const WriteOptions&, const Slice& key, const Slice& value);
   virtual Status Delete(const WriteOptions&, const Slice& key);
+  virtual Status Delete(const WriteOptions&, const Slice& fromKey, const Slice& toKey);
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(const ReadOptions& options,
                      const Slice& key,
@@ -107,11 +111,10 @@ class DBImpl : public DB {
   typedef std::function<std::vector<FileMetaData*>(const Version *)> GetFileList;
   /// gonna compact \a level into level+1, if one of the levels is under compaction now, the call is ignored
   void enqueueCompaction( int level );
-  void enqueueCompaction( int level, DropTheKey &&);
-  /// gonna compact files with the key range on the \a level into level+1, none of the levels should be under compaction now
-  void enqueueCompaction( int level, const std::string &ikeyStart, const std::string &ikeyEnd );
   // called by background thread to do actual compaction
-  void compact( int level, DropTheKey &&dropTheKey, GetFileList &&filesToCompact );
+  void compact( int level );
+
+  size_t numRangeDeleteIntervals(int level);
 private:
   friend class DB;
   friend class LevelSizeCS;
@@ -146,7 +149,12 @@ private:
                         VersionEdit* edit,
                         SequenceNumber* max_sequence);
 
-  Status WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit, Version* base);
+  Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base);
+
+  // blocks and waits if imm_ is not yet written
+  void enqueueMemWrite();
+  // temporary unlocks and waits till imm write finishes.
+  void waitImmWriteFinish();
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
   WriteBatch* BuildBatchGroup(Writer** last_writer);
@@ -178,9 +186,8 @@ private:
   port::AtomicPointer shutting_down_;
 
   port::CondVar bg_cv_;          // Signalled when background work finishes
-  MemTable* mem_;
-  volatile MemTable* imm_;                // Memtable being compacted
-  port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
+  std::shared_ptr<MemTable> mem_;
+  std::shared_ptr<MemTable> imm_;                // Memtable being compacted
   uint64_t logfile_number_;
   std::unique_ptr<log::Writer> log_;
 
@@ -225,9 +232,6 @@ private:
     }
   };
   CompactionStats stats_[config::kNumLevels];
-
-  // hint to background thread when level0 is backing up
-  volatile bool level0_good;
 
   volatile uint64_t throttle_end;
   volatile uint32_t running_compactions_;
@@ -327,7 +331,7 @@ private:
 
   struct CompactionTargetParams{
     uint64_t fileSize(int level) const {
-      return fileSizeLimitForLevel0 << level;
+      return fileSizeLimitForLevel0_ << level;
     }
     uint32_t numFilesPerLevel(int level) const {
       if (level == 0)
@@ -336,13 +340,19 @@ private:
         return 10;
       return 1000;
     }
+    size_t numRangeDeletes() const{
+      return numRangeDeletes_;
+    }
   private:
-    uint64_t fileSizeLimitForLevel0 = 4 * 1024 * 1024;
+    uint64_t fileSizeLimitForLevel0_ = 16 * 1024 * 1024;
+    size_t  numRangeDeletes_ = 10000;
   };
   const CompactionTargetParams compactionTarget_;
-
   std::vector<std::unique_ptr<CompactionStrategy>> compactionStrategies_;
 
+  const std::unique_ptr<RangeDeletes> rangeDeletes_;
+
+  TaskQueue immWrite_;
 };
 
 // Sanitize db options.  The caller should delete result.info_log if

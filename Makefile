@@ -9,8 +9,8 @@ INSTALL_PATH ?= $(CURDIR)
 # Uncomment exactly one of the lines labelled (A), (B), and (C) below
 # to switch between compilation modes.
 
-OPT ?= -std=c++11 -O3 -g -DNDEBUG    # (A) Production use (optimized mode)
-# OPT ?= -std=c++11 -g2             # (B) Debug mode, w/ full line-level debugging symbols
+OPT ?= -std=c++14 -O3 -g -DNDEBUG    # (A) Production use (optimized mode)
+#OPT ?= -std=c++14 -g2             # (B) Debug mode, w/ full line-level debugging symbols
 # OPT ?= -std=c++11 -O3 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
 #-----------------------------------------------
 
@@ -20,7 +20,7 @@ $(shell ./build_detect_platform build_config.mk)
 include build_config.mk
 
 CFLAGS += -I. -I./include $(PLATFORM_CCFLAGS) $(OPT)
-CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT)
+CXXFLAGS += -I. -I./include -I../boost $(PLATFORM_CXXFLAGS) $(OPT)
 
 LDFLAGS += $(PLATFORM_LDFLAGS)
 

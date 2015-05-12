@@ -29,7 +29,6 @@ namespace leveldb {
 
 namespace log { class Writer; }
 
-class Compaction;
 class Iterator;
 class MemTable;
 class TableBuilder;
@@ -72,7 +71,7 @@ class Version {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-  Status Get(const ReadOptions&, const LookupKey& key, Value* val,
+  Status Get(const ReadOptions&, const LookupKey& key, Value* val, SequenceNumber *seq,
              GetStats* stats);
 
   // Adds "stats" into the current state.  Returns true if a new
@@ -92,7 +91,7 @@ class Version {
       const InternalKey* end,           // NULL means after all keys
       std::vector<FileMetaData*>* inputs) const;
 
-  // Returns true iff some file in the specified level overlaps
+  // Returns true if some file in the specified level overlaps
   // some part of [*smallest_user_key,*largest_user_key].
   // smallest_user_key==NULL represents a key smaller than all keys in the DB.
   // largest_user_key==NULL represents a key largest than all keys in the DB.
@@ -123,7 +122,6 @@ class Version {
   int getLastFilledLevel() const;
 
  private:
-  friend class Compaction;
   friend class VersionSet;
 
   class LevelFileNumIterator;
@@ -201,8 +199,6 @@ class VersionSet {
   // is the specified level overlapped (or if false->sorted)
   bool IsLevelOverlapped(int level) const;
 
-  uint64_t MaxFileSizeForLevel(int level) const;
-
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
 
@@ -264,11 +260,9 @@ class VersionSet {
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
 
   TableCache* GetTableCache() {return(table_cache_);};
-
  private:
   class Builder;
 
-  friend class Compaction;
   friend class Version;
 
   void UpdatePenalty(Version *v);
@@ -281,8 +275,6 @@ class VersionSet {
                  const std::vector<FileMetaData*>& inputs2,
                  InternalKey* smallest,
                  InternalKey* largest);
-
-  void SetupOtherInputs(Compaction* c);
 
   // Save current contents to *log
   Status WriteSnapshot(log::Writer* log);
@@ -309,7 +301,6 @@ class VersionSet {
   // Riak allows multiple compaction threads, this mutex allows
   //  only one to write to manifest at a time.  Only used in LogAndApply
   port::Mutex manifest_mutex_;
-
 
   // No copying allowed
   VersionSet(const VersionSet&);

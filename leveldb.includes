@@ -1,4 +1,5 @@
 .
+../boost/
 include
 db
 helpers/memenv

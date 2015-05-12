@@ -5,6 +5,7 @@
 #ifndef STORAGE_LEVELDB_INCLUDE_TABLE_H_
 #define STORAGE_LEVELDB_INCLUDE_TABLE_H_
 
+#include <functional>
 #include <stdint.h>
 #include "leveldb/iterator.h"
 #include "leveldb/perf_count.h"
@@ -86,8 +87,7 @@ class Table {
   friend class TableCache;
   Status InternalGet(
       const ReadOptions&, const Slice& key,
-      void* arg,
-      bool (*handle_result)(void* arg, const Slice& k, const Slice& v));
+      std::function<bool(const Slice&, const Slice&)> &&saver);
 
 
   void ReadMeta(const Footer& footer);

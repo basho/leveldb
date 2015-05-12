@@ -19,6 +19,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <string>
+#include "db/data_buffer.h"
 
 namespace leveldb {
 
@@ -32,6 +33,9 @@ class Slice {
 
   // Create a slice that refers to the contents of "s"
   Slice(const std::string& s) : data_(s.data()), size_(s.size()) { }
+
+  // Create a slice that refers to the contents of "b"
+  Slice(const DataBuffer& b) : data_((char*) &b.front()), size_(b.size()) { }
 
   // Create a slice that refers to s[0,strlen(s)-1]
   Slice(const char* s) : data_(s), size_(strlen(s)) { }
@@ -101,6 +105,29 @@ inline int Slice::compare(const Slice& b) const {
     else if (size_ > b.size_) r = +1;
   }
   return r;
+}
+
+/// clears the buffer and copies slice content into it
+const DataBuffer &operator<<(DataBuffer &db, Slice s);
+
+// corresponding read is in data_buffer.h
+template <class CharT, class Traits>
+std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, Slice s)
+{
+  size_t size = s.size();
+  while (size > 127)
+  {
+    os.put( (size & 127)|128 );
+    size >>= 7;
+  }
+  os.put(size);
+  os.write( s.data(), s.size() );
+  return os;
+}
+
+inline
+DataBuffer dataBuffer(Slice s){
+  return DataBuffer(s.data(), s.data() + s.size());
 }
 
 }  // namespace leveldb

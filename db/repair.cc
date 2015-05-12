@@ -38,6 +38,8 @@
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 
+using namespace std;
+
 namespace leveldb {
 
 namespace {
@@ -292,8 +294,7 @@ class Repairer {
     std::string scratch;
     Slice record;
     WriteBatch batch;
-    MemTable* mem = new MemTable(icmp_);
-    mem->Ref();
+    shared_ptr<MemTable> mem = make_shared<MemTable>(icmp_);
     int counter = 0;
     while (reader.ReadRecord(&record, &scratch)) {
       if (record.size() < 12) {
@@ -302,7 +303,7 @@ class Repairer {
         continue;
       }
       WriteBatchInternal::SetContents(&batch, record);
-      status = WriteBatchInternal::InsertInto(&batch, mem);
+      status = WriteBatchInternal::InsertInto(&batch, mem.get());
       if (status.ok()) {
         counter += WriteBatchInternal::Count(&batch);
       } else {
@@ -322,8 +323,7 @@ class Repairer {
     Iterator* iter = mem->NewIterator();
     status = BuildTable(dbname_, env_, options_, icmp_.user_comparator(), table_cache_, iter, &meta, 0);
     delete iter;
-    mem->Unref();
-    mem = NULL;
+    mem.reset();
     if (status.ok()) {
       if (meta.file_size > 0) {
         table_numbers_[0].push_back(meta.number);

@@ -41,6 +41,13 @@ void LevelSizeCS::attachTo(DBImpl *db)
       return;
     if ( db->versions_->NumLevelFiles(level+1) > db->compactionTarget_.numFilesPerLevel(level+1) )
       db->enqueueCompaction(level+1);
+    auto numFiles = db->versions_->NumLevelFiles(0);
+    if ( numFiles > db->compactionTarget_.numFilesPerLevel(0) )
+      db->enqueueCompaction(0);
+    for (int l = 0; l < config::kNumLevels; l++){
+      if ( db->numRangeDeleteIntervals(l) > db->compactionTarget_.numRangeDeletes() )
+        db->enqueueCompaction(l);
+    }
   });
 }
 

@@ -305,29 +305,6 @@ enum SaverState {
   kDeleted,
   kCorrupt,
 };
-struct Saver {
-  SaverState state;
-  const Comparator* ucmp;
-  Slice user_key;
-  Value* value;
-};
-}
-static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
-  bool match=false;
-  Saver* s = reinterpret_cast<Saver*>(arg);
-  ParsedInternalKey parsed_key;
-  if (!ParseInternalKey(ikey, &parsed_key)) {
-    s->state = kCorrupt;
-  } else {
-    if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
-      match=true;
-      s->state = (parsed_key.type == kTypeValue) ? kFound : kDeleted;
-      if (s->state == kFound) {
-        s->value->assign(v.data(), v.size());
-      }
-    }
-  }
-  return(match);
 }
 
 static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
@@ -337,6 +314,7 @@ static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
 Status Version::Get(const ReadOptions& options,
                     const LookupKey& k,
                     Value* value,
+                    SequenceNumber *seq,
                     GetStats* stats) {
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
@@ -408,17 +386,30 @@ Status Version::Get(const ReadOptions& options,
       last_file_read = f;
       last_file_read_level = level;
 
-      Saver saver;
-      saver.state = kNotFound;
-      saver.ucmp = ucmp;
-      saver.user_key = user_key;
-      saver.value = value;
+      SaverState state = kNotFound;
+
       s = vset_->table_cache_->Get(options, f->number, f->file_size, level,
-                                   ikey, &saver, SaveValue);
+          ikey, [&](const Slice& ikey, const Slice& v)->bool
+      {
+        ParsedInternalKey parsed_key;
+        if (!ParseInternalKey(ikey, &parsed_key)) {
+          state = kCorrupt;
+        } else {
+          if (ucmp->Compare(parsed_key.user_key, user_key) == 0) {
+            state = (parsed_key.type == kTypeValue) ? kFound : kDeleted;
+            if (state == kFound) {
+              *seq = parsed_key.sequence;
+              value->assign(v.data(), v.size());
+            }
+            return true;
+          }
+        }
+        return false;
+      });
       if (!s.ok()) {
         return s;
       }
-      switch (saver.state) {
+      switch (state) {
         case kNotFound:
           break;      // Keep searching in other files
         case kFound:
@@ -806,21 +797,22 @@ class VersionSet::Builder {
 VersionSet::VersionSet(const std::string& dbname,
                        const Options* options,
                        TableCache* table_cache,
-                       const InternalKeyComparator* cmp)
-    : env_(options->env),
-      dbname_(dbname),
-      options_(options),
-      table_cache_(table_cache),
-      icmp_(*cmp),
-      next_file_number_(2),
-      manifest_file_number_(0),  // Filled by Recover()
-      last_sequence_(0),
-      log_number_(0),
-      prev_log_number_(0),
-      write_rate_usec_(0),
-      descriptor_log_(NULL),
-      dummy_versions_(this),
-      current_(NULL) {
+                       const InternalKeyComparator* cmp) :
+  env_(options->env),
+  dbname_(dbname),
+  options_(options),
+  table_cache_(table_cache),
+  icmp_(*cmp),
+  next_file_number_(2),
+  manifest_file_number_(0),  // Filled by Recover()
+  last_sequence_(0),
+  log_number_(0),
+  prev_log_number_(0),
+  write_rate_usec_(0),
+  descriptor_log_(NULL),
+  dummy_versions_(this),
+  current_(NULL)
+{
   AppendVersion(new Version(this));
 }
 
@@ -1187,12 +1179,6 @@ bool VersionSet::IsLevelOverlapped(int level) const {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return(gLevelTraits[level].m_OverlappedFiles);
-}
-
-uint64_t VersionSet::MaxFileSizeForLevel(int level) const {
-  assert(level >= 0);
-  assert(level < config::kNumLevels);
-  return(gLevelTraits[level].m_MaxFileSizeForLevel);
 }
 
 const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {

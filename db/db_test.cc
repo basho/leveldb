@@ -5,6 +5,8 @@
 #include <limits>
 #include <chrono>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 #include "leveldb/db.h"
 #include "leveldb/filter_policy.h"
 #include "db/db_impl.h"
@@ -2052,15 +2054,12 @@ void pause(const char *effect){
 }
 
 void tick(size_t c, size_t e){
-  using duration = decltype(std::chrono::steady_clock::now());
-  static duration prev = duration::min();
-  auto now = std::chrono::steady_clock::now();
-  auto dif = std::chrono::duration_cast<std::chrono::seconds>(now - prev).count();
-  if ( !dif ){
+  static size_t prev = 100000;
+  size_t now = 100*c/(e-1);
+  if (prev == now)
     return;
-  }
   prev = now;
-  std::cout << 100*c/(e-1) << "%\r";
+  std::cout << now << "%\r";
   std::cout.flush();
 }
 
@@ -2107,6 +2106,91 @@ TEST(DBTest, Tezd){
   Close();
 }
 
+using namespace std;
+
+TEST(DBTest, RangeDeletes){
+  Options options = CurrentOptions();
+  options.delete_threshold = 0;
+  Reopen( &options );
+  WriteOptions wo;
+  ReadOptions  ro;
+  ostringstream out;
+  auto toKey = [&](size_t k) -> auto{
+    out.seekp(0);
+    out << setw(15) << setfill('0') << k;
+    return out.str();
+  };
+  size_t limit = 10'000'000;
+  //size_t limit = 1000;
+  puts("writing");
+  for (size_t i = 0; i < limit; i++ ){
+    auto key = toKey(i);
+    ASSERT_OK( db_->Put( wo, key, key) );
+    tick(i,limit);
+  }
+//  puts("testing");
+//  for (size_t i = 0; i < limit; i++ ){
+//    std::string ret_val;
+//    auto key = toKey(i);
+//    ASSERT_OK( db_->Get(ro, key, &ret_val) );
+//    ASSERT_TRUE(key == ret_val);
+//    tick(i,limit);
+//  }
+  puts("deleting");
+  for (size_t i = 0, prev = 0; i <= limit; i+= 10){
+    auto from = toKey(prev);
+    auto to = toKey(i);
+    if (i == prev)
+      continue;
+    prev = i;
+    ASSERT_OK( db_->Delete( wo, from, to) );
+    tick(i,limit);
+  }
+  puts("deleting even more");
+  for (size_t i = 0, prev = 0; i <= limit; i+= 100){ // overlap em
+    auto from = toKey(prev);
+    auto to = toKey(i);
+    if (i == prev)
+      continue;
+    prev = i;
+    ASSERT_OK( db_->Delete( wo, from, to) );
+    tick(i,limit);
+  }
+  puts("testing the results");
+  for (size_t i = 0; i < limit; i++ ){
+    std::string ret_val;
+    auto key = toKey(i);
+    if ( i % 100 ){
+      Status s = db_->Get(ro, key, &ret_val);
+      if ( s.ok() )
+        cout << key << " status: " << s.ToString() << endl;
+      ASSERT_NOTOK( s );
+    }
+    else{
+      Status s = db_->Get(ro, key, &ret_val);
+      //cout << "status: " << s.ToString() << endl;
+      ASSERT_OK( s );
+      ASSERT_TRUE(key == ret_val);
+    }
+    tick(i,limit);
+  }
+  puts("writing again");
+  for (size_t i = 0; i < limit; i++ ){
+    auto key = toKey(i);
+    ASSERT_OK( db_->Put( wo, key, key) );
+    tick(i,limit);
+  }
+  puts("testing");
+  for (size_t i = 0; i < limit; i++ ){
+    std::string ret_val;
+    auto key = toKey(i);
+    ASSERT_OK( db_->Get(ro, key, &ret_val) );
+    ASSERT_TRUE(key == ret_val);
+    tick(i,limit);
+  }
+  Close();
+}
+
 }  // namespace leveldb
 
 int main(int argc, char** argv) {
@@ -2118,6 +2202,6 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  setenv("LEVELDB_TESTS","Tezd", 1); // only run this test
+  setenv("LEVELDB_TESTS","RangeDeletes", 1); // only run this test
   return leveldb::test::RunAllTests();
 }

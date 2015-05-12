@@ -148,3 +148,12 @@ db/level_size_cs.cc
 db/level_size_cs.h
 util/once_in.h
 util/once_in.cc
+db/range_deletes.h
+db/range_deletes.cc
+db/comparable_key.h
+db/comparable_key.cc
+util/format.h
+db/data_buffer.h
+db/data_buffer.cc
+util/task_queue.h
+util/task_queue.cc

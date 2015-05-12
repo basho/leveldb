@@ -74,6 +74,7 @@ class DB {
 
   virtual Status Put(const std::string& family, const WriteOptions&, const Slice& key, const Slice& value)=0;
   virtual Status Delete(const std::string& family, const WriteOptions&, const Slice& key)=0;
+  virtual Status Delete(const std::string& family, const WriteOptions&, const Slice& fromKey, const Slice& toKey) =0;
   virtual Status Write(const std::string& family, const WriteOptions& options, WriteBatch* updates)=0;
   virtual Status Get(
       const std::string& family,
@@ -98,6 +99,8 @@ class DB {
   // did not exist in the database.
   // Note: consider setting options.sync = true.
   virtual Status Delete(const WriteOptions& options, const Slice& key) = 0;
+  // Deletes open interval (fromKey, toKey). note that it does not include neither fromKey nor toKey
+  virtual Status Delete(const WriteOptions&, const Slice& fromKey, const Slice& toKey) =0;
 
   // Apply the specified updates to the database.
   // Returns OK on success, non-OK on failure.

@@ -231,6 +231,8 @@ struct Options {
   // array.  levels tiered_slow_level through 6 use this path prefix
   std::string tiered_slow_prefix;
 
+  bool enableRangeDeletes = true;
+
   // Create an Options object with default values for all fields.
   Options();
 

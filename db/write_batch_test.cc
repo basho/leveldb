@@ -14,10 +14,9 @@ namespace leveldb {
 
 static std::string PrintContents(WriteBatch* b) {
   InternalKeyComparator cmp(BytewiseComparator());
-  MemTable* mem = new MemTable(cmp);
-  mem->Ref();
+  std::shared_ptr<MemTable> mem = std::make_shared<MemTable>(cmp);
   std::string state;
-  Status s = WriteBatchInternal::InsertInto(b, mem);
+  Status s = WriteBatchInternal::InsertInto(b, mem.get());
   int count = 0;
   Iterator* iter = mem->NewIterator();
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
@@ -48,7 +47,6 @@ static std::string PrintContents(WriteBatch* b) {
   } else if (count != WriteBatchInternal::Count(b)) {
     state.append("CountMismatch()");
   }
-  mem->Unref();
   return state;
 }
 

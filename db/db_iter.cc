@@ -94,12 +94,9 @@ class DBIter: public Iterator {
   }
 
   inline void ClearSavedValue() {
-    if (saved_value_.capacity() > 1048576) {
-      std::string empty;
-      swap(empty, saved_value_);
-    } else {
-      saved_value_.clear();
-    }
+    saved_value_.clear();
+    if (saved_value_.capacity() > 1048576)
+      saved_value_.shrink_to_fit();
   }
 
   const std::string* const dbname_;

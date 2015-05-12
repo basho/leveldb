@@ -304,8 +304,7 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
 }
 
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
-                          void* arg,
-                          bool (*saver)(void*, const Slice&, const Slice&)) {
+                          std::function<bool(const Slice&, const Slice&)> &&saver) {
   Status s;
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
@@ -323,7 +322,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       block_iter->Seek(k);
       if (block_iter->Valid()) {
         bool match;
-        match=(*saver)(arg, block_iter->key(), block_iter->value());
+        match=saver(block_iter->key(), block_iter->value());
         if (!match && NULL!=filter)
             gPerfCounters->Inc(ePerfBlockFilterFalse);
         if (match)
