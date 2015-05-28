@@ -58,11 +58,8 @@ include/leveldb/status.h
 include/leveldb/table.h
 include/leveldb/table_builder.h
 include/leveldb/write_batch.h
-port/win/stdint.h
 port/atomic_pointer.h
 port/port.h
-port/port_android.cc
-port/port_android.h
 port/port_example.h
 port/port_posix.cc
 port/port_posix.h
@@ -148,3 +145,5 @@ db/level_size_cs.cc
 db/level_size_cs.h
 util/once_in.h
 util/once_in.cc
+util/thread_pool.cc
+util/thread_pool.h

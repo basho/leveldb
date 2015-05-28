@@ -243,10 +243,37 @@ class VersionSet {
   }
 
 
+  // Pick level and inputs for a new compaction.
+  // Returns NULL if there is no compaction to be done.
+  // Otherwise returns a pointer to a heap-allocated object that
+  // describes the compaction.  Caller should delete the result.
+  //
+  // Riak October 2013:  Pick Compaction now posts work directly
+  //  to hot_thread pools
+  void PickCompaction(class DBImpl * db_impl);
+
+  // Return a compaction object for compacting the range [begin,end] in
+  // the specified level.  Returns NULL if there is nothing in that
+  // level that overlaps the specified range.  Caller should delete
+  // the result.
+  Compaction* CompactRange(
+      int level,
+      const InternalKey* begin,
+      const InternalKey* end);
 
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
   int64_t MaxNextLevelOverlappingBytes();
+
+  // Create an iterator that reads over the compaction inputs for "*c".
+  // The caller should delete the iterator when no longer needed.
+  Iterator* MakeInputIterator(Compaction* c);
+
+  // Returns true iff some level needs a compaction.
+  bool NeedsCompaction() const {
+    Version* v = current_;
+    return (v->compaction_score_ >= 1) || (v->file_to_compact_ != NULL);
+  }
 
   // Add all files listed in any live version to *live.
   // May also mutate some internal state.
@@ -262,8 +289,22 @@ class VersionSet {
     char buffer[100];
   };
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
+  const char* CompactionSummary(LevelSummaryStorage* scratch) const;
 
   TableCache* GetTableCache() {return(table_cache_);};
+
+  bool IsCompactionSubmitted(int level)
+  {return(m_CompactionStatus[level].m_Submitted);}
+
+  void SetCompactionSubmitted(int level)
+  {m_CompactionStatus[level].m_Submitted=true;}
+
+  void SetCompactionRunning(int level)
+  {m_CompactionStatus[level].m_Running=true;}
+
+  void SetCompactionDone(int level)
+  {   m_CompactionStatus[level].m_Running=false;
+      m_CompactionStatus[level].m_Submitted=false;}
 
  private:
   class Builder;
@@ -271,6 +312,7 @@ class VersionSet {
   friend class Compaction;
   friend class Version;
 
+  bool Finalize(Version* v);
   void UpdatePenalty(Version *v);
 
   void GetRange(const std::vector<FileMetaData*>& inputs,
@@ -306,14 +348,117 @@ class VersionSet {
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
 
+  // Per-level key at which the next compaction at that level should start.
+  // Either an empty string, or a valid InternalKey.
+  std::string compact_pointer_[config::kNumLevels];
+
   // Riak allows multiple compaction threads, this mutex allows
   //  only one to write to manifest at a time.  Only used in LogAndApply
   port::Mutex manifest_mutex_;
+
+  struct CompactionStatus_s
+  {
+      bool m_Submitted;     //!< level submitted to hot thread pool
+      bool m_Running;       //!< thread actually running compaction
+
+      CompactionStatus_s()
+      : m_Submitted(false), m_Running(false)
+      {};
+  } m_CompactionStatus[config::kNumLevels];
 
 
   // No copying allowed
   VersionSet(const VersionSet&);
   void operator=(const VersionSet&);
+};
+
+// A Compaction encapsulates information about a compaction.
+class Compaction {
+ public:
+  ~Compaction();
+
+  // Return the level that is being compacted.  Inputs from "level"
+  // and "level+1" will be merged to produce a set of "level+1" files.
+  int level() const { return level_; }
+
+  // Return the object that holds the edits to the descriptor done
+  // by this compaction.
+  VersionEdit* edit() { return &edit_; }
+
+  // "which" must be either 0 or 1
+  int num_input_files(int which) const { return inputs_[which].size(); }
+
+  // Return the ith input file at "level()+which" ("which" must be 0 or 1).
+  FileMetaData* input(int which, int i) const { return inputs_[which][i]; }
+
+  // Maximum size of files to build during this compaction.
+  uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
+
+  // Is this a trivial compaction that can be implemented by just
+  // moving a single input file to the next level (no merging or splitting)
+  bool IsTrivialMove() const;
+
+  // Add all inputs to this compaction as delete operations to *edit.
+  void AddInputDeletions(VersionEdit* edit);
+
+  // Returns true if the information we have available guarantees that
+  // the compaction is producing data in "level+1" for which no data exists
+  // in levels greater than "level+1".
+  bool IsBaseLevelForKey(const Slice& user_key);
+
+  // Returns true iff we should stop building the current output
+  // before processing "internal_key".
+  bool ShouldStopBefore(const Slice& internal_key, size_t key_count);
+
+  // Release the input version for the compaction, once the compaction
+  // is successful.
+  void ReleaseInputs();
+
+  // Riak specific:  get summary statistics from compaction inputs
+  void CalcInputStats(TableCache & tables);
+  size_t TotalUserDataSize() const {return(tot_user_data_);};
+  size_t TotalIndexKeys()    const {return(tot_index_keys_);};
+  size_t AverageValueSize()  const {return(avg_value_size_);};
+  size_t AverageKeySize()    const {return(avg_key_size_);};
+  size_t AverageBlockSize()  const {return(avg_block_size_);};
+
+ private:
+  friend class Version;
+  friend class VersionSet;
+
+  explicit Compaction(int level);
+
+  int level_;
+  uint64_t max_output_file_size_;
+  Version* input_version_;
+  VersionEdit edit_;
+
+  // Each compaction reads inputs from "level_" and "level_+1"
+  std::vector<FileMetaData*> inputs_[2];      // The two sets of inputs
+
+  // State used to check for number of of overlapping grandparent files
+  // (parent == level_ + 1, grandparent == level_ + 2)
+  std::vector<FileMetaData*> grandparents_;
+  size_t grandparent_index_;  // Index in grandparent_starts_
+  bool seen_key_;             // Some output key has been seen
+  uint64_t overlapped_bytes_;  // Bytes of overlap between current output
+                              // and grandparent files
+
+  // State for implementing IsBaseLevelForKey
+
+  // level_ptrs_ holds indices into input_version_->levels_: our state
+  // is that we are positioned at one of the file ranges for each
+  // higher level than the ones involved in this compaction (i.e. for
+  // all L >= level_ + 2).
+  size_t level_ptrs_[config::kNumLevels];
+
+  // Riak specific:  output statistics from CalcInputStats
+  size_t tot_user_data_;
+  size_t tot_index_keys_;
+  size_t avg_value_size_;
+  size_t avg_key_size_;
+  size_t avg_block_size_;
+  bool stats_done_;
 };
 
 }  // namespace leveldb

@@ -170,8 +170,7 @@ class DBTest {
   DBTest() : option_config_(kDefault),
              env_(new SpecialEnv(Env::Default())) {
     filter_policy_ = NewBloomFilterPolicy2(16);
-    //dbname_ = test::TmpDir() + "/db_test";
-    dbname_ = "/media/ds/test";
+    dbname_ = test::TmpDir() + "/db_test";
     DestroyDB(dbname_, Options());
     db_ = NULL;
     Reopen();
@@ -947,7 +946,7 @@ TEST(DBTest, CompactionsGenerateMultipleFiles) {
 
   // Reopening moves updates to level-0
   Reopen(&options);
-  //dbfull()->TEST_CompactRange(0, NULL, NULL);
+  dbfull()->TEST_CompactRange(0, NULL, NULL);
 
   ASSERT_EQ(NumTableFilesAtLevel(0), 0);
 // not riak  ASSERT_GT(NumTableFilesAtLevel(1), 1);
@@ -999,7 +998,7 @@ TEST(DBTest, SparseMerge) {
   }
   Put("C", "vc");
   dbfull()->TEST_CompactMemTable();
-  //dbfull()->TEST_CompactRange(0, NULL, NULL);
+  dbfull()->TEST_CompactRange(0, NULL, NULL);
 
   // Make sparse update
   Put("A",    "va2");
@@ -1012,9 +1011,9 @@ TEST(DBTest, SparseMerge) {
   // 07/10/14 matthewv - we overlap first two levels.  sparse test not appropriate there,
   //                     and we set overlaps into 100s of megabytes as "normal"
 //  ASSERT_LE(dbfull()->TEST_MaxNextLevelOverlappingBytes(), 20*1048576);
-  //dbfull()->TEST_CompactRange(0, NULL, NULL);
+  dbfull()->TEST_CompactRange(0, NULL, NULL);
 //  ASSERT_LE(dbfull()->TEST_MaxNextLevelOverlappingBytes(), 20*1048576);
-  //dbfull()->TEST_CompactRange(1, NULL, NULL);
+  dbfull()->TEST_CompactRange(1, NULL, NULL);
 //  ASSERT_LE(dbfull()->TEST_MaxNextLevelOverlappingBytes(), 20*1048576);
 }
 
@@ -1070,7 +1069,7 @@ TEST(DBTest, ApproximateSizes) {
         std::string cend_str = Key(compact_start + 9);
         Slice cstart = cstart_str;
         Slice cend = cend_str;
-        //dbfull()->TEST_CompactRange(0, &cstart, &cend);
+        dbfull()->TEST_CompactRange(0, &cstart, &cend);
       }
 
       ASSERT_EQ(NumTableFilesAtLevel(0), 0);
@@ -1112,7 +1111,7 @@ TEST(DBTest, ApproximateSizes_MixOfSmallAndLarge) {
 
       ASSERT_TRUE(Between(Size(Key(3), Key(5)), 110000, 111000));
 
-      //dbfull()->TEST_CompactRange(0, NULL, NULL);
+      dbfull()->TEST_CompactRange(0, NULL, NULL);
     }
   } while (ChangeOptions());
 }
@@ -1218,7 +1217,7 @@ TEST(DBTest, DeletionMarkers1) {
   ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level last-2
   ASSERT_EQ(AllEntriesFor("foo"), "[ v2, v1 ]"); // riak 1.3, DEL merged out by BuildTable
   Slice z("z");
-  //dbfull()->TEST_CompactRange(last-2, NULL, &z);
+  dbfull()->TEST_CompactRange(last-2, NULL, &z);
   // DEL eliminated, but v1 remains because we aren't compacting that level
   // (DEL can be eliminated because v2 hides v1).
   //ASSERT_EQ(AllEntriesFor("foo"), "[ v2, v1 ]"); Riak 1.4 has merged to level 1
@@ -1233,7 +1232,7 @@ TEST(DBTest, DeletionMarkers2) {
   ASSERT_OK(dbfull()->TEST_CompactMemTable());
   const int last = config::kMaxMemCompactLevel;
   ASSERT_EQ(NumTableFilesAtLevel(0), 1);   // foo => v1 is now in last level
-  //dbfull()->TEST_CompactRange(0, NULL, NULL);
+  dbfull()->TEST_CompactRange(0, NULL, NULL);
   ASSERT_EQ(NumTableFilesAtLevel(1), 1);   // foo => v1 is now in last level
   ASSERT_EQ(NumTableFilesAtLevel(0), 0);
 
@@ -1247,15 +1246,15 @@ TEST(DBTest, DeletionMarkers2) {
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
   ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level last-2
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
-  //dbfull()->TEST_CompactRange(0, NULL, NULL);   // Riak overlaps level 1
+  dbfull()->TEST_CompactRange(0, NULL, NULL);   // Riak overlaps level 1
   // DEL kept: "last" file overlaps
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
   // Merging last-1 w/ last, so we are the base level for "foo", so
   // DEL is removed.  (as is v1).
-  //dbfull()->TEST_CompactRange(1, NULL, NULL);
+  dbfull()->TEST_CompactRange(1, NULL, NULL);
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL ]");
 
-  //dbfull()->TEST_CompactRange(2, NULL, NULL);
+  dbfull()->TEST_CompactRange(2, NULL, NULL);
   ASSERT_EQ(AllEntriesFor("foo"), "[ ]");
 }
 
@@ -1267,12 +1266,12 @@ TEST(DBTest, OverlapInLevel0) {
     ASSERT_OK(Put("100", "v100"));
     ASSERT_OK(Put("999", "v999"));
     dbfull()->TEST_CompactMemTable();
-    //dbfull()->TEST_CompactRange(0, NULL, NULL);
-    //dbfull()->TEST_CompactRange(1, NULL, NULL);
+    dbfull()->TEST_CompactRange(0, NULL, NULL);
+    dbfull()->TEST_CompactRange(1, NULL, NULL);
     ASSERT_OK(Delete("100"));
     ASSERT_OK(Delete("999"));
     dbfull()->TEST_CompactMemTable();
-    //dbfull()->TEST_CompactRange(0, NULL, NULL);
+    dbfull()->TEST_CompactRange(0, NULL, NULL);
     ASSERT_EQ("0,1,1", FilesPerLevel());
 
     // Make files spanning the following ranges in level-0:
@@ -1289,8 +1288,8 @@ TEST(DBTest, OverlapInLevel0) {
     ASSERT_EQ("2,1,1", FilesPerLevel());
 
     // Compact away the placeholder files we created initially
-    //dbfull()->TEST_CompactRange(1, NULL, NULL);
-    //dbfull()->TEST_CompactRange(2, NULL, NULL);
+    dbfull()->TEST_CompactRange(1, NULL, NULL);
+    dbfull()->TEST_CompactRange(2, NULL, NULL);
     ASSERT_EQ("2", FilesPerLevel());
 
     // Do a memtable compaction.  Before bug-fix, the compaction would
@@ -1509,11 +1508,11 @@ TEST(DBTest, NoSpace) {
   const int num_files = CountFiles();
   env_->no_space_.Release_Store(env_);   // Force out-of-space errors
   env_->sleep_counter_.Reset();
-//  for (int i = 0; i < 5; i++) {
-//    for (int level = 0; level < config::kNumLevels-1; level++) {
-//      dbfull()->TEST_CompactRange(level, NULL, NULL);
-//    }
-//  }
+  for (int i = 0; i < 5; i++) {
+    for (int level = 0; level < config::kNumLevels-1; level++) {
+      dbfull()->TEST_CompactRange(level, NULL, NULL);
+    }
+  }
   env_->no_space_.Release_Store(NULL);
   ASSERT_LT(CountFiles(), num_files + 3);
 
@@ -1806,6 +1805,8 @@ class ModelDB: public DB {
   }
   virtual void CompactRange(const Slice* start, const Slice* end) {
   }
+  virtual
+  const Options & GetOptions() const override { return options_; }
 
  private:
   class ModelIter: public Iterator {
@@ -1897,76 +1898,76 @@ static bool CompareIterators(int step,
   return ok;
 }
 
-//TEST(DBTest, Randomized) {
-//  Random rnd(test::RandomSeed());
-//  do {
-//    ModelDB model(CurrentOptions());
-//    const int N = 10000;
-//    const Snapshot* model_snap = NULL;
-//    const Snapshot* db_snap = NULL;
-//    std::string k, v;
-//    for (int step = 0; step < N; step++) {
-//      if (step % 100 == 0) {
-//        fprintf(stderr, "Step %d of %d\n", step, N);
-//      }
-//      // TODO(sanjay): Test Get() works
-//      int p = rnd.Uniform(100);
-//      if (p < 45) {                               // Put
-//        k = RandomKey(&rnd);
-//        v = RandomString(&rnd,
-//                         rnd.OneIn(20)
-//                         ? 100 + rnd.Uniform(100)
-//                         : rnd.Uniform(8));
-//        ASSERT_OK(model.Put(WriteOptions(), k, v));
-//        ASSERT_OK(db_->Put(WriteOptions(), k, v));
+TEST(DBTest, Randomized) {
+  Random rnd(test::RandomSeed());
+  do {
+    ModelDB model(CurrentOptions());
+    const int N = 10000;
+    const Snapshot* model_snap = NULL;
+    const Snapshot* db_snap = NULL;
+    std::string k, v;
+    for (int step = 0; step < N; step++) {
+      if (step % 100 == 0) {
+        fprintf(stderr, "Step %d of %d\n", step, N);
+      }
+      // TODO(sanjay): Test Get() works
+      int p = rnd.Uniform(100);
+      if (p < 45) {                               // Put
+        k = RandomKey(&rnd);
+        v = RandomString(&rnd,
+                         rnd.OneIn(20)
+                         ? 100 + rnd.Uniform(100)
+                         : rnd.Uniform(8));
+        ASSERT_OK(model.Put(WriteOptions(), k, v));
+        ASSERT_OK(db_->Put(WriteOptions(), k, v));
 
-//      } else if (p < 90) {                        // Delete
-//        k = RandomKey(&rnd);
-//        ASSERT_OK(model.Delete(WriteOptions(), k));
-//        ASSERT_OK(db_->Delete(WriteOptions(), k));
+      } else if (p < 90) {                        // Delete
+        k = RandomKey(&rnd);
+        ASSERT_OK(model.Delete(WriteOptions(), k));
+        ASSERT_OK(db_->Delete(WriteOptions(), k));
 
 
-//      } else {                                    // Multi-element batch
-//        WriteBatch b;
-//        const int num = rnd.Uniform(8);
-//        for (int i = 0; i < num; i++) {
-//          if (i == 0 || !rnd.OneIn(10)) {
-//            k = RandomKey(&rnd);
-//          } else {
-//            // Periodically re-use the same key from the previous iter, so
-//            // we have multiple entries in the write batch for the same key
-//          }
-//          if (rnd.OneIn(2)) {
-//            v = RandomString(&rnd, rnd.Uniform(10));
-//            b.Put(k, v);
-//          } else {
-//            b.Delete(k);
-//          }
-//        }
-//        ASSERT_OK(model.Write(WriteOptions(), &b));
-//        ASSERT_OK(db_->Write(WriteOptions(), &b));
-//      }
+      } else {                                    // Multi-element batch
+        WriteBatch b;
+        const int num = rnd.Uniform(8);
+        for (int i = 0; i < num; i++) {
+          if (i == 0 || !rnd.OneIn(10)) {
+            k = RandomKey(&rnd);
+          } else {
+            // Periodically re-use the same key from the previous iter, so
+            // we have multiple entries in the write batch for the same key
+          }
+          if (rnd.OneIn(2)) {
+            v = RandomString(&rnd, rnd.Uniform(10));
+            b.Put(k, v);
+          } else {
+            b.Delete(k);
+          }
+        }
+        ASSERT_OK(model.Write(WriteOptions(), &b));
+        ASSERT_OK(db_->Write(WriteOptions(), &b));
+      }
 
-//      if ((step % 100) == 0) {
-//        ASSERT_TRUE(CompareIterators(step, &model, db_, NULL, NULL));
-//        ASSERT_TRUE(CompareIterators(step, &model, db_, model_snap, db_snap));
-//        // Save a snapshot from each DB this time that we'll use next
-//        // time we compare things, to make sure the current state is
-//        // preserved with the snapshot
-//        if (model_snap != NULL) model.ReleaseSnapshot(model_snap);
-//        if (db_snap != NULL) db_->ReleaseSnapshot(db_snap);
+      if ((step % 100) == 0) {
+        ASSERT_TRUE(CompareIterators(step, &model, db_, NULL, NULL));
+        ASSERT_TRUE(CompareIterators(step, &model, db_, model_snap, db_snap));
+        // Save a snapshot from each DB this time that we'll use next
+        // time we compare things, to make sure the current state is
+        // preserved with the snapshot
+        if (model_snap != NULL) model.ReleaseSnapshot(model_snap);
+        if (db_snap != NULL) db_->ReleaseSnapshot(db_snap);
 
-//        Reopen();
-//        ASSERT_TRUE(CompareIterators(step, &model, db_, NULL, NULL));
+        Reopen();
+        ASSERT_TRUE(CompareIterators(step, &model, db_, NULL, NULL));
 
-//        model_snap = model.GetSnapshot();
-//        db_snap = db_->GetSnapshot();
-//      }
-//    }
-//    if (model_snap != NULL) model.ReleaseSnapshot(model_snap);
-//    if (db_snap != NULL) db_->ReleaseSnapshot(db_snap);
-//  } while (ChangeOptions());
-//}
+        model_snap = model.GetSnapshot();
+        db_snap = db_->GetSnapshot();
+      }
+    }
+    if (model_snap != NULL) model.ReleaseSnapshot(model_snap);
+    if (db_snap != NULL) db_->ReleaseSnapshot(db_snap);
+  } while (ChangeOptions());
+}
 
 std::string MakeKey(unsigned int num) {
   char buf[30];
@@ -2052,25 +2053,23 @@ void pause(const char *effect){
 }
 
 void tick(size_t c, size_t e){
-  using duration = decltype(std::chrono::steady_clock::now());
-  static duration prev = duration::min();
-  auto now = std::chrono::steady_clock::now();
-  auto dif = std::chrono::duration_cast<std::chrono::seconds>(now - prev).count();
-  if ( !dif ){
+  static size_t prev = 100000;
+  size_t now = 100*c/(e-1);
+  if (prev == now)
     return;
-  }
   prev = now;
-  std::cout << 100*c/(e-1) << "%\r";
+  std::cout << now << "%\r";
   std::cout.flush();
 }
 
 TEST(DBTest, Tezd){
   Options options = CurrentOptions();
   options.delete_threshold = 0;
+  //options.is_time_series = true;
   Reopen( &options );
   WriteOptions wo;
   ReadOptions  ro;
-  size_t limit = 10000000;
+  size_t limit = 10'000'000;
   //size_t limit = 1000000;
   puts("writing");
   for (size_t i = 0; i < limit; i++ ){
@@ -2089,14 +2088,14 @@ TEST(DBTest, Tezd){
     tick(i,limit);
     //env_->SleepForMicroseconds(1000);
   }
-  pause("");
+  //pause("");
   puts("deleting");
   for (size_t i = 0; i < limit; i++ ){
     auto key = std::to_string(i);
     ASSERT_OK( db_->Delete( wo, key ) );
     tick(i,limit);
   }
-  pause("now see how files are misteriously disappearing");
+  //pause("now see how files are misteriously disappearing");
   puts("checking that nothing is there");
   for (size_t i = 0; i < limit; i++ ){
     std::string ret_val;
@@ -2118,6 +2117,6 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  setenv("LEVELDB_TESTS","Tezd", 1); // only run this test
+  //setenv("LEVELDB_TESTS","Tezd", 1); // only run this test
   return leveldb::test::RunAllTests();
 }

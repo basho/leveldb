@@ -98,6 +98,10 @@ struct Options {
   // -------------------
   // Parameters that affect performance
 
+  // Turn on optimizations for time series data.
+  bool is_time_series = false;
+
+
   // Amount of data to build up in memory (backed by an unsorted log
   // on disk) before converting to a sorted on-disk file.
   //

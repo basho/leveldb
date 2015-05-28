@@ -73,7 +73,9 @@ class VersionEdit {
     has_last_sequence_ = true;
     last_sequence_ = seq;
   }
-
+  void SetCompactPointer(int level, const InternalKey& key) {
+    compact_pointers_.push_back(std::make_pair(level, key));
+  }
 
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)

@@ -106,21 +106,30 @@ private:
 /**
  * Background compaction 
  */
+class CompactionTask : public ThreadTask
+{
+protected:
+    DBImpl * m_DBImpl;
+    Compaction * m_Compaction;
 
-class CompactionTask : public ThreadTask{
 public:
-  CompactionTask(DBImpl * Db, int level, DBImpl::DropTheKey &&dropper, DBImpl::GetFileList &&filesToCompact) :
-    DBImpl_(Db), level_(level), dropper_(std::move(dropper)), filesToCompact_(std::move(filesToCompact)) {}
-  virtual void operator()()
-  {
-    DBImpl_->compact(level_, std::move(dropper_), std::move(filesToCompact_));
-  };
+    CompactionTask(DBImpl * Db, Compaction * Compact)
+        : m_DBImpl(Db), m_Compaction(Compact) {};
+
+    virtual ~CompactionTask() {delete m_Compaction;};
+
+    virtual void operator()() 
+    {
+        m_DBImpl->BackgroundCall2(m_Compaction);
+        m_Compaction=NULL;
+    };
+
 private:
-  DBImpl * DBImpl_;
-  int      level_;
-  DBImpl::DropTheKey  dropper_;
-  DBImpl::GetFileList filesToCompact_;
-};
+    CompactionTask();
+    CompactionTask(const CompactionTask &);
+    CompactionTask & operator=(const CompactionTask &);
+
+};  // class CompactionTask
 
 /**
  * Original env_posix.cc task

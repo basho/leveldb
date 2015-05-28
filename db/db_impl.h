@@ -21,6 +21,7 @@
 #include "port/port.h"
 #include "util/cache2.h"
 #include "util/once_in.h"
+#include "util/thread_pool.h"
 
 namespace leveldb {
 
@@ -75,6 +76,8 @@ class DBImpl : public DB {
 
   // Extra methods (for testing) that are not in the public DB interface
 
+  // Compact any files in the named level that overlap [*begin,*end]
+  void TEST_CompactRange(int level, const Slice* begin, const Slice* end);
 
   // Force current memtable contents to be compacted.
   Status TEST_CompactMemTable();
@@ -92,6 +95,7 @@ class DBImpl : public DB {
   size_t GetCacheCapacity() {return(double_cache->GetCapacity(false));}
   void PurgeExpiredFileCache() {double_cache->PurgeExpiredFiles();};
 
+  void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
   bool IsBackroundJobs();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
@@ -104,18 +108,17 @@ class DBImpl : public DB {
   void addCompactionFinishedListener(OnCompactionFinished f);
   /// decides wheither to drop the user key
   typedef std::function<bool(Slice, SequenceNumber)> DropTheKey;
-  typedef std::function<std::vector<FileMetaData*>(const Version *)> GetFileList;
   /// gonna compact \a level into level+1, if one of the levels is under compaction now, the call is ignored
   void enqueueCompaction( int level );
   void enqueueCompaction( int level, DropTheKey &&);
-  /// gonna compact files with the key range on the \a level into level+1, none of the levels should be under compaction now
-  void enqueueCompaction( int level, const std::string &ikeyStart, const std::string &ikeyEnd );
   // called by background thread to do actual compaction
-  void compact( int level, DropTheKey &&dropTheKey, GetFileList &&filesToCompact );
+  void compact( int level, DropTheKey &dropTheKey );
 private:
   friend class DB;
   friend class LevelSizeCS;
   struct Writer;
+
+  ThreadPool compactionThreadPool{2};
 
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot);
@@ -151,7 +154,39 @@ private:
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
   WriteBatch* BuildBatchGroup(Writer** last_writer);
 
+  //⭣⭣⭣⭣⭣⭣⭣ Old Compaction stuff
+  bool IsCompactionScheduled();
+  void MaybeScheduleCompaction();
+
+  struct CompactionState;
+  Status BackgroundCompaction(Compaction * Compact=NULL);
+  void CleanupCompaction(CompactionState* compact);
+  Status DoCompactionWork(CompactionState* compact);
   int64_t PrioritizeWork(bool IsLevel0);
+
+  Status OpenCompactionOutputFile(CompactionState* compact, size_t sample_value_size);
+  bool Send2PageCache(CompactionState * compact);
+  size_t MaybeRaiseBlockSize(Compaction & CompactionStuff, size_t SampleValueSize);
+  Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
+  Status InstallCompactionResults(CompactionState* compact);
+
+  // Has a background compaction been scheduled or is running?
+  bool bg_compaction_scheduled_;
+  // only used for test ??
+  // Information for a manual compaction
+  struct ManualCompaction {
+    int level;
+    bool done;
+    const InternalKey* begin;   // NULL means beginning of key range
+    const InternalKey* end;     // NULL means end of key range
+    InternalKey tmp_storage;    // Used to keep track of compaction progress
+  };
+  volatile ManualCompaction* manual_compaction_;
+  volatile uint32_t running_compactions_;
+  volatile size_t current_block_size_;    // last dynamic block size computed
+  volatile uint64_t block_size_changed_;  // NowMicros() when block size computed
+  volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
+  //⭡⭡⭡⭡⭡⭡⭡ Old Compaction stuff
 
   // initialized before options so its block_cache is available
   std::shared_ptr<DoubleCache> double_cache;
@@ -194,16 +229,6 @@ private:
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
-
-  // Information for a manual compaction
-  struct ManualCompaction {
-    int level;
-    bool done;
-    const InternalKey* begin;   // NULL means beginning of key range
-    const InternalKey* end;     // NULL means end of key range
-    InternalKey tmp_storage;    // Used to keep track of compaction progress
-  };
-
   VersionSet* versions_;
 
   // Have we encountered a background error in paranoid mode?
@@ -230,7 +255,6 @@ private:
   volatile bool level0_good;
 
   volatile uint64_t throttle_end;
-  volatile uint32_t running_compactions_;
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache->GetBlockCache());};
@@ -339,10 +363,9 @@ private:
   private:
     uint64_t fileSizeLimitForLevel0 = 4 * 1024 * 1024;
   };
-  const CompactionTargetParams compactionTarget_;
+  const CompactionTargetParams compactionTarget_{};
 
-  std::vector<std::unique_ptr<CompactionStrategy>> compactionStrategies_;
-
+  std::unique_ptr<CompactionStrategy> compactionStrategy_;
 };
 
 // Sanitize db options.  The caller should delete result.info_log if
