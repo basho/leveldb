@@ -87,6 +87,8 @@ case "$TARGET_OS" in
         PORT_FILE=port/port_posix.cc
         ;;
     FreeBSD)
+        CC=cc
+        CXX=c++
         PLATFORM=OS_FREEBSD
         COMMON_FLAGS="-fno-builtin-memcmp -D_REENTRANT -DOS_FREEBSD"
         PLATFORM_LDFLAGS="-lpthread"
