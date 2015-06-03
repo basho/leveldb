@@ -14,6 +14,7 @@
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "util/cache2.h"
+#include "util/classes/StatManager.h"
 
 namespace leveldb {
 
@@ -62,6 +63,8 @@ class DBImpl : public DB {
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
+
+  Logger* TEST_GetLogger();
 
   void ResizeCaches() {double_cache.ResizeCaches();};
   size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
@@ -209,6 +212,10 @@ class DBImpl : public DB {
   volatile size_t current_block_size_;    // last dynamic block size computed
   volatile uint64_t block_size_changed_;  // NowMicros() when block size computed
   volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
+
+  // An object that will manage various stats
+
+  leveldb::util::StatManager statManager_;
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};

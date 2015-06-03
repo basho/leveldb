@@ -492,6 +492,7 @@ TEST(LogTest, ReadPastEnd) {
   CheckOffsetPastEndReturnsNoRecords(5);
 }
 
+
 }  // namespace log
 }  // namespace leveldb
 

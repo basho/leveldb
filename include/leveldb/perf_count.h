@@ -23,8 +23,11 @@
 #ifndef STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
 #define STORAGE_LEVELDB_INCLUDE_PERF_COUNT_H_
 
+#include <map>
 #include <stdint.h>
 #include <string>
+#include <vector>
+
 #include "leveldb/status.h"
 
 namespace leveldb {
@@ -295,6 +298,47 @@ public:
 };  // struct PerformanceCounters
 
 extern PerformanceCounters * gPerfCounters;
+
+//------------------------------------------------------------
+// Definition of a struct that will contain statistics about a
+// single counter
+//------------------------------------------------------------
+
+namespace util {
+
+  struct Sample {
+
+    Sample() {
+      found_ = false;
+    };
+
+    bool found_;
+    uint64_t total_;
+    std::vector<std::pair<uint64_t, uint64_t> > differentials_;
+  };
+
+  //------------------------------------------------------------
+  // Base class that provides a simple abstract interface for managing
+  // counters
+  //------------------------------------------------------------
+
+  class StatBase {
+  public:
+    virtual void getCounts(std::map<std::string, Sample>& sampleMap,
+			   unsigned nSample=0) {};
+
+    virtual std::string formatOutput(std::string header, std::map<std::string, Sample>& sampleMap) 
+    {
+      return "";
+    }
+
+    virtual void setOutputOrder(std::vector<std::string>& order) {};
+    virtual void setOutputDivisors(std::map<std::string, double>& divisorMap) {};
+    virtual void setOutputLabels(std::map<std::string, std::string>& labelMap) {};
+    virtual void setOutputUnits(std::map<std::string, std::string>& unitMap) {};
+  };
+
+}
 
 }  // namespace leveldb
 

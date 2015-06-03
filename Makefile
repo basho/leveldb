@@ -52,7 +52,9 @@ TESTS = \
 	table_test \
 	version_edit_test \
 	version_set_test \
-	write_batch_test
+	write_batch_test \
+	class_test \
+	stats_test
 
 TOOLS = \
 	leveldb_repair \
@@ -191,6 +193,12 @@ version_set_test: db/version_set_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 write_batch_test: db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+class_test: util/classes/class_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) util/classes/class_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+stats_test: db/stats_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) db/stats_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
 
 $(MEMENVLIBRARY) : $(MEMENVOBJECTS)
 	rm -f $@

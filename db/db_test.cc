@@ -16,6 +16,7 @@
 #include "util/mutexlock.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
+#include "util/classes/ExceptionUtils.h"
 
 namespace leveldb {
 
@@ -1862,6 +1863,18 @@ static bool CompareIterators(int step,
   delete miter;
   delete dbiter;
   return ok;
+}
+
+TEST(DBTest, LogStats) {
+  ASSERT_OK(Put("foo", "v1"));
+  ASSERT_EQ("v1", Get("foo"));
+  ASSERT_OK(Put("bar", "v2"));
+  ASSERT_OK(Put("foo", "v3"));
+  ASSERT_EQ("v3", Get("foo"));
+  ASSERT_EQ("v2", Get("bar"));
+  
+  COUT("Running LogStats test");
+  //  db[0]->GetProperty("leveldb.block-cache", &value);
 }
 
 TEST(DBTest, Randomized) {

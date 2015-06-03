@@ -14,6 +14,7 @@
 #include <time.h>
 #include "leveldb/env.h"
 #include "util/mutexlock.h"
+#include "util/classes/StatManager.h"
 
 namespace leveldb {
 
@@ -21,13 +22,29 @@ class PosixLogger : public Logger {
  private:
   FILE* file_;
   uint64_t (*gettid_)();  // Return the thread id for the current thread
+  leveldb::util::StatManager statManager_;
 
  public:
-  PosixLogger(FILE* f, uint64_t (*gettid)()) : file_(f), gettid_(gettid) { }
+  PosixLogger(FILE* f, uint64_t (*gettid)()) : file_(f), gettid_(gettid), statManager_(1, 10, false) 
+  { 
+    statManager_.initCounter("logWriteMicros");
+    statManager_.initCounter("logWriteNbyte");
+    statManager_.initCounter("logNWrites");
+
+    statManager_.spawnStrobeThread();
+  }
+
   virtual ~PosixLogger() {
     fclose(file_);
   }
   virtual void Logv(const char* format, va_list ap) {
+
+    //------------------------------------------------------------
+    // Start the stat timer now
+    //------------------------------------------------------------
+
+    statManager_.timer_.start();
+
     const uint64_t thread_id = (*gettid_)();
 
     // We try twice: the first time with a fixed-size stack allocated buffer,
@@ -87,11 +104,55 @@ class PosixLogger : public Logger {
       assert(p <= limit);
       fwrite(base, 1, p - base, file_);
       fflush(file_);
+
+      //------------------------------------------------------------
+      // Stop the stat timer and store logging stats
+      //------------------------------------------------------------
+
+      statManager_.timer_.stop();
+      std::map<std::string, uint64_t> addMap;
+
+      addMap["logWriteMicros"] = statManager_.timer_.deltaMicroSeconds();
+      addMap["logWriteNbyte"]  = p-base;
+      addMap["logNWrites"]     = 1;
+
+      statManager_.add(addMap);
+
       if (base != buffer) {
         delete[] base;
       }
       break;
     }
+  }
+
+  //------------------------------------------------------------
+  // Overloaded interface method from StatBase to return counts for a
+  // set of items
+  //------------------------------------------------------------
+
+  virtual void getCounts(std::map<std::string, leveldb::util::Sample>& sampleMap,
+			 unsigned nSample=0) {
+    return statManager_.getCounts(sampleMap, nSample);
+  }
+
+  virtual std::string formatOutput(std::string header, std::map<std::string, leveldb::util::Sample>& sampleMap) {
+    return statManager_.formatOutput(header, sampleMap);
+  }
+
+  virtual void setOutputOrder(std::vector<std::string>& order) {
+    return statManager_.setOutputOrder(order);
+  }
+
+  virtual void setOutputDivisors(std::map<std::string, double>& divisorMap) {
+    return statManager_.setOutputDivisors(divisorMap);
+  }
+
+  virtual void setOutputLabels(std::map<std::string, std::string>& labelMap) {
+    return statManager_.setOutputLabels(labelMap);
+  }
+
+  virtual void setOutputUnits(std::map<std::string, std::string>& unitMap) {
+    return statManager_.setOutputUnits(unitMap);
   }
 };
 
