@@ -1020,7 +1020,7 @@ Status DBImpl::BackgroundCompaction(
     // Nothing to do
     do_compact=false;
   } else if (!is_manual && c->IsTrivialMove()
-             && (c->level()+1)!=options_.tiered_slow_level) {
+             && (c->level()+1)!=(int)options_.tiered_slow_level) {
     // Move file to next level
     assert(c->num_input_files(0) == 1);
     std::string old_name, new_name;
