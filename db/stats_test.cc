@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <errno.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 #include "leveldb/db.h"
 #include "leveldb/filter_policy.h"
 #include "db/db_impl.h"
@@ -465,6 +471,7 @@ class DBTest {
   }
 };
 
+#if 1
 TEST(DBTest, LogStats) {
 
   Reopen(&last_options_);
@@ -476,27 +483,54 @@ TEST(DBTest, LogStats) {
   sleep(1);
 
   Log(dbfull()->TEST_GetLogger(), "This is a test 0");
+
+  ASSERT_OK(Put("foo", "v1"));
+  dbfull()->TEST_CompactMemTable();
+  ASSERT_EQ("v1", Get("foo"));
+
   sleep(1);
 
   Log(dbfull()->TEST_GetLogger(), "This is a test 1");
   sleep(1);
 
+  ASSERT_OK(Put("foo", "v1"));
+  dbfull()->TEST_CompactMemTable();
+  ASSERT_EQ("v1", Get("foo"));
+
   ASSERT_OK(Put("foo", "v3"));
   sleep(1);
+  dbfull()->TEST_CompactMemTable();
   ASSERT_EQ("v3", Get("foo"));
   ASSERT_EQ("v2", Get("bar"));
   sleep(1);
 
   std::string property;
+
+  std::map<std::string, leveldb::util::Sample> sampleMap;
+  sampleMap["ApiOpen"];
+  gStatManager->getCounts(sampleMap);
+  COUT(gStatManager->formatOutput("PERFCOUNT TEST", sampleMap));
+
+  db_->GetProperty("leveldb.ApiOpen", &property);
+  COUT("Api = " << property);
+
+  db_->GetProperty("leveldb.ApiOpen.stats", &property);
+  COUT(property);
+
   db_->GetProperty("leveldb.logstats", &property);
   COUT(property);
 
   db_->GetProperty("leveldb.compactionstats", &property);
   COUT(property);
 
-  db_->GetProperty("leveldb.flushstats", &property);
+  db_->GetProperty("leveldb.level0.stats", &property);
   COUT(property);
+
+  db_->GetProperty("leveldb.TableOpen.stats", &property);
+  COUT(property);
+
 }
+#endif
 
 std::string MakeKey(unsigned int num) {
   char buf[30];
@@ -554,6 +588,121 @@ void BM_LogAndApply(int iters, int num_base_files) {
           "BM_LogAndApply/%-6s   %8d iters : %9u us (%7.0f us / iter)\n",
           buf, iters, us, ((float)us) / iters);
 }
+
+class PerfTest 
+{
+public:
+    static PerfTest* current_;
+
+    PerfTest()
+    {
+        current_ = this;
+    }
+
+    ~PerfTest() {};
+
+    bool
+    DeleteShm(key_t Key)
+    {
+        int ret_val, id;
+
+        id=shmget(Key, 0, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if (-1!=id)
+            ret_val=shmctl(id, IPC_RMID, NULL);
+        else
+            ret_val=-1;
+
+        return(0==ret_val);
+    }
+
+
+    bool
+    CreateShm(key_t Key, size_t Size)
+    {
+        int ret_val;
+
+        ret_val=shmget(Key, Size, IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        return(-1!=ret_val);
+    }
+
+
+    void *
+    MapShm(key_t Key)
+    {
+        int id;
+        void * ret_ptr;
+
+        id=shmget(Key, 0, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if (-1!=id)
+            ret_ptr=shmat(id, NULL, 0);
+        else
+            ret_ptr=NULL;
+
+        return(ret_ptr);
+    }
+
+
+
+    size_t
+    GetShmSize(key_t Key)
+    {
+        int ret_val, id;
+        struct shmid_ds shm_info;
+
+        memset(&shm_info, 0, sizeof(shm_info));
+        id=shmget(Key, 0, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if (-1!=id)
+        {
+            ret_val=shmctl(id, IPC_STAT, &shm_info);
+
+            if (0!=ret_val)
+                shm_info.shm_segsz=0;
+        }   // if
+        return(shm_info.shm_segsz);
+    }
+
+};  // class PerfTest
+
+PerfTest* PerfTest::current_;
+
+#if 1
+TEST(PerfTest, CreateNew) 
+{
+    PerformanceCounters * perf_ptr;
+
+    // clear any existing shm
+    DeleteShm(ePerfKey);
+
+    // open for write, will create
+    perf_ptr=PerformanceCounters::Init(false);
+
+    std::map<std::string, leveldb::util::Sample> sampleMap;
+    sampleMap["ApiOpen"];
+    gStatManager->getCounts(sampleMap);
+    COUT(gStatManager->formatOutput("PERFCOUNT TEST", sampleMap));
+
+    ASSERT_NE(perf_ptr, (void*)NULL);
+    ASSERT_EQ(sizeof(PerformanceCounters), GetShmSize(ePerfKey));
+
+    // close and reopen for read
+
+    gStatManager->getCounts(sampleMap);
+    COUT(gStatManager->formatOutput("PERFCOUNT TEST", sampleMap));
+
+    ASSERT_EQ(0, PerformanceCounters::Close(perf_ptr));
+    
+    perf_ptr=PerformanceCounters::Init(true);
+    ASSERT_NE(perf_ptr, (void*)NULL);
+    ASSERT_EQ(sizeof(PerformanceCounters), GetShmSize(ePerfKey));
+    ASSERT_EQ(0, PerformanceCounters::Close(perf_ptr));
+
+    // cleanup
+    ASSERT_EQ(true, DeleteShm(ePerfKey));
+
+    return;
+
+}   // CreateNew
+#endif
 
 }  // namespace leveldb
 

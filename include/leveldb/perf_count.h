@@ -32,6 +32,10 @@
 
 namespace leveldb {
 
+  namespace util {
+    class StatManagerBase;
+  }
+
 enum SstCountEnum
 {
     //
@@ -102,7 +106,7 @@ public:
 
 
 extern struct PerformanceCounters * gPerfCounters;
-
+extern leveldb::util::StatManagerBase* gStatManager;
 
 enum PerformanceCountersEnum
 {
@@ -295,17 +299,19 @@ public:
 
     void Dump();
 
+    void RegisterStats(bool spawn);
+
 };  // struct PerformanceCounters
 
 extern PerformanceCounters * gPerfCounters;
 
-//------------------------------------------------------------
-// Definition of a struct that will contain statistics about a
-// single counter
-//------------------------------------------------------------
-
 namespace util {
 
+  //------------------------------------------------------------
+  // Definition of a struct that will contain statistics about a
+  // single counter
+  //------------------------------------------------------------
+  
   struct Sample {
 
     Sample() {
@@ -322,20 +328,45 @@ namespace util {
   // counters
   //------------------------------------------------------------
 
-  class StatBase {
+  class StatManagerBase {
   public:
+
+    //------------------------------------------------------------
+    // Return true if this object contains the named counter
+    //------------------------------------------------------------
+    
+    virtual bool containsCounter(std::string name) {return false;};
+
+    //------------------------------------------------------------
+    // Initialize a new counter
+    //------------------------------------------------------------
+    
+    virtual void initCounter(std::string name) {};
+
+    //------------------------------------------------------------
+    // Add to the counters maintained by this object
+    //------------------------------------------------------------
+    
+    virtual void add(std::map<std::string, uint64_t>& counterMap) {};
+
+    //------------------------------------------------------------
+    // Retrieve a map of up to nSample counter samples from this
+    // object (all if nSample==0)
+    //------------------------------------------------------------
+    
     virtual void getCounts(std::map<std::string, Sample>& sampleMap,
 			   unsigned nSample=0) {};
 
-    virtual std::string formatOutput(std::string header, std::map<std::string, Sample>& sampleMap) 
-    {
-      return "";
-    }
-
+    virtual std::string formatOutput(std::string header, std::map<std::string, Sample>& sampleMap) {return "";};
     virtual void setOutputOrder(std::vector<std::string>& order) {};
     virtual void setOutputDivisors(std::map<std::string, double>& divisorMap) {};
     virtual void setOutputLabels(std::map<std::string, std::string>& labelMap) {};
     virtual void setOutputUnits(std::map<std::string, std::string>& unitMap) {};
+
+    virtual void startTimer() {};
+    virtual void stopTimer() {};
+    virtual uint64_t elapsedMicroSeconds() {return 0;};
+
   };
 
 }

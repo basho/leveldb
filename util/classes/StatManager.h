@@ -21,7 +21,7 @@
 namespace leveldb {
   namespace util {
 
-    class StatManager {
+    class StatManager : public StatManagerBase {
     public:
 
       //------------------------------------------------------------
@@ -33,6 +33,10 @@ namespace leveldb {
 	// Default constructor
 
 	Counter();
+	Counter(const Counter& count);
+	Counter(Counter& count);
+	void operator=(const Counter& count);
+	void operator=(Counter& count);
 
 	// Resize the circular buffer of samples to queueLen
 
@@ -46,13 +50,15 @@ namespace leveldb {
 
 	void storeDifferential(uint64_t time);
 
-	// Retrieve total and up to nSample differential counts (all if nSample == 0)
+	// Retrieve total and up to nSample differential counts (all
+	// if nSample == 0)
 
 	void getCounts(Sample& samples,
 		       unsigned nSample=0);
 
 	bool first_;
 
+	volatile uint64_t* extIntegratedCurrPtr_;
 	uint64_t integratedCurr_;
 	uint64_t integratedLast_;
 
@@ -64,6 +70,10 @@ namespace leveldb {
        * Constructor.
        */
       StatManager();
+      StatManager(const StatManager& sm);
+      StatManager(StatManager& sm);
+      void operator=(const StatManager& sm);
+      void operator=(StatManager& sm);
       StatManager(unsigned strobeIntervalSec, unsigned queueLen, bool noOp=false);
 
       /**
@@ -74,10 +84,26 @@ namespace leveldb {
       void initialize(unsigned strobeIntervalSec, unsigned queueLen, bool noOp);
 
       //------------------------------------------------------------
+      // Return true if this object contains the named counter
+      //------------------------------------------------------------
+
+      bool containsCounter(std::string name);
+
+      //------------------------------------------------------------
+      // Return true if this object contains counters with the substring
+      //------------------------------------------------------------
+
+      bool containsCountersContaining(std::string name);
+
+      //------------------------------------------------------------
       // Initialize a new counter
       //------------------------------------------------------------
 
       void initCounter(std::string name);
+
+      // Initialize for counts stored in an external pointer
+
+      void initCounter(std::string name, volatile uint64_t* valPtr);
 
       //------------------------------------------------------------
       // Add to the counters maintained by this object
@@ -93,11 +119,27 @@ namespace leveldb {
 
       //------------------------------------------------------------
       // Retrieve a map of up to nSample counter samples from this
-      // object (all if nSample==0)
+      // object (all if nSample==0). 
+      //
+      // Returns counts for counters matching the keys in sampleMap
       //------------------------------------------------------------
 
       void getCounts(std::map<std::string, Sample>& sampleMap,
 		     unsigned nSample=0);
+
+      //------------------------------------------------------------
+      // Retrieve counts for counters containing the keys in sampleMap
+      //------------------------------------------------------------
+
+      void getCountsContaining(std::map<std::string, Sample>& sampleMap,
+			       unsigned nSample=0);
+
+      //------------------------------------------------------------
+      // Retrieve counts for all counters managed by this object
+      //------------------------------------------------------------
+
+      void getAllCounts(std::map<std::string, Sample>& sampleMap,
+			unsigned nSample=0);
 
       //------------------------------------------------------------
       // Spawn the thread that will strobe our counters.  To strobe 
@@ -113,12 +155,18 @@ namespace leveldb {
       void setOutputLabels(std::map<std::string, std::string>& labelMap);
       void setOutputUnits(std::map<std::string, std::string>& unitMap);
 
+      void setOutputDivisor(std::string name, double divisor);
+      void setOutputLabel(std::string name, std::string label);
+      void setOutputUnit(std::string name, std::string unit);
+
       // Format output for the requested set of samples
 
       std::string formatOutput(std::string header, 
 			       std::map<std::string, Sample>& sampleMap);
 
-      Timer timer_;
+      void startTimer();
+      void stopTimer();
+      uint64_t elapsedMicroSeconds();
 
     private:
 
@@ -167,6 +215,8 @@ namespace leveldb {
       unsigned  strobeIntervalSec_;
 
       port::Mutex mutex_;
+
+      Timer timer_;
 
       // Length of the counter queues managed by this object
 

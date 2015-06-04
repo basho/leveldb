@@ -77,6 +77,23 @@ class Slice {
             (memcmp(data_, x.data_, x.size_) == 0));
   }
 
+  bool contains(const std::string& target) const {
+    std::string src = ToString();
+    std::string::size_type idx = src.find(src);
+    return idx != std::string::npos;
+  }
+
+  void split(const std::string& pivot, std::string& prefix, std::string& suffix) const {
+
+    if(!contains(pivot))
+      return;
+
+    std::string src = ToString();
+    std::string::size_type pivotIdx = src.find(pivot, 0);
+    prefix = src.substr(0, pivotIdx);
+    suffix = src.substr(pivotIdx + pivot.size(), src.size());
+  }
+
  private:
   const char* data_;
   size_t size_;

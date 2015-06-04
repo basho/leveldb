@@ -194,21 +194,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       block_size_changed_(0), last_low_mem_(0),
       statManager_(1, 10, false)
 {
-  //------------------------------------------------------------
-  // Initialize some counters, and spawn the strobe thread for this
-  // StatManager
-  //------------------------------------------------------------
-
-  statManager_.initCounter("compactBytesWritten");
-  statManager_.initCounter("compactBytesRead");
-  statManager_.initCounter("compactMicros");
-  statManager_.initCounter("compactN");
-
-  statManager_.initCounter("flushBytesWritten");
-  statManager_.initCounter("flushMicros");
-  statManager_.initCounter("flushN");
-
-  statManager_.spawnStrobeThread();
+  RegisterStats();
 
   current_block_size_=options_.block_size;
   DBList()->AddDB(this, options_.is_internal_db);
@@ -687,7 +673,7 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
 
-  statManager_.timer_.start();
+  statManager_.startTimer();
 
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
@@ -757,19 +743,6 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
   stats.micros = env_->NowMicros() - start_micros;
   stats.bytes_written = meta.file_size;
   stats_[level].Add(stats);
-
-  //------------------------------------------------------------
-  // Accumulate stats
-  //------------------------------------------------------------
-
-  statManager_.timer_.stop();
-  std::map<std::string, uint64_t> addMap;
-
-  addMap["flushBytesWritten"] = meta.file_size;
-  addMap["flushMicros"]       = statManager_.timer_.deltaMicroSeconds();
-  addMap["flushN"]            = 1;
-
-  statManager_.add(addMap);
 
   if (0!=meta.num_entries && s.ok())
   {
@@ -1488,7 +1461,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   bool is_level0_compaction=(0 == compact->compaction->level());
 
-  statManager_.timer_.start();
+  statManager_.startTimer();
 
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
@@ -1565,7 +1538,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   delete input;
   input = NULL;
 
-  statManager_.timer_.stop();
+  statManager_.stopTimer();
 
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros - imm_micros;
@@ -1585,19 +1558,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
-
-  //------------------------------------------------------------
-  // Accumulate stats
-  //------------------------------------------------------------
-
-  std::map<std::string, uint64_t> addMap;
-  
-  addMap["compactBytesWritten"] = stats.bytes_written;
-  addMap["compactBytesRead"]    = stats.bytes_read;
-  addMap["compactMicros"]       = statManager_.timer_.deltaMicroSeconds();
-  addMap["compactN"]            = 1;
-  
-  statManager_.add(addMap);
 
   if (status.ok()) {
     if (0!=compact->num_entries)
@@ -2078,44 +2038,6 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     }
     return true;
 
-  } else if (in == "flushstats") {
-
-    //------------------------------------------------------------
-    // Retrieve counts
-    //------------------------------------------------------------
-
-    std::map<std::string, leveldb::util::Sample> samples; 
-
-    samples["flushBytesWritten"]; 
-    samples["flushMicros"];	  
-    samples["flushN"];            
-
-    statManager_.getCounts(samples);
-
-    std::map<std::string, std::string> labelMap;
-    labelMap["flushBytesWritten"] = "Write";
-    labelMap["flushMicros"]	  = "Time";
-    labelMap["flushN"]            = "Calls";
-
-    statManager_.setOutputLabels(labelMap);
-
-    std::map<std::string, std::string> unitMap;
-    unitMap["flushBytesWritten"] = "MB";
-    unitMap["flushMicros"]	 = "sec";
-    unitMap["flushN"]            = "#";
-
-    statManager_.setOutputUnits(unitMap);
-
-    std::map<std::string, double> divisorMap;
-    divisorMap["flushBytesWritten"] = 1048576.0;
-    divisorMap["flushMicros"]	    = 1e6;
-
-    statManager_.setOutputDivisors(divisorMap);
-
-    value->append(statManager_.formatOutput("Flush Writes", samples).c_str());
-
-    return true;
-
   } else if (in == "compactionstats") {
 
     //------------------------------------------------------------
@@ -2123,38 +2045,8 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     //------------------------------------------------------------
 
     std::map<std::string, leveldb::util::Sample> samples; 
-
-    samples["compactBytesWritten"];
-    samples["compactBytesRead"];
-    samples["compactMicros"];
-    samples["compactN"];
-
-    statManager_.getCounts(samples);
-
-    std::map<std::string, std::string> labelMap;
-    labelMap["compactBytesWritten"]  = "Write";
-    labelMap["compactBytesRead"]     = "Read";
-    labelMap["compactMicros"]        = "Time";
-    labelMap["compactN"]             = "Calls";
-
-    statManager_.setOutputLabels(labelMap);
-
-    std::map<std::string, std::string> unitMap;
-    unitMap["compactBytesWritten"]  = "MB";
-    unitMap["compactBytesRead"]     = "MB";
-    unitMap["compactMicros"]        = "sec";
-    unitMap["compactN"]             = "#";
-
-    statManager_.setOutputUnits(unitMap);
-
-    std::map<std::string, double> divisorMap;
-    divisorMap["compactBytesWritten"]  = 1048576.0;
-    divisorMap["compactBytesRead"]     = 1048576.0;
-    divisorMap["compactMicros"]        = 1e6;
-
-    statManager_.setOutputDivisors(divisorMap);
-
-    value->append(statManager_.formatOutput("Background Compaction", samples).c_str());
+    statManager_.getAllCounts(samples);
+    value->append(statManager_.formatOutput("Compaction", samples).c_str());
 
     return true;
 
@@ -2169,29 +2061,29 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     samples["logWriteNbyte"];
     samples["logNWrites"];
 
-    options_.info_log->getCounts(samples);
+    gStatManager->getCounts(samples);
 
     std::map<std::string, std::string> labelMap;
     labelMap["logWriteMicros"] = "Time";
     labelMap["logNWrites"]     = "Writes";
     labelMap["logWriteNbyte"]  = "Size";
 
-    options_.info_log->setOutputLabels(labelMap);
+    gStatManager->setOutputLabels(labelMap);
 
     std::map<std::string, std::string> unitMap;
     unitMap["logWriteMicros"] = "sec";
     unitMap["logNWrites"]     = "#";
     unitMap["logWriteNbyte"]  = "MB";
 
-    options_.info_log->setOutputUnits(unitMap);
+    gStatManager->setOutputUnits(unitMap);
 
     std::map<std::string, double> divisorMap;
     divisorMap["logWriteMicros"] = 1e6;
     divisorMap["logWriteNbyte"]  = 1048576.0;
 
-    options_.info_log->setOutputDivisors(divisorMap);
+    gStatManager->setOutputDivisors(divisorMap);
 
-    value->append(options_.info_log->formatOutput("Log Writes", samples));
+    value->append(gStatManager->formatOutput("Log Writes", samples));
 
     return true;
 
@@ -2226,6 +2118,39 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
       snprintf(buf, sizeof(buf), "%" PRIu64 , gPerfCounters->Value(index));
       value->append(buf);
       return(true);
+
+  } else if (in.contains(".")) {
+
+    std::string prefix, suffix;
+    in.split(".", prefix, suffix);
+
+    if(gStatManager->containsCounter(prefix)) {
+
+      if(suffix == "stats") {
+	std::map<std::string, leveldb::util::Sample> samples; 
+	samples[prefix];
+	gStatManager->getCounts(samples);
+	value->append(gStatManager->formatOutput(prefix, samples).c_str());
+	return true;
+      } else {
+	return false;
+      }
+    }
+
+    if(statManager_.containsCountersContaining(prefix)) {
+      if(suffix == "stats") {
+	std::map<std::string, leveldb::util::Sample> samples; 
+	samples[prefix];
+	statManager_.getCountsContaining(samples);
+	value->append(statManager_.formatOutput("Compaction", samples).c_str());
+	return true;
+      } else {
+	return false;
+      }
+    }
+
+    return false;
+    
   }
 
   return false;
@@ -2454,4 +2379,36 @@ DBImpl::IsCompactionScheduled()
     return(flag || NULL!=imm_);
 }   // DBImpl::IsCompactionScheduled
 
+void 
+DBImpl::RegisterStats()
+{
+  std::ostringstream os;
+
+  for(unsigned iLevel=0; iLevel < config::kNumLevels; iLevel++) {
+    os.str("");
+    os << "level" << iLevel << "Time";
+    statManager_.initCounter(os.str(), &stats_[iLevel].micros);
+    statManager_.setOutputLabel(os.str(), os.str());
+    statManager_.setOutputUnit(os.str(), "sec");
+    statManager_.setOutputDivisor(os.str(), 1e6);
+
+    os.str("");
+    os << "level" << iLevel << "NRead";
+    statManager_.initCounter(os.str(), &stats_[iLevel].bytes_read);
+    statManager_.setOutputLabel(os.str(), os.str());
+    statManager_.setOutputUnit(os.str(), "MB");
+    statManager_.setOutputDivisor(os.str(), 1048576.0);
+
+    os.str("");
+    os << "level" << iLevel << "NWrite";
+    statManager_.initCounter(os.str(), &stats_[iLevel].bytes_written);
+    statManager_.setOutputLabel(os.str(), os.str());
+    statManager_.setOutputUnit(os.str(), "MB");
+    statManager_.setOutputDivisor(os.str(), 1048576.0);
+  }
+
+  statManager_.spawnStrobeThread();
+}
+
 }  // namespace leveldb
+

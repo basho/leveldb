@@ -33,6 +33,36 @@ StatManager::StatManager(unsigned strobeIntervalSec, unsigned queueLen, bool noO
   initialize(strobeIntervalSec, queueLen, noOp);
 }
 
+StatManager::StatManager(const StatManager& sm)
+{
+  *this = sm;
+}
+
+StatManager::StatManager(StatManager& sm)
+{
+  *this = sm;
+}
+
+void StatManager::operator=(const StatManager& sm)
+{
+  *this = (StatManager&)sm;
+}
+
+void StatManager::operator=(StatManager& sm)
+{
+  strobeIntervalSec_ = sm.strobeIntervalSec_;
+  queueLen_          = sm.queueLen_;
+  strobeThreadId_    = sm.strobeThreadId_;
+  noOp_              = sm.noOp_;
+  
+  counterMap_        = sm.counterMap_;
+  
+  outputOrder_       = sm.outputOrder_;
+  outputDivisors_    = sm.outputDivisors_;
+  outputLabels_      = sm.outputLabels_;
+  outputUnits_       = sm.outputUnits_;
+}
+
 /**.......................................................................
  * Common initialization
  */
@@ -139,12 +169,42 @@ void StatManager::strobe(uint64_t time)
 	  );
 }
 
+bool StatManager::containsCounter(std::string name)
+{
+  return counterMap_.find(name) != counterMap_.end();
+}
+
+bool StatManager::containsCountersContaining(std::string name)
+{
+  for(std::map<std::string, Counter>::iterator countIter=counterMap_.begin(); countIter != counterMap_.end(); countIter++) {
+
+    std::string::size_type idx = countIter->first.find(name);
+
+    if(idx != std::string::npos)
+      return true;
+  }
+
+  return false;
+}
+
 void StatManager::initCounter(std::string name)
 {
   std::map<std::string, uint64_t> addMap;
   addMap[name] = 0;
 
   add(addMap);
+}
+
+void StatManager::initCounter(std::string name, volatile uint64_t* valPtr)
+{
+  // Only resize the buffer if the counter doesn't already exist
+
+  if(counterMap_.find(name)==counterMap_.end()) {
+    Counter& counter = counterMap_[name];
+    counter.resize(queueLen_);
+  }
+
+  counterMap_[name].extIntegratedCurrPtr_ = valPtr;
 }
 
 /**.......................................................................
@@ -205,6 +265,58 @@ void StatManager::getCounts(std::map<std::string, Sample>& sampleMap,
 	  );
 }
 
+void StatManager::getCountsContaining(std::map<std::string, Sample>& sampleMap,
+				      unsigned nSample)
+{
+  if(noOp_)
+    return;
+
+  try {
+    lock();
+
+    std::map<std::string, Sample> tmpMap;
+
+    for(std::map<std::string, Sample>::iterator sampIter=sampleMap.begin(); sampIter != sampleMap.end(); sampIter++) {
+      std::string key = sampIter->first;
+      for(std::map<std::string, Counter>::iterator countIter=counterMap_.begin(); countIter != counterMap_.end(); countIter++) {
+	
+	std::string::size_type idx = countIter->first.find(key);
+	if(idx != std::string::npos) {
+	  tmpMap[countIter->first];
+	}
+      }
+    }
+    
+    unlock();
+
+    getCounts(tmpMap, nSample);
+    sampleMap = tmpMap;
+
+  } catch(...) {
+    unlock();
+  }
+
+}
+
+/**.......................................................................
+ * Iterate through the map of requested counters, filling in data
+ * where available
+ */
+void StatManager::getAllCounts(std::map<std::string, Sample>& sampleMap,
+			       unsigned nSample) 
+{
+  TRYLOCK(
+
+    for(std::map<std::string, Counter>::iterator iter=counterMap_.begin(); iter != counterMap_.end(); iter++) {
+
+      Counter& counter = iter->second;
+      Sample&  sample  = sampleMap[iter->first];
+
+      counter.getCounts(sample, nSample);
+    }
+	  );
+}
+
 /**.......................................................................
  * Methods to control output formatting
  */
@@ -216,6 +328,11 @@ void StatManager::setOutputOrder(std::vector<std::string>& order)
 void StatManager::setOutputDivisors(std::map<std::string, double>& divisorMap)
 {
   outputDivisors_ = divisorMap;
+}
+
+void StatManager::setOutputDivisor(std::string name, double divisor)
+{
+  outputDivisors_[name] = divisor;
 }
 
 double StatManager::getDivisor(std::string name)
@@ -232,6 +349,11 @@ void StatManager::setOutputLabels(std::map<std::string, std::string>& labelMap)
   outputLabels_ = labelMap;
 }
 
+void StatManager::setOutputLabel(std::string name, std::string label)
+{
+  outputLabels_[name] = label;
+}
+
 std::string StatManager::getLabel(std::string name)
 {
   if(outputLabels_.find(name) != outputLabels_.end()) {
@@ -246,12 +368,17 @@ void StatManager::setOutputUnits(std::map<std::string, std::string>& unitMap)
   outputUnits_ = unitMap;
 }
 
+void StatManager::setOutputUnit(std::string name, std::string units)
+{
+  outputUnits_[name] = units;
+}
+
 std::string StatManager::getUnits(std::string name)
 {
   if(outputUnits_.find(name) != outputUnits_.end()) {
     return outputUnits_[name];
   } else {
-    return "?";
+    return "#";
   }
 }
 
@@ -396,17 +523,61 @@ std::string StatManager::formatOutput(std::string header,
   return os.str();
 }
 
+void StatManager::startTimer()
+{
+  timer_.start();
+}
+
+void StatManager::stopTimer()
+{
+  timer_.stop();
+}
+
+uint64_t StatManager::elapsedMicroSeconds()
+{
+  return timer_.deltaMicroSeconds();
+}
+
 //=======================================================================
 // Methods of StatManager::Counter
 //=======================================================================
 
 StatManager::Counter::Counter()
 {
-  integratedCurr_ = 0;
-  integratedLast_ = 0;
+  extIntegratedCurrPtr_ = 0;
+  integratedCurr_       = 0;
+  integratedLast_       = 0;
   first_ = true;
   resize(0);
 }
+
+StatManager::Counter::Counter(const Counter& count)
+{
+  *this = count;
+}
+
+StatManager::Counter::Counter(Counter& count)
+{
+  *this = count;
+}
+
+void StatManager::Counter::operator=(const Counter& count)
+{
+  *this = (Counter&) count;
+}
+
+void StatManager::Counter::operator=(Counter& count)
+{
+  bool first_ = count.first_;
+  
+  extIntegratedCurrPtr_ = count.extIntegratedCurrPtr_;
+  integratedCurr_ = count.integratedCurr_;
+  integratedLast_ = count.integratedLast_;
+  
+  differentials_  = count.differentials_;
+  sampleTimes_    = count.sampleTimes_;
+}
+
 /**.......................................................................
  * Resize the data buffers for this counter
  */
@@ -439,12 +610,16 @@ void StatManager::Counter::storeDifferential(uint64_t time)
 
   } else {
 
-    diff = integratedCurr_ - integratedLast_;
+    if(extIntegratedCurrPtr_)
+      diff = *extIntegratedCurrPtr_ - integratedLast_;
+    else
+      diff = integratedCurr_ - integratedLast_;
+
     differentials_.push(diff);
     sampleTimes_.push(time);
   }
 
-  integratedLast_ = integratedCurr_;
+  integratedLast_ = extIntegratedCurrPtr_ ? *extIntegratedCurrPtr_ : integratedCurr_;
 }
 
 /**.......................................................................
@@ -454,7 +629,7 @@ void StatManager::Counter::storeDifferential(uint64_t time)
 void StatManager::Counter::getCounts(Sample& sample,
 				     unsigned nSample)
 {
-  sample.total_ = integratedCurr_;
+  sample.total_ = extIntegratedCurrPtr_ ? *extIntegratedCurrPtr_ : integratedCurr_;
 
   std::valarray<uint64_t> times = sampleTimes_.reverseCopy();
   std::valarray<uint64_t> vals  = differentials_.reverseCopy();

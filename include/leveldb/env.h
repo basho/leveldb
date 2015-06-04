@@ -281,7 +281,7 @@ class AppendableFile: public WritableFile {
 };
 
 // An interface for writing log messages.
- class Logger : public leveldb::util::StatBase {
+ class Logger {
  public:
   Logger() { }
   virtual ~Logger();

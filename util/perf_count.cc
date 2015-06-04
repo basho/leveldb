@@ -34,6 +34,7 @@
 #include "leveldb/perf_count.h"
 #endif
 
+#include "util/classes/StatManager.h"
 #include "util/coding.h"
 
 #define __STDC_FORMAT_MACROS
@@ -46,12 +47,14 @@
 
 namespace leveldb
 {
+  static leveldb::util::StatManager LocalStatManager = leveldb::util::StatManager(1, 10);
+  leveldb::util::StatManagerBase* gStatManager(&LocalStatManager);
+
 
 // always have something active in gPerfCounters, eliminates
 //  need to test for "is shared object attached yet"
 static PerformanceCounters LocalStartupCounters;
 PerformanceCounters * gPerfCounters(&LocalStartupCounters);
-
 
     SstCounters::SstCounters()
         : m_IsReadOnly(false),
@@ -202,6 +205,8 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         m_CounterSize=ePerfCountEnumSize;
         // cast away "volatile"
         memset((void*)m_Counter, 0, sizeof(m_Counter));
+  
+        RegisterStats(true);
 
         return;
 
@@ -294,6 +299,8 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             if (good)
             {
+	        ret_ptr->RegisterStats(false);
+
                 // make this available process wide
                 gPerfCounters=ret_ptr;
             }   // if
@@ -656,5 +663,25 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
             printf("  %s: %" PRIu64 "\n", m_PerfCounterNames[loop], m_Counter[loop]);
         }   // loop
     };  // Dump
+
+    void 
+    PerformanceCounters::RegisterStats(bool spawn) 
+    {
+      //------------------------------------------------------------
+      // Initialize all counters to be strobed on the specified interval.
+      // In reality, just a subset may be desired, in which case we would only
+      // initialize those.
+      //------------------------------------------------------------
+      
+      for(unsigned iCounter=0; iCounter < ePerfCountEnumSize; iCounter++)
+	LocalStatManager.initCounter(m_PerfCounterNames[iCounter], &m_Counter[iCounter]);
+
+      // Add a few extra counters
+
+      LocalStatManager.initCounter("TableOpen");
+
+      if(spawn)
+	LocalStatManager.spawnStrobeThread();
+    }
 
 }  // namespace leveldb

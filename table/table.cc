@@ -43,6 +43,11 @@ Status Table::Open(const Options& options,
                    RandomAccessFile* file,
                    uint64_t size,
                    Table** table) {
+
+  std::map<std::string, uint64_t> addMap;
+  addMap["TableOpen"] = 1;
+  gStatManager->add(addMap);
+
   *table = NULL;
   if (size < Footer::kEncodedLength) {
     return Status::InvalidArgument("file is too short to be an sstable");

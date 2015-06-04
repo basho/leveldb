@@ -190,9 +190,9 @@ class DBImpl : public DB {
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".
   struct CompactionStats {
-    int64_t micros;
-    int64_t bytes_read;
-    int64_t bytes_written;
+    uint64_t micros;
+    uint64_t bytes_read;
+    uint64_t bytes_written;
 
     CompactionStats() : micros(0), bytes_read(0), bytes_written(0) { }
 
@@ -213,9 +213,13 @@ class DBImpl : public DB {
   volatile uint64_t block_size_changed_;  // NowMicros() when block size computed
   volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
 
-  // An object that will manage various stats
+  // An object that will manage time-resolved compaction stats
 
   leveldb::util::StatManager statManager_;
+
+  // Register compaction stats to be monitored by statManager_
+
+  void RegisterStats();
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};
