@@ -676,9 +676,32 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
       for(unsigned iCounter=0; iCounter < ePerfCountEnumSize; iCounter++)
 	LocalStatManager.initCounter(m_PerfCounterNames[iCounter], &m_Counter[iCounter]);
 
-      // Add a few extra counters
+      //------------------------------------------------------------
+      // Add a few extra on-the-fly counters for testing.  
+      //
+      // Whichever ones we want to keep should be migrated to
+      // gPerfCounters, since StatManager uses mutex locking on add()
+      //------------------------------------------------------------
 
-      LocalStatManager.initCounter("TableOpen");
+      // For logging
+
+      LocalStatManager.initCounter("LogWriteMicros", "LogWriteMicros", "sec", 1e6);
+      LocalStatManager.initCounter("LogWriteNbyte",  "LogWriteNbyte",  "MB",  1048576.0);
+      LocalStatManager.initCounter("LogNWrites");
+
+      // From Engel's DTrace script
+
+      LocalStatManager.initCounter("PosixMmapFileAppendEntry");
+      LocalStatManager.initCounter("PosixMmapFileAppendReturn");
+
+      LocalStatManager.initCounter("CompactionTaskOperEntry");
+      LocalStatManager.initCounter("CompactionTaskOperReturn");
+
+      LocalStatManager.initCounter("CompactMemTableEntry");
+      LocalStatManager.initCounter("CompactMemTableReturn");
+
+      LocalStatManager.initCounter("AddRecordEntry");
+      LocalStatManager.initCounter("AddRecordReturn");
 
       if(spawn)
 	LocalStatManager.spawnStrobeThread();

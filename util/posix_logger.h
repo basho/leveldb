@@ -108,9 +108,9 @@ class PosixLogger : public Logger {
       gStatManager->stopTimer();
       std::map<std::string, uint64_t> addMap;
 
-      addMap["logWriteMicros"] = gStatManager->elapsedMicroSeconds();
-      addMap["logWriteNbyte"]  = p-base;
-      addMap["logNWrites"]     = 1;
+      addMap["LogWriteMicros"] = gStatManager->elapsedMicroSeconds();
+      addMap["LogWriteNbyte"]  = p-base;
+      addMap["LogNWrites"]     = 1;
 
       gStatManager->add(addMap);
 

@@ -335,7 +335,8 @@ namespace util {
     // Return true if this object contains the named counter
     //------------------------------------------------------------
     
-    virtual bool containsCounter(std::string name) {return false;};
+    virtual bool hasCounter(std::string name) {return false;};
+    virtual bool hasCountersContaining(std::string name) {return false;};
 
     //------------------------------------------------------------
     // Initialize a new counter
@@ -348,6 +349,7 @@ namespace util {
     //------------------------------------------------------------
     
     virtual void add(std::map<std::string, uint64_t>& counterMap) {};
+    virtual void add(std::string name, uint64_t val) {};
 
     //------------------------------------------------------------
     // Retrieve a map of up to nSample counter samples from this
@@ -356,6 +358,8 @@ namespace util {
     
     virtual void getCounts(std::map<std::string, Sample>& sampleMap,
 			   unsigned nSample=0) {};
+    virtual void getCountsContaining(std::map<std::string, Sample>& sampleMap,
+				    unsigned nSample=0) {};
 
     virtual std::string formatOutput(std::string header, std::map<std::string, Sample>& sampleMap) {return "";};
     virtual void setOutputOrder(std::vector<std::string>& order) {};

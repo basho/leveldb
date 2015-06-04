@@ -4,20 +4,21 @@
 #include <cmath>
 #include <iomanip>
 #include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 #include <time.h>
 
 using namespace std;
 using namespace leveldb::util;
 
-#define TRYLOCK(fn)\
-  if(noOp_)\
-    return;\
-  try {\
-    lock();\
-    fn;\
-  } catch(...) {\
-  };\
+#define TRYLOCK(fn)				\
+  if(noOp_)					\
+    return;					\
+  try {						\
+    lock();					\
+    fn;						\
+  } catch(...) {				\
+  };						\
   unlock();
 
 /**.......................................................................
@@ -163,48 +164,93 @@ void* StatManager::runStrobeThread(void* arg)
 void StatManager::strobe(uint64_t time)
 {
   TRYLOCK(
-    for(std::map<std::string, Counter>::iterator iter=counterMap_.begin(); iter != counterMap_.end();
-	iter++) 
-      iter->second.storeDifferential(time);
+
+	  for(std::map<std::string, Counter>::iterator iter=counterMap_.begin(); iter != counterMap_.end();
+	      iter++) 
+	    iter->second.storeDifferential(time);
+
 	  );
 }
 
-bool StatManager::containsCounter(std::string name)
+bool StatManager::hasCounter(std::string name)
 {
-  return counterMap_.find(name) != counterMap_.end();
-}
+  bool retVal = false;
 
-bool StatManager::containsCountersContaining(std::string name)
-{
-  for(std::map<std::string, Counter>::iterator countIter=counterMap_.begin(); countIter != counterMap_.end(); countIter++) {
+  try {
 
-    std::string::size_type idx = countIter->first.find(name);
+    lock();
 
-    if(idx != std::string::npos)
-      return true;
+    retVal = counterMap_.find(name) != counterMap_.end();
+
+  } catch(...) {
   }
 
-  return false;
+  unlock();
+
+  return retVal;
+}
+
+bool StatManager::hasCountersContaining(std::string name)
+{
+  bool retVal = false;
+
+  try {
+
+    lock();
+
+    for(std::map<std::string, Counter>::iterator countIter=counterMap_.begin(); countIter != counterMap_.end(); countIter++) {
+
+      std::string::size_type idx = countIter->first.find(name);
+      
+      if(idx != std::string::npos)
+	retVal = true;
+    }
+
+  } catch(...) {
+  }
+
+  unlock();
+
+  return retVal;
 }
 
 void StatManager::initCounter(std::string name)
 {
   std::map<std::string, uint64_t> addMap;
   addMap[name] = 0;
-
   add(addMap);
+}
+
+void StatManager::initCounter(std::string name, std::string label, std::string unit, unsigned divisor)
+{
+  initCounter(name);
+  setOutputLabel(name, label);
+  setOutputUnit(name, unit);
+  setOutputDivisor(name, divisor);
 }
 
 void StatManager::initCounter(std::string name, volatile uint64_t* valPtr)
 {
-  // Only resize the buffer if the counter doesn't already exist
+  TRYLOCK(
 
-  if(counterMap_.find(name)==counterMap_.end()) {
-    Counter& counter = counterMap_[name];
-    counter.resize(queueLen_);
-  }
+	  // Only resize the buffer if the counter doesn't already exist
 
-  counterMap_[name].extIntegratedCurrPtr_ = valPtr;
+	  if(counterMap_.find(name)==counterMap_.end()) {
+	    Counter& counter = counterMap_[name];
+	    counter.resize(queueLen_);
+	  }
+
+	  counterMap_[name].extIntegratedCurrPtr_ = valPtr;
+
+	  )
+}
+
+void StatManager::initCounter(std::string name, volatile uint64_t* valPtr, std::string label, std::string unit, unsigned divisor)
+{
+  initCounter(name, valPtr);
+  setOutputLabel(name, label);
+  setOutputUnit(name, unit);
+  setOutputDivisor(name, divisor);
 }
 
 /**.......................................................................
@@ -214,25 +260,35 @@ void StatManager::add(std::map<std::string, uint64_t>& addMap)
 {
   TRYLOCK(
 
-     for(std::map<std::string, uint64_t>::iterator iter=addMap.begin(); 
-	iter != addMap.end(); iter++) {
+	  for(std::map<std::string, uint64_t>::iterator iter=addMap.begin(); 
+	      iter != addMap.end(); iter++) {
 
-      // If the counter doesn't already exist, add an entry and resize the buffer
+	    // If the counter doesn't already exist, add an entry and resize the buffer
 
-      if(counterMap_.find(iter->first)==counterMap_.end()) {
+	    if(counterMap_.find(iter->first)==counterMap_.end()) {
 
-	Counter& counter = counterMap_[iter->first];
-	counter.resize(queueLen_);
-	counter.add(iter->second);
+	      Counter& counter = counterMap_[iter->first];
+	      counter.resize(queueLen_);
+	      counter.add(iter->second);
 
-	// Else just add to the existing counter
+	      // Else just add to the existing counter
 
-      } else {
-	Counter& counter = counterMap_[iter->first];
-	counter.add(iter->second);
-      }
-    }
+	    } else {
+	      Counter& counter = counterMap_[iter->first];
+	      counter.add(iter->second);
+	    }
+	  }
 	  );
+}
+
+/**.......................................................................
+ * Add to a counter
+ */
+void StatManager::add(std::string name, uint64_t val)
+{
+  std::map<std::string, uint64_t> addMap;
+  addMap[name] = val;
+  add(addMap);
 }
 
 /**.......................................................................
@@ -244,24 +300,24 @@ void StatManager::getCounts(std::map<std::string, Sample>& sampleMap,
 {
   TRYLOCK(
 
-    for(std::map<std::string, Sample>::iterator iter=sampleMap.begin(); iter != sampleMap.end(); iter++) {
+	  for(std::map<std::string, Sample>::iterator iter=sampleMap.begin(); iter != sampleMap.end(); iter++) {
 
-      // Is this counter in our map? If so, retrieve the data
+	    // Is this counter in our map? If so, retrieve the data
 
-      if(counterMap_.find(iter->first) != counterMap_.end()) {
+	    if(counterMap_.find(iter->first) != counterMap_.end()) {
 
-	Counter& counter = counterMap_[iter->first];
-	counter.getCounts(iter->second, nSample);
+	      Counter& counter = counterMap_[iter->first];
+	      counter.getCounts(iter->second, nSample);
 
-	// Else ensure that the returned array is zero-sized and
-	// marked as not found
+	      // Else ensure that the returned array is zero-sized and
+	      // marked as not found
 
-      } else {
-	iter->second.found_ = false;
-	iter->second.total_ = 0;
-	iter->second.differentials_.resize(0);
-      }
-    }
+	    } else {
+	      iter->second.found_ = false;
+	      iter->second.total_ = 0;
+	      iter->second.differentials_.resize(0);
+	    }
+	  }
 	  );
 }
 
@@ -307,13 +363,13 @@ void StatManager::getAllCounts(std::map<std::string, Sample>& sampleMap,
 {
   TRYLOCK(
 
-    for(std::map<std::string, Counter>::iterator iter=counterMap_.begin(); iter != counterMap_.end(); iter++) {
+	  for(std::map<std::string, Counter>::iterator iter=counterMap_.begin(); iter != counterMap_.end(); iter++) {
 
-      Counter& counter = iter->second;
-      Sample&  sample  = sampleMap[iter->first];
+	    Counter& counter = iter->second;
+	    Sample&  sample  = sampleMap[iter->first];
 
-      counter.getCounts(sample, nSample);
-    }
+	    counter.getCounts(sample, nSample);
+	  }
 	  );
 }
 
@@ -408,11 +464,32 @@ unsigned StatManager::longestHeader(std::map<std::string, Sample>& sampleMap)
       unsigned len = getHeader(iter->first).size();
       maxLen = (maxLen > len ? maxLen : len);
     }
+  }
+
+  return maxLen;
+}
+
+/**.......................................................................
+ * Return the longest time header we will encounter
+ */
+unsigned StatManager::longestTimeHeader(std::map<std::string, Sample>& sampleMap)
+{
+  bool first=true;
+  size_t maxLen=0;
+
+  for(std::map<std::string, Sample>::iterator iter=sampleMap.begin(); iter != sampleMap.end(); 
+      iter++) {
+    Sample& sample = iter->second;
 
     if(sample.differentials_.size() > 0) {
       uint64_t time = sample.differentials_[sample.differentials_.size()-1].first;
       size_t timeLen = formattedDate(time).size();
-      maxLen = (maxLen > timeLen ? maxLen : timeLen);
+
+      if(first) {
+	first = false;
+	maxLen = timeLen;
+      } else
+	maxLen = (maxLen > timeLen ? maxLen : timeLen);
     }
   }
 
@@ -455,22 +532,77 @@ std::string StatManager::formatOutput(std::string header,
 				      std::map<std::string, Sample>& sampleMap)
 {
   unsigned nCounter = sampleMap.size();
-  size_t headerLen = longestHeader(sampleMap) + 2;
-  size_t lineLen = (nCounter+1) * headerLen;
+  size_t timeLen    = longestTimeHeader(sampleMap) + 2;
+  size_t headerLen  = longestHeader(sampleMap) + 2;
+  size_t lineLen    = timeLen + nCounter * headerLen;
 
+  unsigned nCol = getNCol();
+
+  if(nCol < lineLen) {
+
+    unsigned nCounterPerTable = (nCol - timeLen) / headerLen;
+    lineLen = timeLen + nCounterPerTable * headerLen;
+    unsigned nTable = ceil((double)(nCounter) / nCounterPerTable);
+
+    std::ostringstream os;
+
+    unsigned iCounter = 0;
+
+    std::map<std::string, Sample> tmpMap;
+    unsigned iTable=0;
+    for(std::map<std::string, Sample>::iterator iter=sampleMap.begin(); iter != sampleMap.end(); iter++, iCounter++) {
+
+      tmpMap[iter->first] = iter->second;
+
+      if((iCounter+1) % nCounterPerTable == 0 || iCounter+1 == nCounter) {
+	++iTable;
+	os << formatTable(header, tmpMap, lineLen, timeLen, headerLen, iTable, nTable);
+	tmpMap.clear();
+      }
+    }
+
+    return os.str();
+
+  } else {
+    return formatTable(header, sampleMap, lineLen, timeLen, headerLen, 1, 1);
+  }
+}
+  
+/**.......................................................................
+ * Format a single table of output
+ */
+std::string StatManager::formatTable(std::string header,  std::map<std::string, Sample>& sampleMap, 
+				     unsigned lineLen, unsigned timeLen, unsigned headerLen, unsigned iTable, unsigned nTable) 
+{
   std::ostringstream os;
+
+  // Print a line of '='
 
   for(unsigned i=0; i < lineLen; i++)
     os << "=";
   os << std::endl;
 
-  os << std::setw(lineLen) << std::left << header << std::endl;
+  // Print the header
+
+  std::ostringstream osHead;
+  osHead << header;
+
+  if(nTable > 1)
+    osHead << " (" << iTable << " of " << nTable << ")";
+
+  os << std::setw(lineLen) << std::left << osHead.str() << std::endl;
+
+  // Print a line of '-'
 
   for(unsigned i=0; i < lineLen; i++)
     os << "-";
   os << std::endl;
 
-  os << std::setw(headerLen) << " ";
+  // Allocate a space for the timestamps
+
+  os << std::setw(timeLen) << " ";
+
+  // Now print the rest of the headers
 
   for(std::map<std::string, Sample>::iterator iter=sampleMap.begin(); iter != sampleMap.end(); 
       iter++) {
@@ -484,7 +616,7 @@ std::string StatManager::formatOutput(std::string header,
     os << "-";
   os << std::endl << std::endl;
 
-  os << std::setw(headerLen) << " ";
+  os << std::setw(timeLen) << " ";
   for(std::map<std::string, Sample>::iterator iter=sampleMap.begin(); iter != sampleMap.end(); 
       iter++) {
     os << std::setw(headerLen) << std::left << std::setprecision(5) << iter->second.total_ / getDivisor(iter->first);
@@ -501,7 +633,7 @@ std::string StatManager::formatOutput(std::string header,
 
   for(unsigned i=0; i < maxSample.differentials_.size(); i++) {
       
-    os << std::setw(headerLen) << std::left << formattedDate(maxSample.differentials_[i].first);
+    os << std::setw(timeLen) << std::left << formattedDate(maxSample.differentials_[i].first);
 
     for(std::map<std::string, Sample>::iterator iter=sampleMap.begin(); iter != sampleMap.end(); 
 	iter++) {
@@ -602,12 +734,22 @@ void StatManager::Counter::storeDifferential(uint64_t time)
 {
   uint64_t diff;
   
-  // By definition, we can't store differentials until the second
-  // strobe
+  // By definition, we can't store per-unit-time differentials until
+  // the second strobe, but I'm going to store them anyway, taking it
+  // to mean 'whatever happened during the previous interval'. set #if 1
+  // to #if 0 if you don't like this behavior
 
   if(first_) {
     first_ = false;
+#if 1
+    if(extIntegratedCurrPtr_)
+      diff = *extIntegratedCurrPtr_ - integratedLast_;
+    else
+      diff = integratedCurr_ - integratedLast_;
 
+    differentials_.push(diff);
+    sampleTimes_.push(time);
+#endif
   } else {
 
     if(extIntegratedCurrPtr_)
@@ -654,4 +796,11 @@ std::string StatManager::formattedDate(uint64_t sec)
   strftime (time_string, sizeof (time_string), "%Y-%m-%d %H:%M:%S", date);
 
   return time_string;
+}
+
+unsigned StatManager::getNCol()
+{
+  struct winsize ws;
+  ioctl(0, TIOCGWINSZ, &ws);
+  return ws.ws_col;
 }

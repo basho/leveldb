@@ -321,6 +321,9 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
+
+    gStatManager->add("PosixMmapFileAppendEntry", 1);
+
     const char* src = data.data();
     size_t left = data.size();
     while (left > 0) {
@@ -340,6 +343,9 @@ class PosixMmapFile : public WritableFile {
       src += n;
       left -= n;
     }
+
+    gStatManager->add("PosixMmapFileAppendReturn", 1);
+
     return Status::OK();
   }
 
@@ -609,6 +615,9 @@ class PosixEnv : public Env {
   virtual Status NewAppendableFile(const std::string& fname,
                                    WritableFile** result,
                                    size_t map_size) {
+
+    gStatManager->add("PosixMmapFileAppendEntry", 1);
+
     Status s;
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR, 0644);
     if (fd < 0) {
@@ -628,6 +637,9 @@ class PosixEnv : public Env {
           close(fd);
       }   // else
     }   // else
+
+    gStatManager->add("PosixMmapFileAppendReturn", 1);
+
     return s;
   }
 

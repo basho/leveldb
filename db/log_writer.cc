@@ -25,6 +25,9 @@ Writer::~Writer() {
 }
 
 Status Writer::AddRecord(const Slice& slice) {
+
+  gStatManager->add("AddRecordEntry", 1);
+
   const char* ptr = slice.data();
   size_t left = slice.size();
 
@@ -69,6 +72,9 @@ Status Writer::AddRecord(const Slice& slice) {
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
+
+  gStatManager->add("AddRecordReturn", 1);
+
   return s;
 }
 

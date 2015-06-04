@@ -152,6 +152,7 @@ QueueThread::QueueThread(
     m_QueueName.append("Semaphore");
 
     memset(&m_Semaphore, 0, sizeof(m_Semaphore));
+
     ret_val=sem_init(&m_Semaphore, 0, 0);
 
     if (0==ret_val)

@@ -121,8 +121,12 @@ public:
 
     virtual void operator()() 
     {
+        gStatManager->add("CompactionTaskOperEntry", 1);
+
         m_DBImpl->BackgroundCall2(m_Compaction);
         m_Compaction=NULL;
+
+        gStatManager->add("CompactionTaskOperReturn", 1);
     };
 
 private:

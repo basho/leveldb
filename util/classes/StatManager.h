@@ -87,29 +87,38 @@ namespace leveldb {
       // Return true if this object contains the named counter
       //------------------------------------------------------------
 
-      bool containsCounter(std::string name);
+      bool hasCounter(std::string name);
 
       //------------------------------------------------------------
-      // Return true if this object contains counters with the substring
+      // Return true if this object has counters containing the
+      // substring name
       //------------------------------------------------------------
 
-      bool containsCountersContaining(std::string name);
+      bool hasCountersContaining(std::string name);
 
       //------------------------------------------------------------
-      // Initialize a new counter
+      // Initialize new counters.
+      // 
+      // add() will do this for you if adding
+      // counters that haven't already been initialized
       //------------------------------------------------------------
+
+      // Initialize a new internal counter
 
       void initCounter(std::string name);
+      void initCounter(std::string name, std::string label, std::string unit, unsigned divisor);
 
-      // Initialize for counts stored in an external pointer
+      // Initialize a counter whose count is stored in an external pointer
 
       void initCounter(std::string name, volatile uint64_t* valPtr);
+      void initCounter(std::string name, volatile uint64_t* valPtr, std::string label, std::string unit, unsigned divisor);
 
       //------------------------------------------------------------
       // Add to the counters maintained by this object
       //------------------------------------------------------------
 
       void add(std::map<std::string, uint64_t>& counterMap);
+      void add(std::string name, uint64_t val);
 
       //------------------------------------------------------------
       // Store differential counts
@@ -189,8 +198,14 @@ namespace leveldb {
 
       std::string formattedDate(uint64_t sec);
 
+      std::string formatTable(std::string header,  std::map<std::string, Sample>& sampleMap, 
+			      unsigned lineLen, unsigned timeLen, unsigned headerLen, unsigned iTable, unsigned nTable);
+
       unsigned longestHeader(std::map<std::string, Sample>& sampleMap);
+      unsigned longestTimeHeader(std::map<std::string, Sample>& sampleMap);
       std::string longestCounter(std::map<std::string, Sample>& sampleMap);
+
+      unsigned getNCol();
 
       //------------------------------------------------------------
       // Utility members for formatting output
