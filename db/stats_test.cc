@@ -499,29 +499,49 @@ TEST(DBTest, LogStats) {
 
   std::string property;
 
+  // Get perfcount from standard GetProperty call
+
   db_->GetProperty("leveldb.ApiOpen", &property);
   COUT("Api = " << property);
+
+  // Get time-resolved counter from new GetProperty call with ".stats"
+  // appended
 
   db_->GetProperty("leveldb.ApiOpen.stats", &property);
   COUT(property);
 
+  // Get logging stats
+
   db_->GetProperty("leveldb.logstats", &property);
   COUT(property);
 
-  db_->GetProperty("leveldb.compactionstats", &property);
+  // Get existing compaction stats
+
+  db_->GetProperty("leveldb.stats", &property);
   COUT(property);
 
+  // Get time-resolved compaction stats from new GetProperty call
+
   db_->GetProperty("leveldb.Compaction.stats", &property);
+
   COUT(property);
+
+  // Return only Level0 stats
 
   db_->GetProperty("leveldb.Level0.stats", &property);
   COUT(property);
 
+  // Return total Flush stats
+
   db_->GetProperty("leveldb.Flush.stats", &property);
   COUT(property);
 
+  // Return Table::Open stats
+
   db_->GetProperty("leveldb.TableOpen.stats", &property);
   COUT(property);
+
+  // Return some of the added counters from Engel's DTrace script
 
   db_->GetProperty("leveldb.Entry.stats", &property);
   COUT(property);

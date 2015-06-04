@@ -2064,18 +2064,6 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     }
     return true;
 
-  } else if (in == "compactionstats") {
-
-    //------------------------------------------------------------
-    // Retrieve counts
-    //------------------------------------------------------------
-
-    std::map<std::string, leveldb::util::Sample> samples; 
-    statManager_.getAllCounts(samples);
-    value->append(statManager_.formatOutput("Compaction", samples).c_str());
-
-    return true;
-
   } else if (in == "logstats") {
 
     //------------------------------------------------------------
