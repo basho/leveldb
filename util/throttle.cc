@@ -51,7 +51,7 @@ struct ThrottleData_t
 
 ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
 
-uint64_t gThrottleRate;
+uint64_t gThrottleRate, gUnadjustedThrottleRate;
 
 static bool gThrottleRunning=false;
 static pthread_t gThrottleThreadId;
@@ -68,6 +68,7 @@ ThrottleInit()
 
     memset(&gThrottleData, 0, sizeof(gThrottleData));
     gThrottleRate=0;
+    gUnadjustedThrottleRate=0;
 
     pthread_create(&gThrottleThreadId, NULL,  &ThrottleThread, NULL);
 
@@ -82,7 +83,7 @@ ThrottleThread(
 {
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
     int replace_idx, loop;
-    uint64_t new_throttle;
+    uint64_t new_throttle, new_unadjusted;
     time_t now_seconds, cache_expire;
     struct timespec wait_time;
 
@@ -90,6 +91,7 @@ ThrottleThread(
     gThrottleRunning=true;
     now_seconds=0;
     cache_expire=0;
+    new_unadjusted=1;
 
     while(gThrottleRunning)
     {
@@ -145,6 +147,11 @@ ThrottleThread(
             new_throttle /= 10000;  // remove *100 stuff
             if (0==new_throttle)
                 new_throttle=1;     // throttle must have an effect
+
+            new_unadjusted=(tot_micros*100) / tot_keys;
+            new_unadjusted /= 100;
+            if (0==new_unadjusted)
+                new_unadjusted=1;
         }   // if
 
 	// attempt to most recent level0
@@ -155,6 +162,11 @@ ThrottleThread(
             pthread_mutex_lock(&gThrottleMutex);
             new_throttle=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys)
 	      * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
+
+            new_unadjusted=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys);
+            if (0==new_unadjusted)
+                new_unadjusted=1;
+
             pthread_mutex_unlock(&gThrottleMutex);
 	}   // else if
         else
@@ -171,8 +183,11 @@ ThrottleThread(
         if (0==gThrottleRate)
             gThrottleRate=1;   // throttle must always have an effect
 
+        gUnadjustedThrottleRate=new_unadjusted;
+
         gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
         gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
+        gPerfCounters->Set(ePerfThrottleUnadjusted, gUnadjustedThrottleRate);
 
         // prepare for next interval
         pthread_mutex_lock(&gThrottleMutex);
@@ -226,6 +241,7 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Bac
 };
 
 uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
+uint64_t GetUnadjustedThrottleWriteRate() {return(gUnadjustedThrottleRate);};
 
 void ThrottleShutdown()
 {

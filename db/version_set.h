@@ -239,11 +239,16 @@ class VersionSet {
       penalty=current_->write_penalty_;
       throttle=GetThrottleWriteRate();
 
+
       ret_val=0;
       if (0==penalty && 1!=throttle)
           ret_val=(int)throttle;
       else if (0!=penalty)
+      {
+          if (1==throttle)
+              throttle=GetUnadjustedThrottleWriteRate();
           ret_val=(int)penalty * throttle;
+      }   // else if
 
       return(ret_val);
   }

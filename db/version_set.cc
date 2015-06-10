@@ -13,6 +13,7 @@
 #include "db/table_cache.h"
 #include "leveldb/env.h"
 #include "leveldb/table_builder.h"
+#include "table/block.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
@@ -24,7 +25,6 @@
 
 namespace leveldb {
 
-// branch mv-level-work1, March 2013
 //
 // Notes:
 //
@@ -45,9 +45,9 @@ static struct
                                                  //!<   and do not overlap
 } gLevelTraits[config::kNumLevels]=
 
-// level-0 file size of 300,000,000 applies to output files of this level
-//   being written to level-1.  The value is 5 times the default maximum
-//   write buffer size of 60,000,000.  Why five times:  4 level-0 files typically compact
+// level-0 file size of 420,000,000 applies to output files of this level
+//   being written to level-1.  The value is 7 times the default maximum
+//   write buffer size of 60,000,000.  Why seven times:  6 level-0 files typically compact
 //   to one level-1 file and are each slightly larger than 60,000,000.
 // level-1 file size of 1,500,000,000 applies to output file of this level
 //   being written to level-2.  The value is five times the 300,000,000 of level-1.
@@ -56,13 +56,13 @@ static struct
 
 // WARNING: m_OverlappedFiles flags need to match config::kNumOverlapFiles ... until unified
 {
-    {10485760,  262144000,  57671680,      209715200,                0,     300000000, true},
-    {10485760,   82914560,  57671680,      419430400,                0,     209715200, true},
-    {10485760,  314572800,  57671680,     1006632960,        200000000,     314572800, false},
-    {10485760,  419430400,  57671680,     4094304000ULL,    3355443200ULL,  419430400, false},
-    {10485760,  524288000,  57671680,    41943040000ULL,   33554432000ULL,  524288000, false},
-    {10485760,  629145600,  57671680,   419430400000ULL,  335544320000ULL,  629145600, false},
-    {10485760,  734003200,  57671680,  4194304000000ULL, 3355443200000ULL,  734003200, false}
+    {10485760,  262144000,  57671680,      209715200,                 0,     420000000, true},
+    {10485760,   82914560,  57671680,      419430400,                 0,     209715200, true},
+    {10485760,  314572800,  57671680,     3082813440,         200000000,     314572800, false},
+    {10485760,  419430400,  57671680,     6442450944ULL,     4294967296ULL,  419430400, false},
+    {10485760,  524288000,  57671680,   128849018880ULL,    85899345920ULL,  524288000, false},
+    {10485760,  629145600,  57671680,  2576980377600ULL,  1717986918400ULL,  629145600, false},
+    {10485760,  734003200,  57671680, 51539607552000ULL, 34359738368000ULL,  734003200, false}
 };
 
 /// ULL above needed to compile on OSX 10.7.3
@@ -508,36 +508,28 @@ void Version::GetOverlappingInputs(
     std::vector<FileMetaData*>* inputs) {
   inputs->clear();
   Slice user_begin, user_end;
+
+  // overlap takes everything
+  bool test_inputs(!gLevelTraits[level].m_OverlappedFiles);
+
   if (begin != NULL) {
-    user_begin = begin->user_key();
+      user_begin = begin->user_key();
   }
   if (end != NULL) {
-    user_end = end->user_key();
+      user_end = end->user_key();
   }
+
   const Comparator* user_cmp = vset_->icmp_.user_comparator();
   for (size_t i = 0; i < files_[level].size(); ) {
     FileMetaData* f = files_[level][i++];
     const Slice file_start = f->smallest.user_key();
     const Slice file_limit = f->largest.user_key();
-    if (begin != NULL && user_cmp->Compare(file_limit, user_begin) < 0) {
+    if (test_inputs && begin != NULL && user_cmp->Compare(file_limit, user_begin) < 0) {
       // "f" is completely before specified range; skip it
-    } else if (end != NULL && user_cmp->Compare(file_start, user_end) > 0) {
+    } else if (test_inputs && end != NULL && user_cmp->Compare(file_start, user_end) > 0) {
       // "f" is completely after specified range; skip it
     } else {
       inputs->push_back(f);
-      if (gLevelTraits[level].m_OverlappedFiles) {
-        // Level files may overlap each other.  So check if the newly
-        // added file has expanded the range.  If so, restart search.
-        if (begin != NULL && user_cmp->Compare(file_start, user_begin) < 0) {
-          user_begin = file_start;
-          inputs->clear();
-          i = 0;
-        } else if (end != NULL && user_cmp->Compare(file_limit, user_end) > 0) {
-          user_end = file_limit;
-          inputs->clear();
-          i = 0;
-        }
-      }
     }
   }
 }
@@ -1138,6 +1130,14 @@ VersionSet::Finalize(Version* v)
                 }   // if
 
                 is_grooming=false;
+
+                // early overlapped compaction
+                //  only occurs if no other compactions running on groomer thread
+                if (0==score && config::kL0_GroomingTrigger<=v->files_[level].size())
+                {
+                    score=1;
+                    is_grooming=true;
+                }   // if
             } else {
                 // Compute the ratio of current size to size limit.
                 const uint64_t level_bytes = TotalFileSize(v->files_[level]);
@@ -1209,13 +1209,13 @@ VersionSet::UpdatePenalty(
                     //  heavy penalty
                     if (0==level)
                     {   // non-linear penalty
-                        value=4;
+                        value=5;
                         increment=8;
                     }   // if
                     else
                     {   // linear penalty
                         value=count;
-                        increment=1;
+                        increment=2;
                     }   // else
 
                     for (loop=0; loop<count; ++loop)
@@ -1227,28 +1227,51 @@ VersionSet::UpdatePenalty(
         }   // if
         else
         {
+#if 0
             // Compute the ratio of current size to size limit.
-            double penalty_score;
+            double penalty_score(0.0);
 
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
-            if (config::kNumOverlapLevels!=level)
-            {
-                penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+	    // cubed penalty for exceeding size of sorted level
+	    //  (especially helps tiered storage)
+            penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+	    penalty_score = penalty_score * penalty_score * penalty_score;
 
-                // penalty needs to be non-linear once it exceeds 1.0 (especially for tiered storage).
-                //  original values of penalty_score below one are not relevant, hence square of less than one
-                //  is equally ignored.
-                penalty_score *= penalty_score;
-            }   // if
-            // first sort layer needs to clear before next dump of overlapped files.
-            else
+	    // if no penalty so far, set a minor penalty to the landing
+	    //   level to help it flush.  because first sorted layer needs to 
+	    //   clear before next dump of overlapped files.
+	    if (penalty_score<1.0 && config::kNumOverlapLevels==level)
             {
-                penalty_score = (1<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0);
-            }   // else
+                penalty_score = (1.0<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0.0);
+            }   // if
 
             if (1.0<=penalty_score)
                 penalty+=(static_cast<int>(penalty_score));
+#else
+	    int loop, count, value, increment;
+            const uint64_t level_bytes = TotalFileSize(v->files_[level]);
+
+	    count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+            value=0;
+
+	    if (0<count)
+            {
+	        value=5;
+                increment=8;
+            }   // if
+            else if (config::kNumOverlapLevels==level)
+            {   // geometric penalty
+                count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
+                value=count;
+                increment=2;
+            }   // else if
+
+            for (loop=0; loop<count; ++loop)
+                value*=increment;
+
+            penalty+=value;
+#endif
         }   // else
 
     }   // for
@@ -1618,7 +1641,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
       if (!c->inputs_[1].empty()) {
           std::vector<FileMetaData*> expanded0;
           current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
-          const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
+          //const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
           const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
           const int64_t expanded0_size = TotalFileSize(expanded0);
           if (expanded0.size() > c->inputs_[0].size() &&
@@ -1747,10 +1770,11 @@ bool Compaction::IsTrivialMove() const {
   // Avoid a move if there is lots of overlapping grandparent data.
   // Otherwise, the move could create a parent file that will require
   // a very expensive merge later on.
-#if 0
-  return (num_input_files(0) == 1 &&
+#if 1
+  return (!gLevelTraits[level_].m_OverlappedFiles &&
+          num_input_files(0) == 1 &&
           num_input_files(1) == 0 &&
-          TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
+          (uint64_t)TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);
 #else
   // removed this functionality when creating gLevelTraits[].m_OverlappedFiles
   //  flag.  "Move" was intented by Google to delay compaction by moving small

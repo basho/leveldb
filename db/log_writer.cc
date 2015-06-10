@@ -74,7 +74,7 @@ Status Writer::AddRecord(const Slice& slice) {
 
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
   assert(n <= 0xffff);  // Must fit in two bytes
-  assert(block_offset_ + kHeaderSize + n <= kBlockSize);
+  assert(block_offset_ + kHeaderSize + (int)n <= kBlockSize);
 
   // Format the header
   char buf[kHeaderSize];
