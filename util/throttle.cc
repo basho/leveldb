@@ -30,9 +30,6 @@
 
 namespace leveldb {
 
-pthread_rwlock_t gThreadLock0;
-pthread_rwlock_t gThreadLock1;
-
 pthread_mutex_t gThrottleMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t gThrottleCond = PTHREAD_COND_INITIALIZER;
 
@@ -62,10 +59,6 @@ static void * ThrottleThread(void * arg);
 void
 ThrottleInit()
 {
-
-    pthread_rwlock_init(&gThreadLock0, NULL);
-    pthread_rwlock_init(&gThreadLock1, NULL);
-
     memset(&gThrottleData, 0, sizeof(gThrottleData));
     gThrottleRate=0;
     gUnadjustedThrottleRate=0;
