@@ -55,6 +55,10 @@ PLATFORM_SHARED_LDFLAGS="-shared -Wl,-soname -Wl,"
 PLATFORM_SHARED_CFLAGS="-fPIC"
 PLATFORM_SHARED_VERSIONED=true
 
+if test -n "$LEVELDB_VSN"; then
+    PLATFORM_CXXFLAGS="$PLATFORM_CXXFLAGS -DLEVELDB_VSN=\"$LEVELDB_VSN\""
+fi
+
 # On GCC, we pick libc's memcmp over GCC's memcmp via -fno-builtin-memcmp
 case "$TARGET_OS" in
     Darwin)
