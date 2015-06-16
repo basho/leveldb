@@ -13,6 +13,12 @@
 #include "util/cache2.h"
 #include "util/crc32c.h"
 
+#if !defined(LEVELDB_VSN)
+#define LEVELDB_VSN develop
+#endif
+
+#define XSTR(x) #x
+#define STR(x) XSTR(x)
 
 namespace leveldb {
 
@@ -49,6 +55,7 @@ void
 Options::Dump(
     Logger * log) const
 {
+    Log(log,"                       Version: %s", STR(LEVELDB_VSN));
     Log(log,"            Options.comparator: %s", comparator->Name());
     Log(log,"     Options.create_if_missing: %d", create_if_missing);
     Log(log,"       Options.error_if_exists: %d", error_if_exists);
