@@ -1235,13 +1235,13 @@ VersionSet::UpdatePenalty(
                     //  heavy penalty
                     if (0==level)
                     {   // non-linear penalty
-                        value=4;
+                        value=5;
                         increment=8;
                     }   // if
                     else
-                    {   // linear penalty
+                    {   // geometric penalty
                         value=count;
-                        increment=1;
+                        increment=2;
                     }   // else
 
                     for (loop=0; loop<count; ++loop)
@@ -1253,28 +1253,51 @@ VersionSet::UpdatePenalty(
         }   // if
         else
         {
+#if 0
             // Compute the ratio of current size to size limit.
-            double penalty_score;
+            double penalty_score(0.0);
 
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
-            if (config::kNumOverlapLevels!=level)
-            {
-                penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+	    // cubed penalty for exceeding size of sorted level
+	    //  (especially helps tiered storage)
+            penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+	    penalty_score = penalty_score * penalty_score * penalty_score;
 
-                // penalty needs to be non-linear once it exceeds 1.0 (especially for tiered storage).
-                //  original values of penalty_score below one are not relevant, hence square of less than one
-                //  is equally ignored.
-                penalty_score *= penalty_score;
-            }   // if
-            // first sort layer needs to clear before next dump of overlapped files.
-            else
+	    // if no penalty so far, set a minor penalty to the landing
+	    //   level to help it flush.  because first sorted layer needs to 
+	    //   clear before next dump of overlapped files.
+	    if (penalty_score<1.0 && config::kNumOverlapLevels==level)
             {
-                penalty_score = (1<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0);
-            }   // else
+                penalty_score = (1.0<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0.0);
+            }   // if
 
             if (1.0<=penalty_score)
                 penalty+=(static_cast<int>(penalty_score));
+#else
+	    int loop, count, value, increment;
+            const uint64_t level_bytes = TotalFileSize(v->files_[level]);
+
+	    count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+            value=0;
+
+	    if (0<count)
+            {
+	        value=5;
+                increment=8;
+            }   // if
+            else if (config::kNumOverlapLevels==level)
+            {   // geometric penalty
+                count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
+                value=count;
+                increment=2;
+            }   // else if
+
+            for (loop=0; loop<count; ++loop)
+                value*=increment;
+
+            penalty+=value;
+#endif
         }   // else
 
     }   // for
