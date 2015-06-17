@@ -92,6 +92,17 @@ ThrottleThread(
 
     while(gThrottleRunning)
     {
+        //
+        // This is code polls for existance of /etc/riak/perf_counters and sets
+        //  the global gPerfCountersDisabled accordingly.
+        //  Sure, there should be a better place for this code.  But fits here nicely today.
+        //
+        ret_val=access("/etc/riak/perf_counters", F_OK);
+        gPerfCountersDisabled=(-1==ret_val);
+
+        //
+        // start actual throttle work
+        //
         pthread_mutex_lock(&gThrottleMutex);
 
         // sleep 1 minute
@@ -205,14 +216,6 @@ ThrottleThread(
             DBList()->ScanDBs(true,&DBImpl::PurgeExpiredFileCache);
             DBList()->ScanDBs(false, &DBImpl::PurgeExpiredFileCache);
         }   // if
-
-        //
-        // This is code polls for existance of /etc/riak/perf_counters and sets
-        //  the global gPerfCountersDisabled accordingly.
-        //  Sure, there should be a better place for this code.  But fits here nicely today.
-        //
-        ret_val=access("/etc/riak/perf_counters", F_OK);
-        gPerfCountersDisabled=(-1==ret_val);
     }   // while
 
     return(NULL);

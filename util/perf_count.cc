@@ -465,8 +465,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         uint64_t ret_val;
 
         ret_val=0;
-        if (Index<m_CounterSize
-            && (!gPerfCountersDisabled || !m_PerfCounterAttr[Index].m_PerfDiscretionary))
+        if (Index<m_CounterSize)
         {
             ret_val=m_Counter[Index];
         }   // if
