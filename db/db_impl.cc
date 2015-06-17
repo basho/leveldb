@@ -715,14 +715,33 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != NULL) {
-        level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
+        int level_limit;
+        if (0!=options_.tiered_slow_level && (options_.tiered_slow_level-1)<config::kMaxMemCompactLevel)
+            level_limit=options_.tiered_slow_level-1;
+        else
+            level_limit=config::kMaxMemCompactLevel;
+
+        // remember, mutex is held so safe to push file into a non-compacting level
+        level = base->PickLevelForMemTableOutput(min_user_key, max_user_key, level_limit);
+        if (versions_->IsCompactionSubmitted(level) || !versions_->NeighborCompactionsQuiet(level))
+            level=0;
+
         if (0!=level)
         {
+            Status move_s;
             std::string old_name, new_name;
 
             old_name=TableFileName(options_, meta.number, 0);
             new_name=TableFileName(options_, meta.number, level);
-            s=env_->RenameFile(old_name, new_name);
+            move_s=env_->RenameFile(old_name, new_name);
+
+            // argh!  logging while holding mutex ... cannot release
+            if (move_s.ok())
+                Log(options_.info_log, "Level-0 table #%llu:  moved to level %d",
+                    (unsigned long long) meta.number,
+                    level);
+            else
+                level=0;
         }   // if
     }
 
@@ -736,23 +755,11 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
   stats.bytes_written = meta.file_size;
   stats_[level].Add(stats);
 
-  if (0!=meta.num_entries && s.ok())
-  {
-      // This SetWriteRate() call removed because this thread
-      //  has priority (others blocked on mutex) and thus created
-      //  misleading estimates of disk write speed
-      // 2x since mem to disk, not disk to disk
-      //      env_->SetWriteRate(2*stats.micros/meta.num_entries);
-      // 2x since mem to disk, not disk to disk
-      // env_->SetWriteRate(2*stats.micros/meta.num_entries);
-  }   // if
-
   // Riak adds extra reference to file, must remove it
   //  in this race condition upon close
   if (s.ok() && shutting_down_.Acquire_Load()) {
       versions_->GetTableCache()->Evict(meta.number, true);
   }
-
 
   return s;
 }

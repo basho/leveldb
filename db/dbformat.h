@@ -44,7 +44,8 @@ static const size_t kL0_StopWritesTrigger = 12;
 // expensive manifest file operations.  We do not push all the way to
 // the largest level since that can generate a lot of wasted disk
 // space if the same key space is being repeatedly overwritten.
-static const int kMaxMemCompactLevel = 2;
+// Basho: push to kNumOverlapLevels +1 ... beyond "landing level"
+static const int kMaxMemCompactLevel = 3;
 
 }  // namespace config
 

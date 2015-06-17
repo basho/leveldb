@@ -475,9 +475,10 @@ bool Version::OverlapInLevel(int level,
 
 int Version::PickLevelForMemTableOutput(
     const Slice& smallest_user_key,
-    const Slice& largest_user_key) {
+    const Slice& largest_user_key,
+    const int level_limit) {
   int level = 0;
-#if 0
+#if 1
 // test if level 1 m_OverlappedFiles is false, proceded only then
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
     // Push to next level if there is no overlap in next level,
@@ -485,7 +486,7 @@ int Version::PickLevelForMemTableOutput(
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
     std::vector<FileMetaData*> overlaps;
-    while (level < config::kMaxMemCompactLevel) {
+    while (level < level_limit) {
       if (OverlapInLevel(level + 1, &smallest_user_key, &largest_user_key)) {
         break;
       }
@@ -496,6 +497,10 @@ int Version::PickLevelForMemTableOutput(
       }
       level++;
     }
+    // do not waste a move into an overlapped level, breaks
+    //  different performance improvement
+    if (gLevelTraits[level].m_OverlappedFiles)
+        level=0;
   }
 #endif
   return level;
@@ -1057,6 +1062,15 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
   }
 }
 
+
+bool
+VersionSet::NeighborCompactionsQuiet(int level)
+{
+    return((0==level || !m_CompactionStatus[level-1].m_Submitted)
+           && !m_CompactionStatus[level+1].m_Submitted);
+}   // VersionSet::NeighborCompactionsQuiet
+
+
 bool
 VersionSet::Finalize(Version* v)
 {
@@ -1095,7 +1109,7 @@ VersionSet::Finalize(Version* v)
             else
             {
                 // must not have compactions scheduled on neither level below nor level above
-                compact_ok=(!m_CompactionStatus[level-1].m_Submitted && !m_CompactionStatus[level+1].m_Submitted);
+                compact_ok=NeighborCompactionsQuiet(level);
             }   // else
         }   // if
 
@@ -1265,7 +1279,7 @@ VersionSet::UpdatePenalty(
 	    penalty_score = penalty_score * penalty_score * penalty_score;
 
 	    // if no penalty so far, set a minor penalty to the landing
-	    //   level to help it flush.  because first sorted layer needs to 
+	    //   level to help it flush.  because first sorted layer needs to
 	    //   clear before next dump of overlapped files.
 	    if (penalty_score<1.0 && config::kNumOverlapLevels==level)
             {
