@@ -21,6 +21,7 @@
 // -------------------------------------------------------------------
 
 #include <sys/time.h>
+#include <unistd.h>
 
 #include "leveldb/perf_count.h"
 #include "leveldb/env.h"
@@ -32,9 +33,6 @@
 #include "util/throttle.h"
 
 namespace leveldb {
-
-pthread_rwlock_t gThreadLock0;
-pthread_rwlock_t gThreadLock1;
 
 pthread_mutex_t gThrottleMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t gThrottleCond = PTHREAD_COND_INITIALIZER;
@@ -65,10 +63,6 @@ static void * ThrottleThread(void * arg);
 void
 ThrottleInit()
 {
-
-    pthread_rwlock_init(&gThreadLock0, NULL);
-    pthread_rwlock_init(&gThreadLock1, NULL);
-
     memset(&gThrottleData, 0, sizeof(gThrottleData));
     gThrottleRate=0;
     gUnadjustedThrottleRate=0;
@@ -85,7 +79,7 @@ ThrottleThread(
     void * /*arg*/)
 {
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
-    int replace_idx, loop;
+    int replace_idx, loop, ret_val;
     uint64_t new_throttle, new_unadjusted;
     time_t now_seconds, cache_expire;
     struct timespec wait_time;
@@ -203,7 +197,7 @@ ThrottleThread(
 
         //
         // This is code to manage / flush the flexcache's old file cache entries.
-        //  Sure there should be a better place for this code, but fits here nicely today.
+        //  Sure, there should be a better place for this code.  But fits here nicely today.
         //
         if (cache_expire < now_seconds)
         {
@@ -211,6 +205,14 @@ ThrottleThread(
             DBList()->ScanDBs(true,&DBImpl::PurgeExpiredFileCache);
             DBList()->ScanDBs(false, &DBImpl::PurgeExpiredFileCache);
         }   // if
+
+        //
+        // This is code polls for existance of /etc/riak/perf_counters and sets
+        //  the global gPerfCountersDisabled accordingly.
+        //  Sure, there should be a better place for this code.  But fits here nicely today.
+        //
+        ret_val=access("/etc/riak/perf_counters", F_OK);
+        gPerfCountersDisabled=(-1==ret_val);
     }   // while
 
     return(NULL);

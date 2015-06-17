@@ -238,6 +238,14 @@ enum PerformanceCountersEnum
     ePerfKey=41207          //!< random number as shared memory identifier
 };
 
+
+struct PerfCounterAttributes
+{
+    const char * m_PerfCounterName;  //!< text description
+    const bool m_PerfDiscretionary;  //!< true if ok to disable
+};  // PerfCounterAttributes
+
+
 //
 // Do NOT use virtual functions.  This structure will be aligned at different
 //  locations in multiple processes.  Things can get messy with virtuals.
@@ -253,7 +261,7 @@ protected:
 
     volatile uint64_t m_Counter[ePerfCountEnumSize];
 
-    static const char * m_PerfCounterNames[];
+    static const PerfCounterAttributes m_PerfCounterAttr[];
     static int m_PerfSharedId;
     static volatile uint64_t m_BogusCounter;  //!< for out of range GetPtr calls
 
@@ -295,6 +303,8 @@ public:
 };  // struct PerformanceCounters
 
 extern PerformanceCounters * gPerfCounters;
+
+extern bool gPerfCountersDisabled;
 
 }  // namespace leveldb
 
