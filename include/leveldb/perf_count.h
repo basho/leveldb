@@ -304,7 +304,7 @@ public:
 
 extern PerformanceCounters * gPerfCounters;
 
-extern bool gPerfCountersDisabled;
+extern volatile bool gPerfCountersDisabled;
 
 }  // namespace leveldb
 

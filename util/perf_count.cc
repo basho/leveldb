@@ -527,7 +527,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
 
 
-    bool gPerfCountersDisabled=true;
+    volatile bool gPerfCountersDisabled=true;
     int PerformanceCounters::m_PerfSharedId=-1;
     int PerformanceCounters::m_LastError=0;
     volatile uint64_t PerformanceCounters::m_BogusCounter=0;
