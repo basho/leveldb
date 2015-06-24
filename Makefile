@@ -57,6 +57,7 @@ TESTS = \
 TOOLS = \
 	leveldb_repair \
 	perf_dump \
+	sst_rewrite \
 	sst_scan
 
 PROGRAMS = db_bench $(TESTS) $(TOOLS)
@@ -176,6 +177,9 @@ perf_count_test: util/perf_count_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 perf_dump: tools/perf_dump.o $(LIBOBJECTS)
 	$(CXX) tools/perf_dump.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
+
+sst_rewrite: tools/sst_rewrite.o $(LIBOBJECTS)
+	$(CXX) tools/sst_rewrite.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
 sst_scan: tools/sst_scan.o $(LIBOBJECTS)
 	$(CXX) tools/sst_scan.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
