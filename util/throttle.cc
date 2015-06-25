@@ -77,13 +77,10 @@ ThrottleThread(
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
     int replace_idx, loop;
     uint64_t new_throttle, new_unadjusted;
-    time_t now_seconds, cache_expire;
     struct timespec wait_time;
 
     replace_idx=2;
     gThrottleRunning=true;
-    now_seconds=0;
-    cache_expire=0;
     new_unadjusted=1;
 
     while(gThrottleRunning)
@@ -100,7 +97,6 @@ ThrottleThread(
         wait_time.tv_nsec=tv.tv_usec*1000;
 #endif
 
-        now_seconds=wait_time.tv_sec;
         wait_time.tv_sec+=THROTTLE_SECONDS;
         pthread_cond_timedwait(&gThrottleCond, &gThrottleMutex,
                                &wait_time);
