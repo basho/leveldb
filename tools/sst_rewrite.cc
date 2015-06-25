@@ -149,7 +149,7 @@ main(
     options.total_leveldb_mem=(512 << 20);
 
     // testing
-    options.block_size=16 << 10;
+//    options.block_size=16 << 10;
 
     for (cursor=argv+1; NULL!=*cursor && running; ++cursor)
     {

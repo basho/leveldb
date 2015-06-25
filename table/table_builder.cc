@@ -16,6 +16,7 @@
 #include "table/format.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "util/lz4.h"
 
 namespace leveldb {
 
@@ -174,6 +175,8 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   Slice block_contents;
   CompressionType type = r->options.compression;
   // TODO(postrelease): Support more compression options: zlib?
+  std::string * compressed;
+
   switch (type) {
     case kNoCompressionAutomated:
       // automation disabled compression
@@ -186,8 +189,8 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       block_contents = raw;
       break;
 
-    case kSnappyCompression: {
-      std::string* compressed = &r->compressed_output;
+    case kSnappyCompression:
+      compressed = &r->compressed_output;
       if (port::Snappy_Compress(raw.data(), raw.size(), compressed) &&
           compressed->size() < raw.size() - (raw.size() / 8u)) {
         block_contents = *compressed;
@@ -199,7 +202,30 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
         r->sst_counters.Inc(eSstCountCompressAborted);
       }
       break;
-    }
+
+    case kLZ4Compression:
+      compressed = &r->compressed_output;
+      int limit, result_size;
+      limit=raw.size() - (raw.size() / 8u);
+
+      compressed->resize(limit+4);
+      result_size=LZ4_compress_default(raw.data(), (char *)(compressed->data())+4, raw.size(), limit);
+      if (result_size)
+      {
+          EncodeFixed32((char *)compressed->data(), raw.size());
+          compressed->resize(result_size+4);
+          block_contents = *compressed;
+      }
+      else {
+        // Snappy not supported, or compressed less than 12.5%, so just
+        // store uncompressed form
+        block_contents = raw;
+        type = kNoCompression;
+        r->sst_counters.Inc(eSstCountCompressAborted);
+      }
+      break;
+
+
   }
   WriteRawBlock(block_contents, type, handle);
   r->sst_counters.Add(eSstCountBlockWriteSize, block_contents.size());

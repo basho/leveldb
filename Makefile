@@ -25,6 +25,7 @@ CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT)
 LDFLAGS += $(PLATFORM_LDFLAGS)
 
 LIBOBJECTS = $(SOURCES:.cc=.o)
+LIBOBJECTS += util/lz4.o
 MEMENVOBJECTS = $(MEMENV_SOURCES:.cc=.o)
 
 TESTUTIL = ./util/testutil.o
@@ -195,6 +196,9 @@ version_set_test: db/version_set_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 write_batch_test: db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LDFLAGS)
+
+util/lz4.o: util/lz4.c util/lz4.h
+	$(CC) $(CFLAGS) $(PLATFORM_SHARED_CFLAGS) -O3 -std=c99 -Wall -Wextra -Wundef -Wshadow -Wcast-qual -Wcast-align -Wstrict-prototypes -pedantic -DLZ4_VERSION=\"r130\"  -c util/lz4.c -o util/lz4.o
 
 $(MEMENVLIBRARY) : $(MEMENVOBJECTS)
 	rm -f $@

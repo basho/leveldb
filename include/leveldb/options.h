@@ -32,6 +32,7 @@ enum CompressionType {
   // part of the persistent format on disk.
   kNoCompression     = 0x0,
   kSnappyCompression = 0x1,
+  kLZ4Compression    = 0x2,
   kNoCompressionAutomated = 0x3
 };
 
