@@ -1211,8 +1211,13 @@ VersionSet::UpdatePenalty(
 
     for (int level = 0; level < config::kNumLevels-1; ++level)
     {
+        int loop, count, value, increment;
+        value=0;
+        count=0;
+
         if (gLevelTraits[level].m_OverlappedFiles)
         {
+
             // compute penalty for write throttle if too many Level-0 files accumulating
             if (config::kL0_CompactionTrigger < v->files_[level].size())
             {
@@ -1220,15 +1225,14 @@ VersionSet::UpdatePenalty(
                 //   and we are "close" on compaction backlog
                 if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
                 {
-                    penalty+= (v->files_[level].size() - config::kL0_CompactionTrigger);
+                    value = (v->files_[level].size() - config::kL0_CompactionTrigger);
+                    count=0;
                 }   // if
 
                 // no longer estimating work, now trying to throw on the breaks
                 //  to keep leveldb from stalling
                 else
                 {
-                    int loop, count, value, increment;
-
                     count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
 
                     // level 0 has own thread pool and will stall writes,
@@ -1239,47 +1243,18 @@ VersionSet::UpdatePenalty(
                         increment=8;
                     }   // if
                     else
-                    {   // geometric penalty
-                        value=count;
-                        increment=2;
+                    {   // slightly less penalty
+                        value=4;
+                        increment=5;
                     }   // else
-
-                    for (loop=0; loop<count; ++loop)
-                        value*=increment;
-
-                    penalty+=value;
                 }   // else
             }   // if
         }   // if
         else
         {
-#if 0
-            // Compute the ratio of current size to size limit.
-            double penalty_score(0.0);
-
-            const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-
-	    // cubed penalty for exceeding size of sorted level
-	    //  (especially helps tiered storage)
-            penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
-	    penalty_score = penalty_score * penalty_score * penalty_score;
-
-	    // if no penalty so far, set a minor penalty to the landing
-	    //   level to help it flush.  because first sorted layer needs to 
-	    //   clear before next dump of overlapped files.
-	    if (penalty_score<1.0 && config::kNumOverlapLevels==level)
-            {
-                penalty_score = (1.0<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0.0);
-            }   // if
-
-            if (1.0<=penalty_score)
-                penalty+=(static_cast<int>(penalty_score));
-#else
-	    int loop, count, value, increment;
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
 	    count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
-            value=0;
 
 	    if (0<count)
             {
@@ -1287,18 +1262,17 @@ VersionSet::UpdatePenalty(
                 increment=8;
             }   // if
             else if (config::kNumOverlapLevels==level)
-            {   // geometric penalty
+            {   // light penalty
                 count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
-                value=count;
+                value=count/2;
                 increment=2;
             }   // else if
-
-            for (loop=0; loop<count; ++loop)
-                value*=increment;
-
-            penalty+=value;
-#endif
         }   // else
+
+        for (loop=0; loop<count; ++loop)
+            value*=increment;
+
+        penalty+=value;
 
     }   // for
 
