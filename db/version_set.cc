@@ -1278,7 +1278,8 @@ VersionSet::UpdatePenalty(
             else if (config::kNumOverlapLevels==level)
             {   // light penalty
                 count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
-                value=count/2;
+                count/=2;
+                value=4;
                 increment=2;
             }   // else if
         }   // else
