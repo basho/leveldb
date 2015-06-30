@@ -104,14 +104,17 @@ FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
   num_ = (n - 5 - last_word) / 4;
 }
 
-bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
+bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key)
+{return(KeyMayMatch(block_offset, key, NULL));};
+
+bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key, const void * ptr) {
   uint64_t index = block_offset >> base_lg_;
   if (index < num_) {
     uint32_t start = DecodeFixed32(offset_ + index*4);
     uint32_t limit = DecodeFixed32(offset_ + index*4 + 4);
     if (start <= limit && limit <= (offset_ - data_)) {
       Slice filter = Slice(data_ + start, limit - start);
-      return policy_->KeyMayMatch(key, filter);
+      return policy_->KeyMayMatch(key, filter, ptr);
     } else if (start == limit) {
       // Empty filters do not match any keys
       return false;

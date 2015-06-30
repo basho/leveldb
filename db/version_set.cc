@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <stdio.h>
+#include "db/dbformat.h"
 #include "db/filename.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
@@ -298,6 +299,7 @@ void Version::AddIterators(const ReadOptions& options,
 
 
 // Callback from TableCache::Get()
+#if 0
 namespace {
 enum SaverState {
   kNotFound,
@@ -312,6 +314,7 @@ struct Saver {
   Value* value;
 };
 }
+#endif
 static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   bool match=false;
   Saver* s = reinterpret_cast<Saver*>(arg);
@@ -1265,7 +1268,7 @@ VersionSet::UpdatePenalty(
 	    penalty_score = penalty_score * penalty_score * penalty_score;
 
 	    // if no penalty so far, set a minor penalty to the landing
-	    //   level to help it flush.  because first sorted layer needs to 
+	    //   level to help it flush.  because first sorted layer needs to
 	    //   clear before next dump of overlapped files.
 	    if (penalty_score<1.0 && config::kNumOverlapLevels==level)
             {

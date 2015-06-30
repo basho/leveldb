@@ -59,6 +59,8 @@ public:
   // This method may return true or false if the key was not on the
   // list, but it should aim to return false with a high probability.
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const = 0;
+  virtual bool KeyMayMatch(const Slice& key, const Slice& filter, const void * saver) const
+  {return(KeyMayMatch(key, filter));};
 
 };
 

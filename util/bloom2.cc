@@ -74,10 +74,14 @@ class BloomFilterPolicy2 : public FilterPolicy {
     }
   }
 
-  virtual bool KeyMayMatch(const Slice& key, const Slice& bloom_filter) const {
+  virtual bool KeyMayMatch(const Slice& key, const Slice& bloom_filter) const
+        {return(KeyMayMatch(key, bloom_filter, NULL));};
+
+  virtual bool KeyMayMatch(const Slice& key, const Slice& bloom_filter, void * ptr) const {
     const size_t len = bloom_filter.size();
     if (len < 2) return false;
 
+    Saver * saver=(Saver *) ptr;
     const char* array = bloom_filter.data();
     const unsigned prime=Bytes2Prime(len-1);
 
@@ -89,9 +93,24 @@ class BloomFilterPolicy2 : public FilterPolicy {
       // Consider it a match.
       return true;
     }
+    uint32_t h, h2;
 
-    uint32_t h = BloomHash0(key);
-    uint32_t h2= BloomHash1(key);
+    if (NULL!=saver && Name()==saver->hash_id)
+    {
+        h=saver->hash1;
+        h2=saver->hash2;
+    }   // if
+    else
+    {
+        h = BloomHash0(key);
+        h2= BloomHash1(key);
+        if (NULL!=saver)
+        {
+            saver->hash_id=Name();
+            saver->hash1=h;
+            saver->hash2=h2;
+        }   // if
+    }   // else
     const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
     for (size_t j = 0; j < k; j++) {
       const uint32_t bitpos = (h + ((j+1)*h2)) % prime;

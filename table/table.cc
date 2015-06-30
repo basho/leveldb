@@ -4,6 +4,7 @@
 
 #include "leveldb/table.h"
 
+#include "db/dbformat.h"
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
@@ -315,7 +316,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
     BlockHandle handle;
     if (filter != NULL &&
         handle.DecodeFrom(&handle_value).ok() &&
-        !filter->KeyMayMatch(handle.offset(), k)) {
+        !filter->KeyMayMatch(handle.offset(), k, arg)) {
       // Not found
         gPerfCounters->Inc(ePerfBlockFiltered);
     } else {
@@ -370,7 +371,7 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
 }
 
 
-uint64_t 
+uint64_t
 Table::GetFileSize()
 {
     return(rep_->file_size);

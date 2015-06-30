@@ -270,6 +270,29 @@ private:
 
 };  // class KeyRetirement
 
+
+/* previously declared within version_set.cc */
+namespace {
+enum SaverState {
+  kNotFound,
+  kFound,
+  kDeleted,
+  kCorrupt,
+};
+struct Saver {
+  SaverState state;
+  const Comparator* ucmp;
+  Slice user_key;
+  Value* value;
+  const char * hash_id;
+  uint32_t hash1;
+  uint32_t hash2;
+
+Saver() : state(kNotFound), ucmp(NULL), value(NULL), hash_id(NULL), hash1(0), hash2(0) {};
+};
+}
+
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_DB_FORMAT_H_
