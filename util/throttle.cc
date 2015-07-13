@@ -30,6 +30,7 @@
 #include "util/cache2.h"
 #include "util/db_list.h"
 #include "util/flexcache.h"
+#include "util/hot_threads.h"
 #include "util/throttle.h"
 
 namespace leveldb {
@@ -59,6 +60,9 @@ static pthread_t gThrottleThreadId;
 
 static void * ThrottleThread(void * arg);
 
+    static FILE* gF = NULL;
+
+
 
 void
 ThrottleInit()
@@ -68,6 +72,8 @@ ThrottleInit()
     gUnadjustedThrottleRate=0;
 
     pthread_create(&gThrottleThreadId, NULL,  &ThrottleThread, NULL);
+
+    gF = fopen("/var/db/riak/throttle.log", "wr");
 
     return;
 
@@ -120,6 +126,7 @@ ThrottleThread(
         pthread_cond_timedwait(&gThrottleCond, &gThrottleMutex,
                                &wait_time);
         gThrottleData[replace_idx]=gThrottleData[1];
+        gThrottleData[replace_idx].m_Backlog=0;
         memset(&gThrottleData[1], 0, sizeof(gThrottleData[1]));
         pthread_mutex_unlock(&gThrottleMutex);
 
@@ -140,6 +147,13 @@ ThrottleThread(
             tot_compact+=gThrottleData[loop].m_Compactions;
         }   // for
 
+        // capture current state of level-0 and other levels' backlog
+        gThrottleData[replace_idx].m_Backlog=gCompactionThreads->m_WorkQueueAtomic;
+        gPerfCounters->Add(ePerfThrottleBacklog1, gThrottleData[replace_idx].m_Backlog);
+
+        gThrottleData[0].m_Backlog=gLevel0Threads->m_WorkQueueAtomic;
+        gPerfCounters->Add(ePerfThrottleBacklog0, gThrottleData[0].m_Backlog);
+
 	// non-level0 data available?
         if (0!=tot_keys)
         {
@@ -153,6 +167,8 @@ ThrottleThread(
                 * ((tot_backlog*100) / tot_compact);
 
             new_throttle /= 10000;  // remove *100 stuff
+            new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
+
             if (0==new_throttle)
                 new_throttle=1;     // throttle must have an effect
 
@@ -168,12 +184,17 @@ ThrottleThread(
 	else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
 	{
             pthread_mutex_lock(&gThrottleMutex);
+
             new_throttle=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys)
 	      * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
 
             new_unadjusted=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys);
             if (0==new_unadjusted)
                 new_unadjusted=1;
+
+            fprintf(gF, "** %lu, %lu, %lu, %lu, %lu, %lu\n",
+                    new_throttle, new_unadjusted, gThrottleData[0].m_Micros, gThrottleData[0].m_Keys,
+                    gThrottleData[0].m_Backlog, gThrottleData[0].m_Compactions);
 
             pthread_mutex_unlock(&gThrottleMutex);
 	}   // else if
@@ -192,6 +213,9 @@ ThrottleThread(
             gThrottleRate=1;   // throttle must always have an effect
 
         gUnadjustedThrottleRate=new_unadjusted;
+
+        fprintf(gF, "%lu, %lu, %lu, %lu, %lu, %lu\n",
+                gThrottleRate, gUnadjustedThrottleRate, tot_micros, tot_keys, tot_backlog, tot_compact);
 
         gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
         gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
@@ -218,26 +242,30 @@ ThrottleThread(
         }   // if
     }   // while
 
+    fclose(gF);
     return(NULL);
 
 }   // ThrottleThread
 
 
-void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Backlog)
+void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
 {
     if (IsLevel0)
     {
         pthread_mutex_lock(&gThrottleMutex);
         gThrottleData[0].m_Micros+=Micros;
         gThrottleData[0].m_Keys+=Keys;
-        gThrottleData[0].m_Backlog+=Backlog;
+        gThrottleData[0].m_Backlog=0;
         gThrottleData[0].m_Compactions+=1;
         pthread_mutex_unlock(&gThrottleMutex);
 
         gPerfCounters->Add(ePerfThrottleMicros0, Micros);
         gPerfCounters->Add(ePerfThrottleKeys0, Keys);
-        gPerfCounters->Add(ePerfThrottleBacklog0, Backlog);
         gPerfCounters->Inc(ePerfThrottleCompacts0);
+
+        fprintf(gF, "--- %zd, %zd, %zd, %zd\n",
+                gImmThreads->m_WorkQueueAtomic, gWriteThreads->m_WorkQueueAtomic,
+                gLevel0Threads->m_WorkQueueAtomic, gCompactionThreads->m_WorkQueueAtomic);
     }   // if
 
     else
@@ -245,14 +273,17 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Bac
         pthread_mutex_lock(&gThrottleMutex);
         gThrottleData[1].m_Micros+=Micros;
         gThrottleData[1].m_Keys+=Keys;
-        gThrottleData[1].m_Backlog+=Backlog;
+        gThrottleData[1].m_Backlog=0;
         gThrottleData[1].m_Compactions+=1;
         pthread_mutex_unlock(&gThrottleMutex);
 
         gPerfCounters->Add(ePerfThrottleMicros1, Micros);
         gPerfCounters->Add(ePerfThrottleKeys1, Keys);
-        gPerfCounters->Add(ePerfThrottleBacklog1, Backlog);
         gPerfCounters->Inc(ePerfThrottleCompacts1);
+
+        fprintf(gF, "=== %zd, %zd, %zd, %zd\n",
+                gImmThreads->m_WorkQueueAtomic, gWriteThreads->m_WorkQueueAtomic,
+                gLevel0Threads->m_WorkQueueAtomic, gCompactionThreads->m_WorkQueueAtomic);
     }   // else
 
     return;

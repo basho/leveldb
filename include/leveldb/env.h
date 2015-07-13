@@ -178,9 +178,6 @@ class Env {
   // Sleep/delay the thread for the perscribed number of micro-seconds.
   virtual void SleepForMicroseconds(int micros) = 0;
 
-  // Riak specific:  Where supported, give count of background jobs pending.
-  virtual int GetBackgroundBacklog() const {return(0);};
-
   // Riak specific:  Get object that is tracking various software counters
   virtual PerformanceCounters * GetPerformanceCounters() {return(gPerfCounters);};
 

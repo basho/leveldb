@@ -821,10 +821,6 @@ class PosixEnv : public Env {
   }  // SleepForMicroSeconds
 
 
-  virtual int GetBackgroundBacklog() const
-    {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic
-          + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
-
   virtual size_t RecoveryMmapSize(const struct Options * options) const
     {
       size_t map_size;

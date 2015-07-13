@@ -1073,6 +1073,11 @@ Status DBImpl::BackgroundCompaction(
             static_cast<unsigned long long>(f->file_size),
             status.ToString().c_str(),
             versions_->LevelSummary(&tmp));
+
+        // no time, no keys ... just make the call so that one compaction
+        //  gets posted against potential backlog ... extremely important
+        //  to write throttle logic.
+        SetThrottleWriteRate(0, 0, (0 == c->level()));
     }  // if
     else {
         // retry as compaction instead of move
@@ -1574,8 +1579,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok()) {
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), compact->num_entries,
-                            is_level0_compaction, env_->GetBackgroundBacklog());
+        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), 
+                             compact->num_entries, is_level0_compaction);
     status = InstallCompactionResults(compact);
   }
 

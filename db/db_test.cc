@@ -961,7 +961,8 @@ TEST(DBTest, RepeatedWritesToSameKey) {
 
   // We must have at most one file per level except for level-0,
   // which may have up to kL0_StopWritesTrigger files.
-  const int kMaxFiles = config::kNumLevels + config::kL0_StopWritesTrigger;
+  //  ... basho adds *2 since level-1 is now overlapped too
+  const int kMaxFiles = config::kNumLevels + config::kL0_StopWritesTrigger*2;
 
   Random rnd(301);
   std::string value = RandomString(&rnd, 2 * options.write_buffer_size);
