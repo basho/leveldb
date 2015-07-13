@@ -395,7 +395,7 @@ Status Version::Get(const ReadOptions& options,
     }
 
     if (0!=num_files)
-        gPerfCounters->Inc(ePerfSearchLevel0 + level);
+        gPerfCounters->Add(ePerfSearchLevel0 + level, num_files);
 
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != NULL && stats->seek_file == NULL) {
@@ -1072,6 +1072,7 @@ VersionSet::Finalize(Version* v)
     {
         bool compact_ok;
         double score;
+        const uint64_t parent_level_bytes = TotalFileSize(v->files_[level+1]);
 
         is_grooming=false;
         // is this level eligible for compaction consideration?
@@ -1087,7 +1088,8 @@ VersionSet::Finalize(Version* v)
             }   // if
 
             // overlapped and next level is not compacting
-            else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted)
+            else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted
+                     && parent_level_bytes<=gLevelTraits[level+1].m_DesiredBytesForLevel)
             {
                 // good ... stop consideration
             }   // else if
@@ -1095,7 +1097,8 @@ VersionSet::Finalize(Version* v)
             else
             {
                 // must not have compactions scheduled on neither level below nor level above
-                compact_ok=(!m_CompactionStatus[level-1].m_Submitted && !m_CompactionStatus[level+1].m_Submitted);
+                compact_ok=(!m_CompactionStatus[level-1].m_Submitted && !m_CompactionStatus[level+1].m_Submitted
+                            && parent_level_bytes<=gLevelTraits[level+1].m_DesiredBytesForLevel);
             }   // else
         }   // if
 
@@ -1125,8 +1128,7 @@ VersionSet::Finalize(Version* v)
                 if (!gLevelTraits[level+1].m_OverlappedFiles
                     && v->files_[level].size()< config::kL0_SlowdownWritesTrigger)
                 {
-                    const uint64_t level_bytes = TotalFileSize(v->files_[level+1]);
-                    if (1 < (level_bytes / gLevelTraits[level+1].m_DesiredBytesForLevel))
+                    if (1 < (parent_level_bytes / gLevelTraits[level+1].m_DesiredBytesForLevel))
                         score=0;
                 }   // if
 
@@ -1244,8 +1246,13 @@ VersionSet::UpdatePenalty(
                     }   // if
                     else
                     {   // slightly less penalty
+#if 0
                         value=4;
                         increment=5;
+#else
+                        value=1;
+                        increment=8;
+#endif
                     }   // else
                 }   // else
             }   // if
@@ -1261,6 +1268,11 @@ VersionSet::UpdatePenalty(
 	        value=5;
                 increment=8;
             }   // if
+#if 1
+            // this penalty is not about "backlog", its goal is to
+            //  slow the operations during a known period of high
+            //  background activity.  Overall, latencies get better
+            //  not worse because of this.
             else if (config::kNumOverlapLevels==level)
             {   // light penalty
                 count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
@@ -1268,6 +1280,7 @@ VersionSet::UpdatePenalty(
                 value=4;
                 increment=2;
             }   // else if
+#endif
         }   // else
 
         for (loop=0; loop<count; ++loop)
