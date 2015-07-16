@@ -320,16 +320,22 @@ main(
                         else
                         {
                             if (file1.GetSstCounter(leveldb::eSstCountKeys)==file2.GetSstCounter(leveldb::eSstCountKeys))
-                                fprintf(stderr, "%s, %s: Number of keys different.\n",
-                                        file1.GetFileName(), file2.GetFileName());
+                                fprintf(stderr, "%s, %s: Number of keys different, %ld vs %ld.\n",
+                                        file1.GetFileName(), file2.GetFileName(),
+                                        file1.GetSstCounter(leveldb::eSstCountKeys),
+                                        file2.GetSstCounter(leveldb::eSstCountKeys));
 
                             if (file1.GetSstCounter(leveldb::eSstCountKeySize)==file2.GetSstCounter(leveldb::eSstCountKeySize))
-                                fprintf(stderr, "%s, %s: Byte size of all keys different.\n",
-                                        file1.GetFileName(), file2.GetFileName());
+                                fprintf(stderr, "%s, %s: Byte size of all keys different, %ld vs %ld\n",
+                                        file1.GetFileName(), file2.GetFileName(),
+                                        file1.GetSstCounter(leveldb::eSstCountKeySize),
+                                        file2.GetSstCounter(leveldb::eSstCountKeySize));
 
                             if (file1.GetSstCounter(leveldb::eSstCountValueSize)==file2.GetSstCounter(leveldb::eSstCountValueSize))
-                             fprintf(stderr, "%s, %s: Byte size of all values different.\n",
-                                        file1.GetFileName(), file2.GetFileName());
+                             fprintf(stderr, "%s, %s: Byte size of all values different, %ld vs %ld\n",
+                                     file1.GetFileName(), file2.GetFileName(),
+                                     file1.GetSstCounter(leveldb::eSstCountValueSize),
+                                     file2.GetSstCounter(leveldb::eSstCountValueSize));
                             error_seen=true;
                            }   // else
 
@@ -373,7 +379,10 @@ command_help()
 {
     fprintf(stderr, "sst_rewrite [option | file]*\n");
     fprintf(stderr, "  options\n");
-//    fprintf(stderr, "      -b  print details about block\n");
+    fprintf(stderr, "      -b  value  set Options.block_size to value\n");
+    fprintf(stderr, "      -n  set Options.compression to No compression\n");
+    fprintf(stderr, "      -s  set Options.compression to Snappy compression\n");
+    fprintf(stderr, "      -z  set Options.compression to LZ4 compression\n");
     fprintf(stderr, "      -c  compare next two files (inverse of -w)\n");
     fprintf(stderr, "      -w  rewrite next file (default, inverse of -c)\n");
 }   // command_help
