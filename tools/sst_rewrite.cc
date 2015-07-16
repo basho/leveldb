@@ -20,6 +20,7 @@
 //
 // -------------------------------------------------------------------
 
+#include <memory>
 #include <stdio.h>
 #include <stdlib.h>
 //#include <libgen.h>
@@ -50,13 +51,15 @@ public:
 
 protected:
     leveldb::Options & m_Options;
-    std::string m_FileName;
+    const std::string m_FileName;
     leveldb::RandomAccessFile * m_FilePtr;
     leveldb::Table * m_TablePtr;
     uint64_t m_FileSize;
     leveldb::Status m_LastStatus;
 
     bool m_IsOpen;
+
+    void Reset();
 
 private:
     // disable these
@@ -75,7 +78,7 @@ LDbTable::LDbTable(
     m_LastStatus=m_Options.env->GetFileSize(m_FileName, &m_FileSize);
 
     if (m_LastStatus.ok())
-        m_LastStatus=m_Options.env->NewRandomAccessFile(m_FileName, &m_FilePtr);
+        {m_LastStatus=m_Options.env->NewRandomAccessFile(m_FileName, &m_FilePtr);}
 
     if (m_LastStatus.ok())
     {
@@ -90,11 +93,7 @@ LDbTable::LDbTable(
     if (!m_IsOpen)
     {
         // some people would throw() at this point, but not me
-        delete m_TablePtr;
-        m_TablePtr=NULL;
-        delete m_FilePtr;
-        m_FilePtr=NULL;
-        m_FileSize=0;
+        Reset();
     }   // if
 
     return;
@@ -104,13 +103,26 @@ LDbTable::LDbTable(
 
 LDbTable::~LDbTable()
 {
+    Reset();
+
+    return;
+
+}   // LDbTable::~LDbTable
+
+
+void
+LDbTable::Reset()
+{
     m_IsOpen=false;
     delete m_TablePtr;
     m_TablePtr=NULL;
     delete m_FilePtr;
     m_FilePtr=NULL;
     m_FileSize=0;
-}   // LDbTable::~LDbTable
+
+    return;
+
+}   // LDbTable::Reset
 
 
 leveldb::Iterator *
@@ -145,13 +157,15 @@ main(
 
     // Options: needs filter & total_leveldb_mem initialized
     leveldb::Options options;
+
+    // using 16 bit width per key in bloom filter
     options.filter_policy=leveldb::NewBloomFilterPolicy2(16);
+    // tell leveldb it can use 512Mbyte of memory
     options.total_leveldb_mem=(512 << 20);
 
-    // testing
-//    options.block_size=16 << 10;
-
-    for (cursor=argv+1; NULL!=*cursor && running; ++cursor)
+    for (cursor=argv+1;
+         NULL!=*cursor && running && !error_seen;
+         ++cursor)
     {
         // option flag?
         if ('-'==**cursor)
@@ -161,9 +175,29 @@ main(
             flag=*((*cursor)+1);
             switch(flag)
             {
-                //case 'b':  options.block_size=4096; break;
-                case 'c':  compare_files=true; break;
+                case 'b':
+                {
+                    error_seen=(NULL==(cursor+1));
+                    if (!error_seen)
+                    {options.block_size=atol(*(cursor+1));};
+                    break;
+                }   // case b
+
+                case 's':  options.compression=leveldb::kSnappyCompression; break;
+                case 'z':  options.compression=leveldb::kLZ4Compression; break;
+                case 'n':  options.compression=leveldb::kNoCompression; break;
+
+                case 'c':
+                {
+                    // test for first pair ... but after that user beware
+                    error_seen=(NULL==(cursor+1)) || (NULL==(cursor+2));
+                    if (!error_seen)
+                         {compare_files=true;}
+                    break;
+                }   // case c
+
                 case 'w':  compare_files=false; break;
+
                 default:
                     fprintf(stderr, " option \'%c\' is not valid\n", flag);
                     command_help();
@@ -182,22 +216,22 @@ main(
             // do a rewrite
             if (!compare_files)
             {
-                leveldb::WritableFile *outfile = NULL;
+                leveldb::WritableFile * outfile;
                 leveldb::Status s;
-                leveldb::Iterator *it;
-                leveldb::TableBuilder * builder = NULL;
+                std::auto_ptr<leveldb::Iterator> it;
+                std::auto_ptr<leveldb::TableBuilder> builder;
 
                 LDbTable in_file(options, fname);
 
                 if (in_file.GetStatus().ok())
                 {
-                    it=in_file.NewIterator();
+                    it.reset(in_file.NewIterator());
 
                     fname.append(".new");
                     s = options.env->NewWritableFile(fname, &outfile,
                                                      options.env->RecoveryMmapSize(&options));
                     if (s.ok())
-                        builder = new leveldb::TableBuilder(options, outfile);
+                        builder.reset(new leveldb::TableBuilder(options, outfile));
                     else
                     {
                         // Table::Open failed on file "fname"
@@ -219,8 +253,6 @@ main(
                         builder->Abandon();
                     }
 
-                    delete builder;
-                    delete it;
                     if (NULL!=outfile)
                         outfile->Close();
                     delete outfile;
