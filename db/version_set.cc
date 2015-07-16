@@ -1250,8 +1250,8 @@ VersionSet::UpdatePenalty(
                         value=4;
                         increment=5;
 #else
-                        value=1;
-                        increment=8;
+                        value=8;        // 1
+                        increment=6;    // 8
 #endif
                     }   // else
                 }   // else
@@ -1277,8 +1277,13 @@ VersionSet::UpdatePenalty(
             {   // light penalty
                 count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
                 count/=2;
+#if 1
                 value=4;
                 increment=2;
+#else
+                value=4;
+                increment=4;
+#endif
             }   // else if
 #endif
         }   // else

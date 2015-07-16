@@ -167,7 +167,7 @@ ThrottleThread(
                 * ((tot_backlog*100) / tot_compact);
 
             new_throttle /= 10000;  // remove *100 stuff
-            new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
+            //new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
 
             if (0==new_throttle)
                 new_throttle=1;     // throttle must have an effect
@@ -281,9 +281,16 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
         gPerfCounters->Add(ePerfThrottleKeys1, Keys);
         gPerfCounters->Inc(ePerfThrottleCompacts1);
 
-        fprintf(gF, "=== %zd, %zd, %zd, %zd\n",
+        size_t ws, wa;
+        {
+            SpinLock lock(&gCompactionThreads->m_QueueLock);
+            wa=gCompactionThreads->m_WorkQueueAtomic;
+            ws=gCompactionThreads->work_queue_size();
+        }
+
+        fprintf(gF, "=== %zd, %zd, %zd, %zd (%zd)\n",
                 gImmThreads->m_WorkQueueAtomic, gWriteThreads->m_WorkQueueAtomic,
-                gLevel0Threads->m_WorkQueueAtomic, gCompactionThreads->m_WorkQueueAtomic);
+                gLevel0Threads->m_WorkQueueAtomic, wa, ws);
     }   // else
 
     return;

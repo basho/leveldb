@@ -245,7 +245,7 @@ class VersionSet {
       //else if (0!=penalty)
       if (0!=penalty)
       {
-          if (1==throttle)
+//          if (1==throttle)
               throttle=GetUnadjustedThrottleWriteRate();
           ret_val=(int)penalty * throttle;
       }   // else if
