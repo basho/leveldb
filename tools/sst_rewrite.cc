@@ -240,14 +240,16 @@ main(
                         error_seen=true;
                     }   // else
 
-                    for (it->SeekToFirst(); it->Valid() && s.ok(); it->Next())
+                    for (it->SeekToFirst();
+                         it->Valid() && s.ok() && builder->status().ok();
+                         it->Next())
                     {
                         leveldb::Slice key = it->key();
                         builder->Add(key, it->value());
                     }   // for
 
                     // hmmm, nothing new setting status right now.
-                    if (s.ok()) {
+                    if (s.ok() && builder->status().ok()) {
                         s = builder->Finish();
                     } else {
                         builder->Abandon();
