@@ -159,6 +159,11 @@ class DB {
   // with Options.is_repair=true
   virtual Status VerifyLevels();
 
+  // Riak specific function:  Request database check for
+  // available compactions.  This is to stimulate retry of
+  // grooming that might have been offered and rejected previously
+  virtual void CheckAvailableCompactions();
+
  private:
   // No copying allowed
   DB(const DB&);
