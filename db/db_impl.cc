@@ -1579,7 +1579,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok()) {
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), 
+        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros),
                              compact->num_entries, is_level0_compaction);
     status = InstallCompactionResults(compact);
   }
@@ -2300,6 +2300,19 @@ DBImpl::VerifyLevels()
     return(result);
 
 }   // VerifyLevels
+
+void DB::CheckAvailableCompactions() {return;};
+
+// Used internally for inter-database notification
+//  of potential grooming timeslot availability.
+void
+DBImpl::CheckAvailableCompactions()
+{
+    MutexLock l(&mutex_);
+    MaybeScheduleCompaction();
+
+    return;
+}   // CheckAvailableCompactions
 
 
 bool

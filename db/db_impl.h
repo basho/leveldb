@@ -45,6 +45,7 @@ class DBImpl : public DB {
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
   virtual Status VerifyLevels();
+  virtual void CheckAvailableCompactions();
 
   // Extra methods (for testing) that are not in the public DB interface
 
