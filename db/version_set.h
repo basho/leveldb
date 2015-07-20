@@ -240,12 +240,11 @@ class VersionSet {
       throttle=GetThrottleWriteRate();
 
       ret_val=0;
-      //if (0==penalty && 1!=throttle)
-          //    ret_val=(int)throttle;
-      //else if (0!=penalty)
-      if (0!=penalty)
+      if (0==penalty && 1!=throttle)
+          ret_val=(int)throttle;
+      else if (0!=penalty)
       {
-//          if (1==throttle)
+          if (throttle<GetUnadjustedThrottleWriteRate())
               throttle=GetUnadjustedThrottleWriteRate();
           ret_val=(int)penalty * throttle;
       }   // else if
