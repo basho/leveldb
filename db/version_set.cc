@@ -1267,8 +1267,10 @@ VersionSet::UpdatePenalty(
                         value=4;
                         increment=5;
 #else
-                        value=8;        // 1
-                        increment=6;    // 8
+                        //value=2;        // 8 // 1
+                        //increment=8;    // 6 // 8
+                        value=count+1;
+                        count=0;
 #endif
                     }   // else
                 }   // else
@@ -1293,13 +1295,14 @@ VersionSet::UpdatePenalty(
             else if (config::kNumOverlapLevels==level)
             {   // light penalty
                 count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
-                count/=2;
-#if 1
+//                count/=2;
+#if 0
                 value=4;
                 increment=2;
 #else
-                value=4;
-                increment=4;
+                value=count; // this approximates the number of compactions needed, no other penalty
+                increment=1;
+                count=0;
 #endif
             }   // else if
 #endif
