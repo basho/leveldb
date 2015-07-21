@@ -10,6 +10,7 @@
 #include "table/block.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "util/lz4.h"
 #include "db/log_writer.h"
 
 namespace leveldb {
@@ -146,6 +147,28 @@ Status ReadBlock(RandomAccessFile* file,
                   if (!port::Snappy_Uncompress(data, n, ubuf)) {
                       s=Status::Corruption("corrupted compressed block contents");
                   }
+              }   // if
+
+              if (s.ok())
+              {
+                  delete[] buf;
+                  buf=NULL;
+                  result->data = Slice(ubuf, ulength);
+                  result->heap_allocated = true;
+                  result->cachable = true;
+              }   // if
+              break;
+          }
+
+          case kLZ4Compression: {
+              size_t ulength = DecodeFixed32(data);
+              size_t ret_val;
+              ubuf = new char[ulength];
+
+              ret_val=LZ4_decompress_safe(data+4, ubuf, n-4, ulength);
+              if (ret_val != ulength)
+              {
+                  s=Status::Corruption("corrupted LZ4 compressed block");
               }   // if
 
               if (s.ok())

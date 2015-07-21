@@ -6,6 +6,7 @@
 #define STORAGE_LEVELDB_INCLUDE_OPTIONS_H_
 
 #include <stddef.h>
+#include <stdint.h>
 #include <string>
 #include <memory>
 
@@ -31,6 +32,7 @@ enum CompressionType {
   // part of the persistent format on disk.
   kNoCompression     = 0x0,
   kSnappyCompression = 0x1,
+  kLZ4Compression    = 0x2,
   kNoCompressionAutomated = 0x3
 };
 
