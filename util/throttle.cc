@@ -60,9 +60,6 @@ static pthread_t gThrottleThreadId;
 
 static void * ThrottleThread(void * arg);
 
-    static FILE* gF = NULL;
-
-
 
 void
 ThrottleInit()
@@ -72,8 +69,6 @@ ThrottleInit()
     gUnadjustedThrottleRate=0;
 
     pthread_create(&gThrottleThreadId, NULL,  &ThrottleThread, NULL);
-
-    gF = fopen("/var/db/riak/throttle.log", "wr");
 
     return;
 
@@ -192,10 +187,6 @@ ThrottleThread(
             if (0==new_unadjusted)
                 new_unadjusted=1;
 
-            fprintf(gF, "** %lu, %lu, %lu, %lu, %lu, %lu\n",
-                    new_throttle, new_unadjusted, gThrottleData[0].m_Micros, gThrottleData[0].m_Keys,
-                    gThrottleData[0].m_Backlog, gThrottleData[0].m_Compactions);
-
             pthread_mutex_unlock(&gThrottleMutex);
 	}   // else if
         else
@@ -213,9 +204,6 @@ ThrottleThread(
             gThrottleRate=1;   // throttle must always have an effect
 
         gUnadjustedThrottleRate=new_unadjusted;
-
-        fprintf(gF, "%lu, %lu, %lu, %lu, %lu, %lu\n",
-                gThrottleRate, gUnadjustedThrottleRate, tot_micros, tot_keys, tot_backlog, tot_compact);
 
         gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
         gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
@@ -242,7 +230,6 @@ ThrottleThread(
         }   // if
     }   // while
 
-    fclose(gF);
     return(NULL);
 
 }   // ThrottleThread
@@ -263,9 +250,6 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
         gPerfCounters->Add(ePerfThrottleKeys0, Keys);
         gPerfCounters->Inc(ePerfThrottleCompacts0);
 
-        fprintf(gF, "--- %zd, %zd, %zd, %zd\n",
-                gImmThreads->m_WorkQueueAtomic, gWriteThreads->m_WorkQueueAtomic,
-                gLevel0Threads->m_WorkQueueAtomic, gCompactionThreads->m_WorkQueueAtomic);
     }   // if
 
     else
@@ -288,9 +272,6 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
             ws=gCompactionThreads->work_queue_size();
         }
 
-        fprintf(gF, "=== %zd, %zd, %zd, %zd (%zd)\n",
-                gImmThreads->m_WorkQueueAtomic, gWriteThreads->m_WorkQueueAtomic,
-                gLevel0Threads->m_WorkQueueAtomic, wa, ws);
     }   // else
 
     return;
