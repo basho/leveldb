@@ -1096,9 +1096,12 @@ VersionSet::Finalize(Version* v)
 
             else
             {
-                // must not have compactions scheduled on neither level below nor level above
-                compact_ok=(!m_CompactionStatus[level-1].m_Submitted && !m_CompactionStatus[level+1].m_Submitted
-                            && parent_level_bytes<=gLevelTraits[level+1].m_DesiredBytesForLevel);
+                // not an overlapped level and must not have compactions
+                //   scheduled on either level below or level above
+                compact_ok=(!gLevelTraits[level].m_OverlappedFiles
+                            && !m_CompactionStatus[level-1].m_Submitted && !m_CompactionStatus[level+1].m_Submitted
+                            && parent_level_bytes<=((gLevelTraits[level+1].m_MaxBytesForLevel
+                                                     +gLevelTraits[level+1].m_DesiredBytesForLevel)/2));
             }   // else
         }   // if
 
@@ -1246,15 +1249,8 @@ VersionSet::UpdatePenalty(
                     }   // if
                     else
                     {   // slightly less penalty
-#if 0
-                        value=4;
-                        increment=5;
-#else
-                        //value=2;        // 8 // 1
-                        //increment=8;    // 6 // 8
                         value=count+1;
                         count=0;
-#endif
                     }   // else
                 }   // else
             }   // if
@@ -1270,7 +1266,7 @@ VersionSet::UpdatePenalty(
 	        value=5;
                 increment=8;
             }   // if
-#if 1
+
             // this penalty is not about "backlog", its goal is to
             //  slow the operations during a known period of high
             //  background activity.  Overall, latencies get better
@@ -1278,17 +1274,10 @@ VersionSet::UpdatePenalty(
             else if (config::kNumOverlapLevels==level)
             {   // light penalty
                 count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
-//                count/=2;
-#if 0
-                value=4;
-                increment=2;
-#else
                 value=count; // this approximates the number of compactions needed, no other penalty
                 increment=1;
                 count=0;
-#endif
             }   // else if
-#endif
         }   // else
 
         for (loop=0; loop<count; ++loop)
