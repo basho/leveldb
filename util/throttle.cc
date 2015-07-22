@@ -249,7 +249,6 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
         gPerfCounters->Add(ePerfThrottleMicros0, Micros);
         gPerfCounters->Add(ePerfThrottleKeys0, Keys);
         gPerfCounters->Inc(ePerfThrottleCompacts0);
-
     }   // if
 
     else
@@ -264,14 +263,6 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
         gPerfCounters->Add(ePerfThrottleMicros1, Micros);
         gPerfCounters->Add(ePerfThrottleKeys1, Keys);
         gPerfCounters->Inc(ePerfThrottleCompacts1);
-
-        size_t ws, wa;
-        {
-            SpinLock lock(&gCompactionThreads->m_QueueLock);
-            wa=gCompactionThreads->m_WorkQueueAtomic;
-            ws=gCompactionThreads->work_queue_size();
-        }
-
     }   // else
 
     return;
