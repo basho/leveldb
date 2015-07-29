@@ -9,20 +9,6 @@
 
 namespace leveldb {
 
-// Tag numbers for serialized VersionEdit.  These numbers are written to
-// disk and should not be changed.
-enum Tag {
-  kComparator           = 1,
-  kLogNumber            = 2,
-  kNextFileNumber       = 3,
-  kLastSequence         = 4,
-  kCompactPointer       = 5,
-  kDeletedFile          = 6,
-  kNewFile              = 7,
-  // 8 was used for large value refs
-  kPrevLogNumber        = 9
-};
-
 void VersionEdit::Clear() {
   comparator_.clear();
   log_number_ = 0;

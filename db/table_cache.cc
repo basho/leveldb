@@ -72,6 +72,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       tf->file = file;
       tf->table = table;
       tf->doublecache = &doublecache_;
+      tf->file_number = file_number;
+      tf->level = level;
 
       *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
 //      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
