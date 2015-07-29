@@ -234,6 +234,24 @@ DBImpl::~DBImpl() {
   delete tmp_batch_;
   delete log_;
   delete logfile_;
+
+  Status s;
+  std::string cow_name;
+  WritableFile * cow_file;
+  log::Writer * cow_log;
+
+  cow_name=dbname_ + "/COW";
+  s = env_->NewWritableFile(cow_name, &cow_file, 4*1024L);
+  if (s.ok())
+  {
+      std::string cow;
+      cow_log=new log::Writer(cow_file);
+      double_cache.WriteCacheObjectWarming(cow);
+      cow_log->AddRecord(cow);
+      delete cow_log;
+      delete cow_file;
+  }   // if
+
   delete table_cache_;
 
   if (owns_info_log_) {

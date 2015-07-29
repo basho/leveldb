@@ -78,9 +78,13 @@ struct TableAndFile {
   RandomAccessFile* file;
   Table* table;
   DoubleCache * doublecache;
+  uint64_t file_number;     // saved for cache object warming
+  int level;                // saved for cache object warming
 
    TableAndFile()
-   : file(NULL), table(NULL), doublecache(NULL) {};
+   : file(NULL), table(NULL), doublecache(NULL),
+     file_number(0), level(0)
+   {};
 };
 
 
