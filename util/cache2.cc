@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "db/table_cache.h"
+#include "db/version_edit.h"
 #include "leveldb/atomics.h"
 #include "leveldb/env.h"
 #include "util/cache2.h"
@@ -394,7 +396,7 @@ private:
 
           now=Env::Default()->NowMicros() / 1000000L;
 
-          SpinLock l(&id_spin_);  // release between shards to give access
+          SpinLock l(&id_spin_);
 
           for (loop=0; loop<kNumShards; ++loop)
           {
@@ -421,6 +423,46 @@ private:
 
   } // ShardedLRUCache2::PurgeExpiredFiles
 
+  // Initial implementation only implemented against file cache.
+  //  Writes list of open files to log record
+  size_t
+  WriteFileCacheObjectWarming(
+      std::string & Dest)
+  {
+      size_t obj_count(0);
+
+      if (is_file_cache_)
+      {
+          int loop;
+
+          SpinLock l(&id_spin_);
+
+          for (loop=0; loop<kNumShards; ++loop)
+          {
+              LRUHandle2 * cursor;
+
+              for (cursor=shard_[loop].LRUHead()->next;
+                   cursor != shard_[loop].LRUHead();
+                   cursor=cursor->next)
+              {
+                  TableAndFile * tf;
+
+                  tf=(TableAndFile *)cursor->value;
+
+                  assert(0!= tf->file_number);
+                  PutVarint32(&Dest, VersionEdit::kFileCacheObject);
+                  PutVarint32(&Dest, tf->level);
+                  PutVarint64(&Dest, tf->file_number);
+                  PutVarint64(&Dest, tf->table->GetFileSize());
+                  ++obj_count;
+              }   // for
+          }   // for
+      }   // if
+
+      return(obj_count);
+
+  } // ShardedLRUCache2::WritefileCacheObjectWarming
+
 };  //ShardedLRUCache2
 
 
@@ -440,7 +482,7 @@ DoubleCache::DoubleCache(
     //  (with 64 or open databases, this is a serious number)
     // and fixed allocation for two write buffers
 
-    m_Overhead=options.write_buffer_size*2 
+    m_Overhead=options.write_buffer_size*2
         + options.env->RecoveryMmapSize(&options) + 4096;
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
 
@@ -589,6 +631,20 @@ DoubleCache::PurgeExpiredFiles()
     return;
 
 }   // DoubleCache::PurgExpiredFiles
+
+
+/**
+ * Write list of open sst files to log.  List used to
+ * quickly repopulate file cache on next start-up
+ */
+size_t
+DoubleCache::WriteCacheObjectWarming(
+    std::string & Dest)
+{
+
+    return(m_FileCache->WriteFileCacheObjectWarming(Dest));
+
+}   // DoubleCache::WriteCacheObjectWarming
 
 
 //
