@@ -234,7 +234,7 @@ DBImpl::~DBImpl() {
   delete tmp_batch_;
   delete log_;
   delete logfile_;
-
+#if 0
   Status s;
   std::string cow_name;
   WritableFile * cow_file;
@@ -251,7 +251,7 @@ DBImpl::~DBImpl() {
       delete cow_log;
       delete cow_file;
   }   // if
-
+#endif
   delete table_cache_;
 
   if (owns_info_log_) {
@@ -2157,6 +2157,83 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->CheckCompactionState();
     }
   }
+
+  struct LogReporter : public log::Reader::Reporter {
+    Env* env;
+    Logger* info_log;
+    const char* fname;
+    Status* status;  // NULL if options_.paranoid_checks==false
+    virtual void Corruption(size_t bytes, const Status& s) {
+      Log(info_log, "%s%s: dropping %d bytes; %s",
+          (this->status == NULL ? "(ignoring error) " : ""),
+          fname, static_cast<int>(bytes), s.ToString().c_str());
+      if (this->status != NULL && this->status->ok()) *this->status = s;
+    }
+  };
+
+  std::string cow_name;
+  SequentialFile * cow_file;
+  log::Reader * cow_log;
+
+  cow_name=impl->dbname_ + "/COW";
+  s = impl->env_->NewSequentialFile(cow_name, &cow_file);
+  if (s.ok())
+  {
+      // Create the log reader.
+      LogReporter reporter;
+      reporter.env = impl->env_;
+      reporter.info_log = impl->options_.info_log;
+      reporter.fname = "COW";
+      reporter.status = NULL;
+
+      std::string cow;
+      Slice record;
+      cow_log=new log::Reader(cow_file, &reporter, true, 0);
+      while (cow_log->ReadRecord(&record, &cow) && s.ok())
+      {
+          Slice input = record;
+          uint32_t tag, level;
+          uint64_t file_no;
+          size_t num_files,loop;
+          Version::FileMetaDataVector_t files;
+          bool not_found;
+          Cache::Handle * handle;
+
+          while (GetVarint32(&input, &tag))
+          {
+              if (VersionEdit::kFileCacheObject==tag)
+              {
+                  GetVarint32(&input, &level);
+                  GetVarint64(&input, &file_no);
+
+                  files=impl->versions_->current()->GetFileList(level);
+                  num_files=files.size();
+                  not_found=true;
+
+                  for(loop=0; loop<num_files && not_found; ++loop)
+                  {
+                      if (files[loop]->number == file_no)
+                      {
+                          not_found=false;
+                          impl->table_cache_->TEST_FindTable(file_no, files[loop]->file_size,
+                                                  level, &handle);
+                          Log(impl->options_.info_log,"Preload file %lld (size (%zd)",
+                              file_no, files[loop]->file_size);
+                      }   // if
+                  }   // for
+              }   // if
+          }   // while
+      }   // while
+
+      delete cow_log;
+      delete cow_file;
+      // delete the physical file at this point
+  }   // if
+  else
+  {
+      Log(impl->options_.info_log, "No cache warming file detected.");
+  }   // else
+
   impl->mutex_.Unlock();
   if (s.ok()) {
     *dbptr = impl;
