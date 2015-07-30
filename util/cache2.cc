@@ -425,9 +425,12 @@ private:
 
   // Initial implementation only implemented against file cache.
   //  Writes list of open files to log record
-  void WriteFileCacheObjectWarming(
+  size_t
+  WriteFileCacheObjectWarming(
       std::string & Dest)
   {
+      size_t obj_count(0);
+
       if (is_file_cache_)
       {
           int loop;
@@ -450,11 +453,13 @@ private:
                   PutVarint32(&Dest, VersionEdit::kFileCacheObject);
                   PutVarint32(&Dest, tf->level);
                   PutVarint64(&Dest, tf->file_number);
+                  PutVarint64(&Dest, tf->table->GetFileSize());
+                  ++obj_count;
               }   // for
           }   // for
       }   // if
 
-      return;
+      return(obj_count);
 
   } // ShardedLRUCache2::WritefileCacheObjectWarming
 
@@ -632,13 +637,12 @@ DoubleCache::PurgeExpiredFiles()
  * Write list of open sst files to log.  List used to
  * quickly repopulate file cache on next start-up
  */
-void
+size_t
 DoubleCache::WriteCacheObjectWarming(
     std::string & Dest)
 {
-    m_FileCache->WriteFileCacheObjectWarming(Dest);
 
-    return;
+    return(m_FileCache->WriteFileCacheObjectWarming(Dest));
 
 }   // DoubleCache::WriteCacheObjectWarming
 

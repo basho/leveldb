@@ -105,6 +105,11 @@ std::string OldInfoLogFileName(const std::string& dbname) {
   return dbname + "/LOG.old";
 }
 
+// not putting this in ParseFileName since long term
+//  intend to merge this data into manifest.
+std::string CowFileName(const std::string& dbname) {
+  return dbname + "/COW";
+}
 
 // Owned filenames have the form:
 //    dbname/CURRENT
