@@ -79,6 +79,10 @@ extern std::string InfoLogFileName(const std::string& dbname);
 // Return the name of the old info log file for "dbname".
 extern std::string OldInfoLogFileName(const std::string& dbname);
 
+// Return the name of the cache object file for the db named by
+// "dbname".  The result will be prefixed with "dbname".
+extern std::string CowFileName(const std::string& dbname);
+
 // If filename is a leveldb file, store the type of the file in *type.
 // The number encoded in the filename is stored in *number.  If the
 // filename was successfully parsed, returns true.  Else return false.
