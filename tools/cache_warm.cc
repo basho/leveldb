@@ -123,6 +123,7 @@ main(
         else
         {
             FILE * list;
+            bool ignore_file;
             std::string cur_path, record;
             size_t line_count;
             char buffer[PATH_MAX], vnode[PATH_MAX], file[NAME_MAX], * chr_ptr;
@@ -145,12 +146,13 @@ main(
                     if (NULL!=chr_ptr)
                         *chr_ptr='\0';
 
-                    // get file size
+                    // get file size, ignore file if missing or otherwise cranky
+                    ignore_file=false;
                     ret_val=stat(buffer, &file_stat);
                     if (0==ret_val)
                         file_size=file_stat.st_size;
                     else
-                        error_seen=true;
+                        ignore_file=true;
 
                     // get file name
                     chr_ptr=basename(buffer);
@@ -184,7 +186,7 @@ main(
                     }   // if
 
                     // good line
-                    if (!error_seen)
+                    if (!error_seen && !ignore_file)
                     {
                         // did vnode change
                         if (0!=cur_path.compare(vnode))
@@ -215,7 +217,7 @@ main(
                             leveldb::PutVarint64(&record, file_size);
                         }   // if
                     }   // if
-                    else
+                    else if (!ignore_file)
                     {
                         fprintf(stderr, "Unable to parse line in %s at line number %zd\n",
                                 *cursor, line_count);
@@ -223,7 +225,7 @@ main(
                 }   // while
 
                 // write last
-                if (!cur_path.empty())
+                if (!error_seen && !cur_path.empty())
                 {
                     CowFile cow(cur_path, record);
 
