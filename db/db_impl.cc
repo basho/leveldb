@@ -735,13 +735,31 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
             new_name=TableFileName(options_, meta.number, level);
             move_s=env_->RenameFile(old_name, new_name);
 
-            // argh!  logging while holding mutex ... cannot release
             if (move_s.ok())
+            {
+                // builder already added file to table_cache with 2 references and
+                //  marked as level 0 (used by cache warming) ... going to remove from cache
+                //  and add again correctly
+                table_cache_->Evict(meta.number, true);
+                meta.level=level;
+
+                // sadly, we must hold the mutex during this file open
+                //  since operating in non-overlapped level
+                Iterator* it=table_cache_->NewIterator(ReadOptions(),
+                                                       meta.number,
+                                                       meta.file_size,
+                                                       meta.level);
+                delete it;
+
+                // argh!  logging while holding mutex ... cannot release
                 Log(options_.info_log, "Level-0 table #%llu:  moved to level %d",
                     (unsigned long long) meta.number,
                     level);
+            }   // if
             else
+            {
                 level=0;
+            }   // else
         }   // if
     }
 
@@ -758,7 +776,7 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
   // Riak adds extra reference to file, must remove it
   //  in this race condition upon close
   if (s.ok() && shutting_down_.Acquire_Load()) {
-      versions_->GetTableCache()->Evict(meta.number, true);
+      table_cache_->Evict(meta.number, versions_->IsLevelOverlapped(level));
   }
 
   return s;
