@@ -102,7 +102,8 @@ class Version {
   // Return the level at which we should place a new memtable compaction
   // result that covers the range [smallest_user_key,largest_user_key].
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
-                                 const Slice& largest_user_key);
+                                 const Slice& largest_user_key,
+                                 const int level_limit);
 
   size_t NumFiles(int level) const { return files_[level].size(); }
 
@@ -316,6 +317,8 @@ class VersionSet {
   void SetCompactionDone(int level)
   {   m_CompactionStatus[level].m_Running=false;
       m_CompactionStatus[level].m_Submitted=false;}
+
+  bool NeighborCompactionsQuiet(int level);
 
  private:
   class Builder;
