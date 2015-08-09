@@ -853,13 +853,6 @@ class PosixEnv : public Env {
     }
   }
 
-  // BGThread() is the body of the background thread
-  void BGThread();
-  static void* BGThreadWrapper(void* arg) {
-    reinterpret_cast<PosixEnv*>(arg)->BGThread();
-    return NULL;
-  }
-
   size_t page_size_;
   pthread_mutex_t mu_;
   pthread_cond_t bgsignal_;
