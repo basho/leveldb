@@ -478,7 +478,7 @@ int Version::PickLevelForMemTableOutput(
     const Slice& largest_user_key,
     const int level_limit) {
   int level = 0;
-#if 1
+
 // test if level 1 m_OverlappedFiles is false, proceded only then
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
     // Push to next level if there is no overlap in next level,
@@ -491,7 +491,7 @@ int Version::PickLevelForMemTableOutput(
         break;
       }
       GetOverlappingInputs(level + 2, &start, &limit, &overlaps);
-      const int64_t sum = TotalFileSize(overlaps);
+      const uint64_t sum = TotalFileSize(overlaps);
       if (sum > gLevelTraits[level].m_MaxGrandParentOverlapBytes) {
         break;
       }
@@ -502,7 +502,7 @@ int Version::PickLevelForMemTableOutput(
     if (gLevelTraits[level].m_OverlappedFiles)
         level=0;
   }
-#endif
+
   return level;
 }
 

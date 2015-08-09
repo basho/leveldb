@@ -45,7 +45,7 @@ static const size_t kL0_StopWritesTrigger = 12;
 // the largest level since that can generate a lot of wasted disk
 // space if the same key space is being repeatedly overwritten.
 // Basho: push to kNumOverlapLevels +1 ... beyond "landing level"
-static const int kMaxMemCompactLevel = 3;
+static const int kMaxMemCompactLevel = kNumOverlapLevels+1;
 
 }  // namespace config
 

@@ -1863,7 +1863,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
 // REQUIRES: Writer list must be non-empty
 // REQUIRES: First writer must have a non-NULL batch
+// REQUIRES: mutex_ is held
 WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
+  mutex_.AssertHeld();
   assert(!writers_.empty());
   Writer* first = writers_.front();
   WriteBatch* result = first->batch;
