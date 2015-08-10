@@ -1484,8 +1484,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   bool is_level0_compaction=(0 == compact->compaction->level());
 
   const uint64_t start_micros = env_->NowMicros();
-  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
-
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
@@ -1559,7 +1557,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input = NULL;
 
   CompactionStats stats;
-  stats.micros = env_->NowMicros() - start_micros - imm_micros;
+  stats.micros = env_->NowMicros() - start_micros;
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); i++) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
@@ -1579,7 +1577,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok()) {
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros),
+        SetThrottleWriteRate((env_->NowMicros() - start_micros),
                              compact->num_entries, is_level0_compaction);
     status = InstallCompactionResults(compact);
   }

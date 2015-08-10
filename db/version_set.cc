@@ -1276,11 +1276,11 @@ VersionSet::UpdatePenalty(
         {
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
-	    count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+            count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
-	    if (0<count)
+            if (0<count)
             {
-	        value=5;
+                value=5;
                 increment=8;
             }   // if
 
@@ -1872,12 +1872,12 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
     // Scan to find earliest grandparent file that contains key.
     const InternalKeyComparator* icmp = &input_version_->vset_->icmp_;
     while (grandparent_index_ < grandparents_.size() &&
-	   icmp->Compare(internal_key,
-			 grandparents_[grandparent_index_]->largest.Encode()) > 0) {
+           icmp->Compare(internal_key,
+                         grandparents_[grandparent_index_]->largest.Encode()) > 0) {
       if (seen_key_) {
-	overlapped_bytes_ += grandparents_[grandparent_index_]->file_size;
+        overlapped_bytes_ += grandparents_[grandparent_index_]->file_size;
       }
-      grandparent_index_++;
+        grandparent_index_++;
     }
     seen_key_ = true;
 
@@ -1891,7 +1891,7 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
     else
     {
       ret_flag=(300000<key_count);
-     } // else
+    } // else
   }  // if
 
   if (ret_flag)
