@@ -1073,6 +1073,11 @@ Status DBImpl::BackgroundCompaction(
             static_cast<unsigned long long>(f->file_size),
             status.ToString().c_str(),
             versions_->LevelSummary(&tmp));
+
+        // no time, no keys ... just make the call so that one compaction
+        //  gets posted against potential backlog ... extremely important
+        //  to write throttle logic.
+        SetThrottleWriteRate(0, 0, (0 == c->level()));
     }  // if
     else {
         // retry as compaction instead of move
@@ -1479,8 +1484,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   bool is_level0_compaction=(0 == compact->compaction->level());
 
   const uint64_t start_micros = env_->NowMicros();
-  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
-
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
@@ -1554,7 +1557,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input = NULL;
 
   CompactionStats stats;
-  stats.micros = env_->NowMicros() - start_micros - imm_micros;
+  stats.micros = env_->NowMicros() - start_micros;
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); i++) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
@@ -1574,8 +1577,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok()) {
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), compact->num_entries,
-                            is_level0_compaction, env_->GetBackgroundBacklog());
+        SetThrottleWriteRate((env_->NowMicros() - start_micros),
+                             compact->num_entries, is_level0_compaction);
     status = InstallCompactionResults(compact);
   }
 
@@ -2295,6 +2298,19 @@ DBImpl::VerifyLevels()
     return(result);
 
 }   // VerifyLevels
+
+void DB::CheckAvailableCompactions() {return;};
+
+// Used internally for inter-database notification
+//  of potential grooming timeslot availability.
+void
+DBImpl::CheckAvailableCompactions()
+{
+    MutexLock l(&mutex_);
+    MaybeScheduleCompaction();
+
+    return;
+}   // CheckAvailableCompactions
 
 
 bool

@@ -30,6 +30,7 @@
 #include "util/cache2.h"
 #include "util/db_list.h"
 #include "util/flexcache.h"
+#include "util/hot_threads.h"
 #include "util/throttle.h"
 
 namespace leveldb {
@@ -39,8 +40,12 @@ pthread_cond_t gThrottleCond = PTHREAD_COND_INITIALIZER;
 
 #define THROTTLE_SECONDS 60
 #define THROTTLE_TIME THROTTLE_SECONDS*1000000
-#define THROTTLE_SCALING 17
 #define THROTTLE_INTERVALS 63
+// following is a heristic value, determined by trial and error.
+//  its job is slow down the rate of change in the current throttle.
+//  do not want sudden changes in one or two intervals to swing
+//  the throttle value wildly.  Goal is a nice, even throttle value.
+#define THROTTLE_SCALING 17
 
 struct ThrottleData_t
 {
@@ -50,6 +55,11 @@ struct ThrottleData_t
     uint64_t m_Compactions;
 };
 
+// this array stores compaction statistics used in throttle calculation.
+//  Index 0 of this array accumulates the current minute's compaction data for level 0.
+//  Index 1 accumulates accumulates current minute's compaction
+//  statistics for all other levels.  Remaining intervals contain
+//  most recent interval statistics for last hour.
 ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
 
 uint64_t gThrottleRate, gUnadjustedThrottleRate;
@@ -117,9 +127,11 @@ ThrottleThread(
 
         now_seconds=wait_time.tv_sec;
         wait_time.tv_sec+=THROTTLE_SECONDS;
-        pthread_cond_timedwait(&gThrottleCond, &gThrottleMutex,
-                               &wait_time);
+        if (gThrottleRunning)  // test in case of race at shutdown
+            pthread_cond_timedwait(&gThrottleCond, &gThrottleMutex,
+                                   &wait_time);
         gThrottleData[replace_idx]=gThrottleData[1];
+        gThrottleData[replace_idx].m_Backlog=0;
         memset(&gThrottleData[1], 0, sizeof(gThrottleData[1]));
         pthread_mutex_unlock(&gThrottleMutex);
 
@@ -140,7 +152,16 @@ ThrottleThread(
             tot_compact+=gThrottleData[loop].m_Compactions;
         }   // for
 
-	// non-level0 data available?
+        pthread_mutex_lock(&gThrottleMutex);
+
+        // capture current state of level-0 and other levels' backlog
+        gThrottleData[replace_idx].m_Backlog=gCompactionThreads->m_WorkQueueAtomic;
+        gPerfCounters->Add(ePerfThrottleBacklog1, gThrottleData[replace_idx].m_Backlog);
+
+        gThrottleData[0].m_Backlog=gLevel0Threads->m_WorkQueueAtomic;
+        gPerfCounters->Add(ePerfThrottleBacklog0, gThrottleData[0].m_Backlog);
+
+        // non-level0 data available?
         if (0!=tot_keys)
         {
             if (0==tot_compact)
@@ -153,6 +174,8 @@ ThrottleThread(
                 * ((tot_backlog*100) / tot_compact);
 
             new_throttle /= 10000;  // remove *100 stuff
+            //new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
+
             if (0==new_throttle)
                 new_throttle=1;     // throttle must have an effect
 
@@ -162,21 +185,18 @@ ThrottleThread(
                 new_unadjusted=1;
         }   // if
 
-	// attempt to most recent level0
-	//  (only use most recent level0 until level1+ data becomes available,
-	//   useful on restart of heavily loaded server)
-	else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
-	{
-            pthread_mutex_lock(&gThrottleMutex);
+        // attempt to most recent level0
+        //  (only use most recent level0 until level1+ data becomes available,
+        //   useful on restart of heavily loaded server)
+        else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
+        {
             new_throttle=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys)
-	      * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
+                * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
 
             new_unadjusted=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys);
             if (0==new_unadjusted)
                 new_unadjusted=1;
-
-            pthread_mutex_unlock(&gThrottleMutex);
-	}   // else if
+        }   // else if
         else
         {
             new_throttle=1;
@@ -198,7 +218,6 @@ ThrottleThread(
         gPerfCounters->Set(ePerfThrottleUnadjusted, gUnadjustedThrottleRate);
 
         // prepare for next interval
-        pthread_mutex_lock(&gThrottleMutex);
         memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
         pthread_mutex_unlock(&gThrottleMutex);
 
@@ -223,20 +242,19 @@ ThrottleThread(
 }   // ThrottleThread
 
 
-void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Backlog)
+void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
 {
     if (IsLevel0)
     {
         pthread_mutex_lock(&gThrottleMutex);
         gThrottleData[0].m_Micros+=Micros;
         gThrottleData[0].m_Keys+=Keys;
-        gThrottleData[0].m_Backlog+=Backlog;
+        gThrottleData[0].m_Backlog=0;
         gThrottleData[0].m_Compactions+=1;
         pthread_mutex_unlock(&gThrottleMutex);
 
         gPerfCounters->Add(ePerfThrottleMicros0, Micros);
         gPerfCounters->Add(ePerfThrottleKeys0, Keys);
-        gPerfCounters->Add(ePerfThrottleBacklog0, Backlog);
         gPerfCounters->Inc(ePerfThrottleCompacts0);
     }   // if
 
@@ -245,13 +263,12 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0, int Bac
         pthread_mutex_lock(&gThrottleMutex);
         gThrottleData[1].m_Micros+=Micros;
         gThrottleData[1].m_Keys+=Keys;
-        gThrottleData[1].m_Backlog+=Backlog;
+        gThrottleData[1].m_Backlog=0;
         gThrottleData[1].m_Compactions+=1;
         pthread_mutex_unlock(&gThrottleMutex);
 
         gPerfCounters->Add(ePerfThrottleMicros1, Micros);
         gPerfCounters->Add(ePerfThrottleKeys1, Keys);
-        gPerfCounters->Add(ePerfThrottleBacklog1, Backlog);
         gPerfCounters->Inc(ePerfThrottleCompacts1);
     }   // else
 
