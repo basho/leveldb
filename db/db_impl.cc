@@ -715,14 +715,51 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != NULL) {
-        level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
+        int level_limit;
+        if (0!=options_.tiered_slow_level && (options_.tiered_slow_level-1)<config::kMaxMemCompactLevel)
+            level_limit=options_.tiered_slow_level-1;
+        else
+            level_limit=config::kMaxMemCompactLevel;
+
+        // remember, mutex is held so safe to push file into a non-compacting level
+        level = base->PickLevelForMemTableOutput(min_user_key, max_user_key, level_limit);
+        if (versions_->IsCompactionSubmitted(level) || !versions_->NeighborCompactionsQuiet(level))
+            level=0;
+
         if (0!=level)
         {
+            Status move_s;
             std::string old_name, new_name;
 
             old_name=TableFileName(options_, meta.number, 0);
             new_name=TableFileName(options_, meta.number, level);
-            s=env_->RenameFile(old_name, new_name);
+            move_s=env_->RenameFile(old_name, new_name);
+
+            if (move_s.ok())
+            {
+                // builder already added file to table_cache with 2 references and
+                //  marked as level 0 (used by cache warming) ... going to remove from cache
+                //  and add again correctly
+                table_cache_->Evict(meta.number, true);
+                meta.level=level;
+
+                // sadly, we must hold the mutex during this file open
+                //  since operating in non-overlapped level
+                Iterator* it=table_cache_->NewIterator(ReadOptions(),
+                                                       meta.number,
+                                                       meta.file_size,
+                                                       meta.level);
+                delete it;
+
+                // argh!  logging while holding mutex ... cannot release
+                Log(options_.info_log, "Level-0 table #%llu:  moved to level %d",
+                    (unsigned long long) meta.number,
+                    level);
+            }   // if
+            else
+            {
+                level=0;
+            }   // else
         }   // if
     }
 
@@ -736,23 +773,11 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
   stats.bytes_written = meta.file_size;
   stats_[level].Add(stats);
 
-  if (0!=meta.num_entries && s.ok())
-  {
-      // This SetWriteRate() call removed because this thread
-      //  has priority (others blocked on mutex) and thus created
-      //  misleading estimates of disk write speed
-      // 2x since mem to disk, not disk to disk
-      //      env_->SetWriteRate(2*stats.micros/meta.num_entries);
-      // 2x since mem to disk, not disk to disk
-      // env_->SetWriteRate(2*stats.micros/meta.num_entries);
-  }   // if
-
   // Riak adds extra reference to file, must remove it
   //  in this race condition upon close
   if (s.ok() && shutting_down_.Acquire_Load()) {
-      versions_->GetTableCache()->Evict(meta.number, true);
+      table_cache_->Evict(meta.number, versions_->IsLevelOverlapped(level));
   }
-
 
   return s;
 }
@@ -1048,6 +1073,11 @@ Status DBImpl::BackgroundCompaction(
             static_cast<unsigned long long>(f->file_size),
             status.ToString().c_str(),
             versions_->LevelSummary(&tmp));
+
+        // no time, no keys ... just make the call so that one compaction
+        //  gets posted against potential backlog ... extremely important
+        //  to write throttle logic.
+        SetThrottleWriteRate(0, 0, (0 == c->level()));
     }  // if
     else {
         // retry as compaction instead of move
@@ -1454,8 +1484,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   bool is_level0_compaction=(0 == compact->compaction->level());
 
   const uint64_t start_micros = env_->NowMicros();
-  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
-
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
@@ -1529,7 +1557,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input = NULL;
 
   CompactionStats stats;
-  stats.micros = env_->NowMicros() - start_micros - imm_micros;
+  stats.micros = env_->NowMicros() - start_micros;
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); i++) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
@@ -1549,8 +1577,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   if (status.ok()) {
     if (0!=compact->num_entries)
-        SetThrottleWriteRate((env_->NowMicros() - start_micros - imm_micros), compact->num_entries,
-                            is_level0_compaction, env_->GetBackgroundBacklog());
+        SetThrottleWriteRate((env_->NowMicros() - start_micros),
+                             compact->num_entries, is_level0_compaction);
     status = InstallCompactionResults(compact);
   }
 
@@ -1838,7 +1866,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
 // REQUIRES: Writer list must be non-empty
 // REQUIRES: First writer must have a non-NULL batch
+// REQUIRES: mutex_ is held
 WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
+  mutex_.AssertHeld();
   assert(!writers_.empty());
   Writer* first = writers_.front();
   WriteBatch* result = first->batch;
@@ -2268,6 +2298,19 @@ DBImpl::VerifyLevels()
     return(result);
 
 }   // VerifyLevels
+
+void DB::CheckAvailableCompactions() {return;};
+
+// Used internally for inter-database notification
+//  of potential grooming timeslot availability.
+void
+DBImpl::CheckAvailableCompactions()
+{
+    MutexLock l(&mutex_);
+    MaybeScheduleCompaction();
+
+    return;
+}   // CheckAvailableCompactions
 
 
 bool

@@ -395,7 +395,7 @@ Status Version::Get(const ReadOptions& options,
     }
 
     if (0!=num_files)
-        gPerfCounters->Inc(ePerfSearchLevel0 + level);
+        gPerfCounters->Add(ePerfSearchLevel0 + level, num_files);
 
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != NULL && stats->seek_file == NULL) {
@@ -475,9 +475,10 @@ bool Version::OverlapInLevel(int level,
 
 int Version::PickLevelForMemTableOutput(
     const Slice& smallest_user_key,
-    const Slice& largest_user_key) {
+    const Slice& largest_user_key,
+    const int level_limit) {
   int level = 0;
-#if 0
+
 // test if level 1 m_OverlappedFiles is false, proceded only then
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
     // Push to next level if there is no overlap in next level,
@@ -485,19 +486,23 @@ int Version::PickLevelForMemTableOutput(
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
     std::vector<FileMetaData*> overlaps;
-    while (level < config::kMaxMemCompactLevel) {
+    while (level < level_limit) {
       if (OverlapInLevel(level + 1, &smallest_user_key, &largest_user_key)) {
         break;
       }
       GetOverlappingInputs(level + 2, &start, &limit, &overlaps);
-      const int64_t sum = TotalFileSize(overlaps);
+      const uint64_t sum = TotalFileSize(overlaps);
       if (sum > gLevelTraits[level].m_MaxGrandParentOverlapBytes) {
         break;
       }
       level++;
     }
+    // do not waste a move into an overlapped level, breaks
+    //  different performance improvement
+    if (gLevelTraits[level].m_OverlappedFiles)
+        level=0;
   }
-#endif
+
   return level;
 }
 
@@ -1057,6 +1062,22 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
   }
 }
 
+
+bool
+VersionSet::NeighborCompactionsQuiet(int level)
+{
+    const uint64_t parent_level_bytes = TotalFileSize(current_->files_[level+1]);
+
+    // not an overlapped level and must not have compactions
+    //   scheduled on either level below or level above
+    return((0==level || !m_CompactionStatus[level-1].m_Submitted)
+           && !gLevelTraits[level].m_OverlappedFiles
+           && !m_CompactionStatus[level+1].m_Submitted
+           && parent_level_bytes<=((gLevelTraits[level+1].m_MaxBytesForLevel
+                                    +gLevelTraits[level+1].m_DesiredBytesForLevel)/2));
+}   // VersionSet::NeighborCompactionsQuiet
+
+
 bool
 VersionSet::Finalize(Version* v)
 {
@@ -1072,6 +1093,7 @@ VersionSet::Finalize(Version* v)
     {
         bool compact_ok;
         double score;
+        const uint64_t parent_level_bytes = TotalFileSize(v->files_[level+1]);
 
         is_grooming=false;
         // is this level eligible for compaction consideration?
@@ -1087,7 +1109,8 @@ VersionSet::Finalize(Version* v)
             }   // if
 
             // overlapped and next level is not compacting
-            else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted)
+            else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted
+                     && parent_level_bytes<=gLevelTraits[level+1].m_DesiredBytesForLevel)
             {
                 // good ... stop consideration
             }   // else if
@@ -1095,7 +1118,7 @@ VersionSet::Finalize(Version* v)
             else
             {
                 // must not have compactions scheduled on neither level below nor level above
-                compact_ok=(!m_CompactionStatus[level-1].m_Submitted && !m_CompactionStatus[level+1].m_Submitted);
+                compact_ok=NeighborCompactionsQuiet(level);
             }   // else
         }   // if
 
@@ -1125,8 +1148,7 @@ VersionSet::Finalize(Version* v)
                 if (!gLevelTraits[level+1].m_OverlappedFiles
                     && v->files_[level].size()< config::kL0_SlowdownWritesTrigger)
                 {
-                    const uint64_t level_bytes = TotalFileSize(v->files_[level+1]);
-                    if (1 < (level_bytes / gLevelTraits[level+1].m_DesiredBytesForLevel))
+                    if (1 < (parent_level_bytes / gLevelTraits[level+1].m_DesiredBytesForLevel))
                         score=0;
                 }   // if
 
@@ -1211,8 +1233,13 @@ VersionSet::UpdatePenalty(
 
     for (int level = 0; level < config::kNumLevels-1; ++level)
     {
+        int loop, count, value, increment;
+        value=0;
+        count=0;
+
         if (gLevelTraits[level].m_OverlappedFiles)
         {
+
             // compute penalty for write throttle if too many Level-0 files accumulating
             if (config::kL0_CompactionTrigger < v->files_[level].size())
             {
@@ -1220,15 +1247,14 @@ VersionSet::UpdatePenalty(
                 //   and we are "close" on compaction backlog
                 if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
                 {
-                    penalty+= (v->files_[level].size() - config::kL0_CompactionTrigger);
+                    value = (v->files_[level].size() - config::kL0_CompactionTrigger);
+                    count=0;
                 }   // if
 
                 // no longer estimating work, now trying to throw on the breaks
                 //  to keep leveldb from stalling
                 else
                 {
-                    int loop, count, value, increment;
-
                     count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
 
                     // level 0 has own thread pool and will stall writes,
@@ -1239,66 +1265,42 @@ VersionSet::UpdatePenalty(
                         increment=8;
                     }   // if
                     else
-                    {   // geometric penalty
-                        value=count;
-                        increment=2;
+                    {   // slightly less penalty
+                        value=count+1;
+                        count=0;
                     }   // else
-
-                    for (loop=0; loop<count; ++loop)
-                        value*=increment;
-
-                    penalty+=value;
                 }   // else
             }   // if
         }   // if
         else
         {
-#if 0
-            // Compute the ratio of current size to size limit.
-            double penalty_score(0.0);
-
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
-	    // cubed penalty for exceeding size of sorted level
-	    //  (especially helps tiered storage)
-            penalty_score = static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
-	    penalty_score = penalty_score * penalty_score * penalty_score;
+            count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
 
-	    // if no penalty so far, set a minor penalty to the landing
-	    //   level to help it flush.  because first sorted layer needs to 
-	    //   clear before next dump of overlapped files.
-	    if (penalty_score<1.0 && config::kNumOverlapLevels==level)
+            if (0<count)
             {
-                penalty_score = (1.0<(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel)? 1.0 : 0.0);
-            }   // if
-
-            if (1.0<=penalty_score)
-                penalty+=(static_cast<int>(penalty_score));
-#else
-	    int loop, count, value, increment;
-            const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-
-	    count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
-            value=0;
-
-	    if (0<count)
-            {
-	        value=5;
+                value=5;
                 increment=8;
             }   // if
+
+            // this penalty is not about "backlog", its goal is to
+            //  slow the operations during a known period of high
+            //  background activity.  Overall, latencies get better
+            //  not worse because of this.
             else if (config::kNumOverlapLevels==level)
-            {   // geometric penalty
+            {   // light penalty
                 count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
-                value=count;
-                increment=2;
+                value=count; // this approximates the number of compactions needed, no other penalty
+                increment=1;
+                count=0;
             }   // else if
-
-            for (loop=0; loop<count; ++loop)
-                value*=increment;
-
-            penalty+=value;
-#endif
         }   // else
+
+        for (loop=0; loop<count; ++loop)
+            value*=increment;
+
+        penalty+=value;
 
     }   // for
 
@@ -1870,12 +1872,12 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
     // Scan to find earliest grandparent file that contains key.
     const InternalKeyComparator* icmp = &input_version_->vset_->icmp_;
     while (grandparent_index_ < grandparents_.size() &&
-	   icmp->Compare(internal_key,
-			 grandparents_[grandparent_index_]->largest.Encode()) > 0) {
+           icmp->Compare(internal_key,
+                         grandparents_[grandparent_index_]->largest.Encode()) > 0) {
       if (seen_key_) {
-	overlapped_bytes_ += grandparents_[grandparent_index_]->file_size;
+        overlapped_bytes_ += grandparents_[grandparent_index_]->file_size;
       }
-      grandparent_index_++;
+        grandparent_index_++;
     }
     seen_key_ = true;
 
@@ -1889,7 +1891,7 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key, size_t key_count) {
     else
     {
       ret_flag=(300000<key_count);
-     } // else
+    } // else
   }  // if
 
   if (ret_flag)

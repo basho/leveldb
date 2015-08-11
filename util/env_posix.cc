@@ -821,10 +821,6 @@ class PosixEnv : public Env {
   }  // SleepForMicroSeconds
 
 
-  virtual int GetBackgroundBacklog() const
-    {return(gImmThreads->m_WorkQueueAtomic + gWriteThreads->m_WorkQueueAtomic
-          + gLevel0Threads->m_WorkQueueAtomic + gCompactionThreads->m_WorkQueueAtomic);};
-
   virtual size_t RecoveryMmapSize(const struct Options * options) const
     {
       size_t map_size;
@@ -851,13 +847,6 @@ class PosixEnv : public Env {
       fprintf(stderr, "pthread %s: %s\n", label, strerror(result));
       exit(1);
     }
-  }
-
-  // BGThread() is the body of the background thread
-  void BGThread();
-  static void* BGThreadWrapper(void* arg) {
-    reinterpret_cast<PosixEnv*>(arg)->BGThread();
-    return NULL;
   }
 
   size_t page_size_;
@@ -1105,9 +1094,6 @@ void Env::Shutdown()
 {
     if (started)
     {
-        delete default_env;
-        default_env=NULL;
-
         ThrottleShutdown();
     }   // if
 
@@ -1130,6 +1116,12 @@ void Env::Shutdown()
     ComparatorShutdown();
 
     PerformanceCounters::Close(gPerfCounters);
+
+    if (started)
+    {
+        delete default_env;
+        default_env=NULL;
+    }   // if
 
 }   // Env::Shutdown
 

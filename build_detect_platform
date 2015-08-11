@@ -50,7 +50,7 @@ CROSS_COMPILE=
 PLATFORM_CCFLAGS=
 PLATFORM_CXXFLAGS=
 PLATFORM_LDFLAGS=
-PLATFORM_SHARED_EXT="so"
+PLATFORM_SHARED_EXT=
 PLATFORM_SHARED_LDFLAGS="-shared -Wl,-soname -Wl,"
 PLATFORM_SHARED_CFLAGS="-fPIC"
 PLATFORM_SHARED_VERSIONED=true
@@ -73,7 +73,7 @@ case "$TARGET_OS" in
         else
             COMMON_FLAGS="-fno-builtin-memcmp -DOS_MACOSX"
         fi
-        PLATFORM_SHARED_EXT=dylib
+        PLATFORM_SHARED_EXT=
         PLATFORM_SHARED_LDFLAGS="-dynamiclib -install_name "
         PORT_FILE=port/port_posix.cc
         ;;
@@ -87,7 +87,7 @@ case "$TARGET_OS" in
         PLATFORM=OS_SOLARIS
         COMMON_FLAGS="-fno-builtin-memcmp -D_REENTRANT -DOS_SOLARIS"
         PLATFORM_LDFLAGS="-lpthread -lrt"
-        PLATFORM_SHARED_EXT=""
+        PLATFORM_SHARED_EXT=
         PORT_FILE=port/port_posix.cc
         ;;
     FreeBSD)
