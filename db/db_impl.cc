@@ -309,6 +309,18 @@ void DBImpl::Destruct(){
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
   }
+
+  // If we are not using unique_ptr for memory management, we have to
+  // do garbage collection of the DBImpl pointers stored in families_,
+  // or we will leak memory
+
+#if __cplusplus < 199711
+  for(std::unordered_map< std::string, DBImpl* >::iterator iter=families_.begin(); 
+      iter != families_.end(); iter++) {
+    delete iter->second;
+  }
+#endif
+
 }
 
 DBImpl::~DBImpl() {
@@ -2173,19 +2185,23 @@ Status DBImpl::OpenFamily(const Options &options, const std::string &name)
   try{
     WriteLock scopedMtx(&families_mtx_);
     std::string fml_path = GetFamilyPath(name);
-    std::unique_ptr< DBImpl > db(new DBImpl(options, fml_path, double_cache));
 
-    // We can't use C++11 std on compilers with only experimental (ie,
-    // partial) C++11 support
+    // We can't use the full C++11 std on compilers with only
+    // experimental (ie, partial) C++11 support.  In this case,
+    // emplace does not exist, nor does std::move allow us to move off
+    // of db
 
 #if __cplusplus < 199711
-    if(families_.find(name) != families_.end()) {
+    DBImpl* db = new DBImpl(options, fml_path, double_cache);
+
+    if(families_.find(name) != families_.end())
       return Status::InvalidArgument("already opened");
-    } else {
-      families_[name] = std::move(db);
-    }
+
+    families_[name] = db;
 #else
-if ( ! families_.emplace( std::make_pair(name, std::move(db)) ).second ){
+    std::unique_ptr< DBImpl > db(new DBImpl(options, fml_path, double_cache));
+
+    if ( ! families_.emplace( std::make_pair(name, std::move(db)) ).second ){
       return Status::InvalidArgument("already opened");
     }
 #endif
@@ -2200,8 +2216,22 @@ if ( ! families_.emplace( std::make_pair(name, std::move(db)) ).second ){
 Status DBImpl::CloseFamily(const std::string &name)
 {
   WriteLock scopedMtx(&families_mtx_);
+
+  // If we are not using unique_ptr for memory management, we have to
+  // delete the stored DBImpl pointer or we will leak memory
+
+#if __cplusplus < 199711
+
+  if(families_.find(name) == families_.end())
+    return Status::InvalidArgument("can't close the family");
+
+  delete families_[name];
+  families_.erase(name);
+#else
   if ( families_.erase(name) == 0 )
     return Status::InvalidArgument("can't close the family");
+#endif
+
   return Status::OK();
 }
 
@@ -2209,7 +2239,11 @@ Status DBImpl::Put(const std::string &family, const WriteOptions &opt, const Sli
 {
   try{
     ReadLock scopedMtx(&families_mtx_);
+#if __cplusplus < 199711
+    DBImpl *fdb = families_.at(family);
+#else
     DBImpl *fdb = families_.at(family).get();
+#endif
     return fdb->Put(opt,key,value);
   }
   catch(std::exception &e){
@@ -2222,7 +2256,11 @@ Status DBImpl::Delete(const std::string &family, const WriteOptions &o, const Sl
 {
   try{
     ReadLock scopedMtx(&families_mtx_);
+#if __cplusplus < 199711
+    DBImpl *fdb = families_.at(family);
+#else
     DBImpl *fdb = families_.at(family).get();
+#endif
     return fdb->Delete(o, key);
   }
   catch(std::exception &e){
@@ -2235,7 +2273,11 @@ Status DBImpl::Write(const std::string &family, const WriteOptions &o, WriteBatc
 {
   try{
     ReadLock scopedMtx(&families_mtx_);
+#if __cplusplus < 199711
+    DBImpl *fdb = families_.at(family);
+#else
     DBImpl *fdb = families_.at(family).get();
+#endif
     return fdb->Write(o, updates);
   }
   catch(std::exception &e){
@@ -2248,7 +2290,11 @@ Status DBImpl::Get(const std::string &family, const ReadOptions &options, const 
 {
   try{
     ReadLock scopedMtx(&families_mtx_);
+#if __cplusplus < 199711
+    DBImpl *fdb = families_.at(family);
+#else
     DBImpl *fdb = families_.at(family).get();
+#endif
     return fdb->Get(options, key, value);
   }
   catch(std::exception &e){
@@ -2261,7 +2307,11 @@ Status DBImpl::Get(const std::string &family, const ReadOptions &options, const 
 {
   ReadLock scopedMtx(&families_mtx_);
   try{
+#if __cplusplus < 199711
+    DBImpl *fdb = families_.at(family);
+#else
     DBImpl *fdb = families_.at(family).get();
+#endif
     return fdb->Get(options, key, value);
   }
   catch(std::exception &e){

@@ -235,7 +235,16 @@ class DBImpl : public DB {
   Cache * file_cache() {return(double_cache->GetFileCache());};
 
   std::string GetFamilyPath(const std::string &family_name);
+
+  // If C++11 std is not supported, or only partially supported, we
+  // can't use unique_ptr in the way this code wants to
+
+#if __cplusplus < 199711
+  std::unordered_map< std::string, DBImpl* > families_;
+#else
   std::unordered_map< std::string, std::unique_ptr<DBImpl> > families_;
+#endif
+
   port::RWMutex families_mtx_;
 
   // No copying allowed
