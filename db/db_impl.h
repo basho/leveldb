@@ -243,6 +243,8 @@ class DBImpl : public DB {
   void operator=(const DBImpl&);
 
   DBImpl(const Options& options, const std::string& dbname, std::shared_ptr<DoubleCache> cache);
+  void init1(const Options& options, const std::string& dbname, std::shared_ptr<DoubleCache> cache);
+  void init2(const Options& options, const std::string& dbname);
   /// self destruction mechanism
   void Destruct();
 

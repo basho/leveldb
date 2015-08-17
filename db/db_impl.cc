@@ -12,6 +12,7 @@
 #include <string>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdexcept>
 #include <unistd.h>
 #include <vector>
 #include "db/builder.h"
@@ -171,10 +172,19 @@ Options SanitizeOptions(const std::string& dbname,
   return result;
 }
 
-DBImpl::DBImpl(const Options& options, const std::string& dbname)
-  :DBImpl( options, dbname, std::make_shared<DoubleCache>(options) )
+DBImpl::DBImpl(const Options& options, const std::string& dbname) :
+  env_(options.env),
+  internal_comparator_(options.comparator),
+  internal_filter_policy_(options.filter_policy),
+  options_(SanitizeOptions(dbname, &internal_comparator_, &internal_filter_policy_, 
+			   options, block_cache())),
+  // TODO: shouldn't be tiered_dbname from SanitizeOptions?
+  dbname_(options_.tiered_fast_prefix),
+  shutting_down_(NULL),
+  bg_cv_(&mutex_)
 {
-
+  init1(options, dbname,  std::make_shared<DoubleCache>(options));
+  init2(options, dbname);
 }
 
 static
@@ -183,49 +193,58 @@ void EnsureOk(Status s){
     throw s;
 }
 
+void DBImpl::init1(const Options& options, const std::string& dbname, std::shared_ptr<DoubleCache> cache)
+{
+  double_cache             = cache;
+  owns_info_log_           = options_.info_log != options.info_log;
+  owns_cache_              = options_.block_cache != options.block_cache;
+  db_lock_                 = NULL;
+  mem_                     = new MemTable(internal_comparator_);
+  imm_                     = NULL;
+  logfile_number_          = 0;
+  tmp_batch_               = new WriteBatch;
+  bg_compaction_scheduled_ = false;
+  manual_compaction_       = NULL;
+  level0_good              = true;
+  throttle_end             = 0;
+  running_compactions_     = 0;
+  block_size_changed_      = 0;
+  last_low_mem_            = 0;
+}
+
 DBImpl::DBImpl(
     const Options& options,
     const std::string& dbname,
-    std::shared_ptr<DoubleCache> cache)
+    std::shared_ptr<DoubleCache> cache) :
+  env_(options.env),
+  internal_comparator_(options.comparator),
+  internal_filter_policy_(options.filter_policy),
+  options_(SanitizeOptions(dbname, &internal_comparator_, &internal_filter_policy_, 
+			   options, block_cache())),
+  // TODO: shouldn't be tiered_dbname from SanitizeOptions?
+  dbname_(options_.tiered_fast_prefix),
+  shutting_down_(NULL),
+  bg_cv_(&mutex_)
+{
+  init1(options, dbname, cache);
+  init2(options, dbname);
+}
 
-    : double_cache(cache),
-      env_(options.env),
-      internal_comparator_(options.comparator),
-      internal_filter_policy_(options.filter_policy),
-      options_(SanitizeOptions(
-          dbname, &internal_comparator_, &internal_filter_policy_,
-          options, block_cache())),
-      owns_info_log_(options_.info_log != options.info_log),
-      owns_cache_(options_.block_cache != options.block_cache),
-      // TODO: shouldn't be tiered_dbname from SanitizeOptions?
-      dbname_(options_.tiered_fast_prefix),
-      db_lock_(NULL),
-      shutting_down_(NULL),
-      bg_cv_(&mutex_),
-      mem_(new MemTable(internal_comparator_)),
-      imm_(NULL),
-      logfile_number_(0),
-      tmp_batch_(new WriteBatch),
-      bg_compaction_scheduled_(false),
-      manual_compaction_(NULL),
-      level0_good(true),
-      throttle_end(0),
-      running_compactions_(0),
-      block_size_changed_(0), last_low_mem_(0)
+  void DBImpl::init2(const Options& options, const std::string& dbname)
 {
   current_block_size_=options_.block_size;
   DBList()->AddDB(this, options_.is_internal_db);
-
+  
   mem_->Ref();
   has_imm_.Release_Store(NULL);
-
+  
   table_cache_ = new TableCache(dbname_, &options_, file_cache(), *double_cache.get());
-
+  
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
-
+  
   gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
-
+  
   // switch global for everyone ... tacky implementation for now
   gFadviseWillNeed=options_.fadvise_willneed;
 
@@ -2155,9 +2174,22 @@ Status DBImpl::OpenFamily(const Options &options, const std::string &name)
     WriteLock scopedMtx(&families_mtx_);
     std::string fml_path = GetFamilyPath(name);
     std::unique_ptr< DBImpl > db(new DBImpl(options, fml_path, double_cache));
-    if ( ! families_.emplace( std::make_pair(name, std::move(db)) ).second ){
+
+    // We can't use C++11 std on compilers with only experimental (ie,
+    // partial) C++11 support
+
+#if __cplusplus < 199711
+    if(families_.find(name) != families_.end()) {
+      return Status::InvalidArgument("already opened");
+    } else {
+      families_[name] = std::move(db);
+    }
+#else
+if ( ! families_.emplace( std::make_pair(name, std::move(db)) ).second ){
       return Status::InvalidArgument("already opened");
     }
+#endif
+
   }
   catch(std::exception &e){
     return GetFamilyErrorStatus(e);

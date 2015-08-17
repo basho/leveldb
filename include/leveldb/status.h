@@ -22,7 +22,7 @@ class Status : public std::exception {
  public:
   // Create a success status.
   Status() : state_(NULL) { }
-  ~Status() { delete[] state_; }
+    ~Status() throw() { delete[] state_; }
 
   // Copy the specified status.
   Status(const Status& s);
