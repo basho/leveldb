@@ -44,6 +44,9 @@
 #include "util/throttle.h"
 #include "leveldb/perf_count.h"
 
+#include <iostream>
+#include <sstream>
+
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
@@ -173,6 +176,7 @@ Options SanitizeOptions(const std::string& dbname,
 }
 
 DBImpl::DBImpl(const Options& options, const std::string& dbname) :
+  double_cache(std::make_shared<DoubleCache>(options)),
   env_(options.env),
   internal_comparator_(options.comparator),
   internal_filter_policy_(options.filter_policy),
@@ -183,7 +187,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname) :
   shutting_down_(NULL),
   bg_cv_(&mutex_)
 {
-  init1(options, dbname,  std::make_shared<DoubleCache>(options));
+  init1(options, dbname);
   init2(options, dbname);
 }
 
@@ -193,9 +197,8 @@ void EnsureOk(Status s){
     throw s;
 }
 
-void DBImpl::init1(const Options& options, const std::string& dbname, std::shared_ptr<DoubleCache> cache)
+  void DBImpl::init1(const Options& options, const std::string& dbname)
 {
-  double_cache             = cache;
   owns_info_log_           = options_.info_log != options.info_log;
   owns_cache_              = options_.block_cache != options.block_cache;
   db_lock_                 = NULL;
@@ -216,6 +219,7 @@ DBImpl::DBImpl(
     const Options& options,
     const std::string& dbname,
     std::shared_ptr<DoubleCache> cache) :
+  double_cache(cache),
   env_(options.env),
   internal_comparator_(options.comparator),
   internal_filter_policy_(options.filter_policy),
@@ -226,7 +230,7 @@ DBImpl::DBImpl(
   shutting_down_(NULL),
   bg_cv_(&mutex_)
 {
-  init1(options, dbname, cache);
+  init1(options, dbname);
   init2(options, dbname);
 }
 
