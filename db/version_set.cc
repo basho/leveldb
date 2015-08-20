@@ -1086,9 +1086,12 @@ VersionSet::Finalize(Version* v)
     double best_score = -1;
     bool compaction_found;
     bool is_grooming;
+    uint64_t micros_now;
 
     compaction_found=false;
     is_grooming=false;
+    micros_now=env_->NowMicros();
+
     for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level)
     {
         bool compact_ok;
@@ -1125,6 +1128,22 @@ VersionSet::Finalize(Version* v)
         // consider this level
         if (compact_ok)
         {
+            size_t grooming_trigger;
+
+            // which grooming trigger point?  based upon how long
+            //  since last compaction on this level
+            //   - less than 10 minutes?
+            if (micros_now<(m_CompactionStatus[level].m_LastCompaction + (1000000 * 60 *10)))
+                grooming_trigger=config::kL0_GroomingTrigger;
+
+            //   - less than 20 minutes?
+            else if (micros_now<(m_CompactionStatus[level].m_LastCompaction + (1000000 * 60 *20)))
+                grooming_trigger=config::kL0_GroomingTrigger10min;
+
+            //   - more than 20 minutes
+            else
+                grooming_trigger=config::kL0_GroomingTrigger20min;
+
             if (gLevelTraits[level].m_OverlappedFiles) {
                 // We treat level-0 specially by bounding the number of files
                 // instead of number of bytes for two reasons:
@@ -1156,7 +1175,7 @@ VersionSet::Finalize(Version* v)
 
                 // early overlapped compaction
                 //  only occurs if no other compactions running on groomer thread
-                if (0==score && config::kL0_GroomingTrigger<=v->files_[level].size())
+                if (0==score && grooming_trigger<=v->files_[level].size())
                 {
                     score=1;
                     is_grooming=true;
@@ -1192,7 +1211,6 @@ VersionSet::Finalize(Version* v)
                             v->file_to_compact_=*it;
                             v->file_to_compact_level_=level;
                             is_grooming=true;
-                            gPerfCounters->Inc(ePerfDebug0);
                         }
                     }   // for
                 }   // if

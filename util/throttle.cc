@@ -235,6 +235,13 @@ ThrottleThread(
             DBList()->ScanDBs(true,&DBImpl::PurgeExpiredFileCache);
             DBList()->ScanDBs(false, &DBImpl::PurgeExpiredFileCache);
         }   // if
+
+        // nudge compaction logic of potential grooming
+        if (0==gCompactionThreads->m_WorkQueueAtomic)  // user databases
+            DBList()->ScanDBs(false, &DBImpl::CheckAvailableCompactions);
+        if (0==gCompactionThreads->m_WorkQueueAtomic)  // internal databases
+            DBList()->ScanDBs(true, &DBImpl::CheckAvailableCompactions);
+
     }   // while
 
     return(NULL);
