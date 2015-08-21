@@ -928,7 +928,7 @@ void DBImpl::BackgroundCall2(
 
   if (!shutting_down_.Acquire_Load()) {
     Status s = BackgroundCompaction(Compact);
-    if (!s.ok()) {
+    if (!s.ok() && !shutting_down_.Acquire_Load()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
       // chew up resources for failed compactions for the duration of
@@ -969,7 +969,7 @@ DBImpl::BackgroundImmCompactCall() {
 
   if (!shutting_down_.Acquire_Load()) {
     s = CompactMemTable();
-    if (!s.ok()) {
+    if (!s.ok() && !shutting_down_.Acquire_Load()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
       // chew up resources for failed compactions for the duration of
