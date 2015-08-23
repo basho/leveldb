@@ -7,6 +7,7 @@
 #include "leveldb/env.h"
 #include "util/arena.h"
 #include "util/hash.h"
+#include "util/mutexlock.h"
 #include "util/random.h"
 #include "util/testharness.h"
 
@@ -313,18 +314,16 @@ class TestState {
         state_cv_(&mu_) {}
 
   void Wait(ReaderState s) {
-    mu_.Lock();
+    MutexLock lock(&mu_);
     while (state_ != s) {
       state_cv_.Wait();
     }
-    mu_.Unlock();
   }
 
   void Change(ReaderState s) {
-    mu_.Lock();
+    MutexLock lock(&mu_);
     state_ = s;
     state_cv_.Signal();
-    mu_.Unlock();
   }
 
  private:
@@ -370,6 +369,97 @@ TEST(SkipTest, Concurrent2) { RunConcurrent(2); }
 TEST(SkipTest, Concurrent3) { RunConcurrent(3); }
 TEST(SkipTest, Concurrent4) { RunConcurrent(4); }
 TEST(SkipTest, Concurrent5) { RunConcurrent(5); }
+
+static void
+RunSequentialInsert(
+  const int NumKeys,
+  bool      AcquireLock,
+  bool      ReverseInsert )
+{
+  const int loopCount = 5; // repeat the whole process this many times and average the time spent
+  std::vector<uint64_t> timeSpent;
+
+  port::Mutex mutex;
+  Env* env = Env::Default();
+
+  fprintf( stderr, "Sequentially inserting %d keys in %s order, %sacquiring a lock for each insert (averaging over %d runs)\n",
+           NumKeys, ReverseInsert ? "reverse" : "forward", AcquireLock ? "" : "not ", loopCount );
+
+  int k;
+  for ( k = 0; k < loopCount; ++k )
+  {
+    int j;
+    Arena arena;
+    Comparator cmp;
+    SkipList<Key, Comparator> list( cmp, &arena );
+
+    uint64_t start = env->NowMicros();
+    for ( j = 0; j < NumKeys; ++j )
+    {
+      Key key = ReverseInsert ? NumKeys - 1 - j : j;
+
+      if ( AcquireLock ) mutex.Lock();
+      list.Insert( key );
+      if ( AcquireLock ) mutex.Unlock();
+    }
+    uint64_t stop = env->NowMicros();
+    timeSpent.push_back( stop - start );
+    //fprintf( stderr, "  Time for run %d: %llu\n", k, timeSpent[k] );
+
+    for ( j = 0; j < NumKeys; ++j )
+    {
+      ASSERT_TRUE( list.Contains( j ) );
+    }
+  }
+
+  // throw out the low and high times and average the rest
+  uint64_t totalTime, lowTime, highTime;
+  totalTime = lowTime = highTime = timeSpent[0];
+  for ( k = 1; k < loopCount; ++k )
+  {
+    uint64_t currentTime = timeSpent[k];
+    totalTime += currentTime;
+    if ( lowTime > currentTime ) lowTime = currentTime;
+    if ( highTime < currentTime ) highTime = currentTime;
+  }
+
+  totalTime -= (lowTime + highTime);
+
+  uint64_t averageTime = (totalTime / (loopCount - 2));
+  fprintf( stderr, "Average insertion time: %llu\n", averageTime );
+}
+
+TEST(SkipTest, SequentialInsert_NoLock_ForwardInsert)
+{
+  int numKeys = 100000;
+  bool acquireLock = false;
+  bool reverseInsert = false;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+}
+
+TEST(SkipTest, SequentialInsert_Lock_ForwardInsert)
+{
+  int numKeys = 100000;
+  bool acquireLock = true;
+  bool reverseInsert = false;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+}
+
+TEST(SkipTest, SequentialInsert_NoLock_ReverseInsert)
+{
+  int numKeys = 100000;
+  bool acquireLock = false;
+  bool reverseInsert = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+}
+
+TEST(SkipTest, SequentialInsert_Lock_ReverseInsert)
+{
+  int numKeys = 100000;
+  bool acquireLock = true;
+  bool reverseInsert = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+}
 
 }  // namespace leveldb
 
