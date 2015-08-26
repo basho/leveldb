@@ -1706,6 +1706,8 @@ class ModelDB: public DB {
     KVMap map_;
   };
 
+  const Options & GetOptions() const { return options_; }
+
   explicit ModelDB(const Options& options): options_(options) { }
   ~ModelDB() { }
   virtual Status Put(const WriteOptions& o, const Slice& k, const Slice& v) {
