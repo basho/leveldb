@@ -52,6 +52,13 @@ class SkipList {
   // Returns true iff an entry that compares equal to key is in the list.
   bool Contains(const Key& key) const;
 
+  // Returns true if all inserts have been sequentially increasing;
+  // else this SkipList has had keys inserted in random order
+  bool IsSequential() const
+  {
+    return tailValid_;
+  }
+
   // Iteration over the contents of a skip list
   class Iterator {
    public:
@@ -91,6 +98,15 @@ class SkipList {
     // Intentionally copyable
   };
 
+ protected:
+  // Checks the structure of this SkipList object, ensuring the keys are
+  // properly ordered
+  //
+  // This is protected since it is intended for use by unit tests; if a lock
+  // is used to protect Insert(), then it should be used to protect this
+  // method as well
+  bool Valid() const;
+
  private:
   enum { kMaxHeight = 17 };
 
@@ -112,6 +128,18 @@ class SkipList {
   // Read/written only by Insert().
   Random rnd_;
 
+  // Points to the last node in the list; modified only by Insert()
+  Node* tail_;
+
+  // Pointers to the nodes previous to the tail node; have max_height_ entries
+  Node* tailPrev_[kMaxHeight];
+
+  // The height of the tail_ node
+  int tailHeight_;
+
+  // We track the tail node until we have a non-sequential insert
+  bool tailValid_;
+
   Node* NewNode(const Key& key, int height);
   int RandomHeight();
   bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
@@ -125,6 +153,11 @@ class SkipList {
   // If prev is non-NULL, fills prev[level] with pointer to previous
   // node at "level" for every level in [0..max_height_-1].
   Node* FindGreaterOrEqual(const Key& key, Node** prev) const;
+
+  // Similar to FindGreaterOrEqual() except it uses the barrier-free
+  // variant of Next(); this is used only by Insert() and it
+  // checks the tail_ pointer in case we're doing a sequential insert
+  Node* NoBarrier_FindGreaterOrEqual(const Key& key, Node** prev) const;
 
   // Return the latest node with a key < key.
   // Return head_ if there is no such node.
@@ -279,6 +312,54 @@ typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOr
 
 template<typename Key, class Comparator>
 typename SkipList<Key,Comparator>::Node*
+SkipList<Key,Comparator>::NoBarrier_FindGreaterOrEqual(const Key& key, Node** prev) const {
+  int level = GetMaxHeight() - 1;
+
+  // If we have only seen sequential inserts up to this point, we can use
+  // the tail_ node
+  if ( tailValid_ ) {
+    if (tail_ == NULL) {
+      // The list is currently empty, so the node being inserted
+      // will be the new tail_
+      assert(level == 0);
+      if (prev != NULL) prev[0] = head_;
+      return NULL;
+    }
+    else if (KeyIsAfterNode(key, tail_)) {
+      // The new key must be inserted after the current tail_ node
+      if (prev != NULL) {
+        int i;
+        for (i = 0; i < tailHeight_; ++i) {
+          prev[i] = tail_;
+        }
+        for (/*continue with i*/; i <= level; ++i) {
+          prev[i] = tailPrev_[i];
+        }
+      }
+      return NULL;
+    }
+  }
+
+  Node* x = head_;
+  while (true) {
+    Node* next = x->NoBarrier_Next(level);
+    if (KeyIsAfterNode(key, next)) {
+      // Keep searching in this list
+      x = next;
+    } else {
+      if (prev != NULL) prev[level] = x;
+      if (level == 0) {
+        return next;
+      } else {
+        // Switch to next list
+        level--;
+      }
+    }
+  }
+}
+
+template<typename Key, class Comparator>
+typename SkipList<Key,Comparator>::Node*
 SkipList<Key,Comparator>::FindLessThan(const Key& key) const {
   Node* x = head_;
   int level = GetMaxHeight() - 1;
@@ -323,26 +404,46 @@ SkipList<Key,Comparator>::SkipList(Comparator cmp, Arena* arena)
     : compare_(cmp),
       arena_(arena),
       head_(NewNode(0 /* any key will do */, kMaxHeight)),
+      tail_(NULL),
+      tailHeight_(0),
+      tailValid_(true),
       max_height_(reinterpret_cast<void*>(1)),
       rnd_(0xdeadbeef) {
   for (int i = 0; i < kMaxHeight; i++) {
     head_->SetNext(i, NULL);
+    tailPrev_[i] = NULL;
   }
 }
 
 template<typename Key, class Comparator>
 void SkipList<Key,Comparator>::Insert(const Key& key) {
-  // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
+  // We use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
   Node* prev[kMaxHeight];
-  Node* x = FindGreaterOrEqual(key, prev);
+  Node* x = NoBarrier_FindGreaterOrEqual(key, prev);
+
+  // If we're still in sequential-insert mode, check if the new node is being
+  // inserted at the end of the list, which is indicated by x being NULL
+  bool updateTail = false;
+  if (tailValid_) {
+    if (x == NULL) {
+      updateTail = true;
+    }
+    else {
+      // we have a non-sequential (AKA random) insert, so stop maintaining
+      // the tail bookkeeping overhead
+      tailValid_ = false;
+    }
+  }
 
   // Our data structure does not allow duplicate insertion
   assert(x == NULL || !Equal(key, x->key));
 
-  int height = RandomHeight();
+  int i, height = RandomHeight();
   if (height > GetMaxHeight()) {
-    for (int i = GetMaxHeight(); i < height; i++) {
+    // We are extending max_height_ which means we need to fill in the blanks
+    // in prev[] that were not filled in by NoBarrier_FindGreaterOrEqual()
+    for (i = GetMaxHeight(); i < height; ++i) {
       prev[i] = head_;
     }
     //fprintf(stderr, "Change height from %d to %d\n", max_height_, height);
@@ -358,11 +459,36 @@ void SkipList<Key,Comparator>::Insert(const Key& key) {
   }
 
   x = NewNode(key, height);
-  for (int i = 0; i < height; i++) {
+  for (i = 0; i < height; ++i) {
     // NoBarrier_SetNext() suffices since we will add a barrier when
     // we publish a pointer to "x" in prev[i].
     x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
     prev[i]->SetNext(i, x);
+  }
+
+  // Do we need to update our tail_ pointer?
+  if (updateTail) {
+    Node* prevTail = tail_;
+    int prevTailHeight = tailHeight_;
+
+    tail_ = x;
+    tailHeight_ = height;
+
+    // We also need to update our tailPrev_ pointers; first we capture
+    // the nodes already pointing to the new tail_
+    for (i = 0; i < height; ++i) {
+      tailPrev_[i] = prev[i];
+    }
+
+    // If the previous tail node was taller than the new tail node, then
+    // the prev pointers above the current tail node's height (up to the
+    // height of the previous tail node) are simply the previous tail node
+    for (/*continue with i*/; i < prevTailHeight; ++i) {
+      tailPrev_[i] = prevTail;
+    }
+
+    // NOTE: any prev pointers above prevTailHeight (up to max_height_) were
+    // already set in tailPrev_ by previous calls to this method
   }
 }
 
@@ -374,6 +500,43 @@ bool SkipList<Key,Comparator>::Contains(const Key& key) const {
   } else {
     return false;
   }
+}
+
+template<typename Key, class Comparator>
+bool SkipList<Key,Comparator>::Valid() const
+{
+  // Note that we can use barrier-free overloads in this method since is
+  // protected by the same lock as Insert().
+
+  // Ensure that the list is properly sorted
+  const Key* pPrevKey = NULL;
+  SkipList<Key, Comparator>::Iterator iter(this);
+  for ( iter.SeekToFirst(); iter.Valid(); iter.Next() ) {
+    if ( pPrevKey != NULL ) {
+      if ( compare_( *pPrevKey, iter.key() ) >= 0 ) {
+        return false;
+      }
+    }
+    pPrevKey = &iter.key();
+  }
+
+  // Ensure that tail_ points to the last node
+  if (tailValid_) {
+    if (tail_ == NULL) {
+      // tail_ is not set, so the list must be empty
+      if (tailPrev_[0] != NULL || head_->NoBarrier_Next(0) != NULL) {
+        return false;
+      }
+    }
+    else {
+      if (tailPrev_[0] == NULL) {
+        return false;
+      }
+    }
+  }
+
+  // if we get here, all is good
+  return true;
 }
 
 }  // namespace leveldb

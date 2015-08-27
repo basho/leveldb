@@ -27,15 +27,27 @@ struct Comparator {
   }
 };
 
+template<typename Key, class Comparator>
+class SkipListTest : public SkipList<Key, Comparator>
+{
+ public:
+  SkipListTest(Comparator cmp, Arena* arena) : SkipList<Key, Comparator>(cmp, arena) {}
+
+  // check the validity of this SkipList object by calling the Valid() method
+  // in the base class
+  bool Valid() const { return SkipList<Key, Comparator>::Valid(); }
+};
+
 class SkipTest { };
 
 TEST(SkipTest, Empty) {
   Arena arena;
   Comparator cmp;
-  SkipList<Key, Comparator> list(cmp, &arena);
+  SkipListTest<Key, Comparator> list(cmp, &arena);
   ASSERT_TRUE(!list.Contains(10));
+  ASSERT_TRUE(list.Valid());
 
-  SkipList<Key, Comparator>::Iterator iter(&list);
+  SkipListTest<Key, Comparator>::Iterator iter(&list);
   ASSERT_TRUE(!iter.Valid());
   iter.SeekToFirst();
   ASSERT_TRUE(!iter.Valid());
@@ -52,13 +64,14 @@ TEST(SkipTest, InsertAndLookup) {
   std::set<Key> keys;
   Arena arena;
   Comparator cmp;
-  SkipList<Key, Comparator> list(cmp, &arena);
+  SkipListTest<Key, Comparator> list(cmp, &arena);
   for (int i = 0; i < N; i++) {
     Key key = rnd.Next() % R;
     if (keys.insert(key).second) {
       list.Insert(key);
     }
   }
+  ASSERT_TRUE(list.Valid());
 
   for (int i = 0; i < R; i++) {
     if (list.Contains(i)) {
@@ -70,7 +83,7 @@ TEST(SkipTest, InsertAndLookup) {
 
   // Simple iterator tests
   {
-    SkipList<Key, Comparator>::Iterator iter(&list);
+    SkipListTest<Key, Comparator>::Iterator iter(&list);
     ASSERT_TRUE(!iter.Valid());
 
     iter.Seek(0);
@@ -88,7 +101,7 @@ TEST(SkipTest, InsertAndLookup) {
 
   // Forward iteration test
   for (int i = 0; i < R; i++) {
-    SkipList<Key, Comparator>::Iterator iter(&list);
+    SkipListTest<Key, Comparator>::Iterator iter(&list);
     iter.Seek(i);
 
     // Compare against model iterator
@@ -108,7 +121,7 @@ TEST(SkipTest, InsertAndLookup) {
 
   // Backward iteration test
   {
-    SkipList<Key, Comparator>::Iterator iter(&list);
+    SkipListTest<Key, Comparator>::Iterator iter(&list);
     iter.SeekToLast();
 
     // Compare against model iterator
@@ -391,7 +404,10 @@ RunSequentialInsert(
     int j;
     Arena arena;
     Comparator cmp;
-    SkipList<Key, Comparator> list( cmp, &arena );
+    SkipListTest<Key, Comparator> list( cmp, &arena );
+
+    // initially the SkipList should be in sequential mode
+    ASSERT_TRUE( list.IsSequential() );
 
     uint64_t start = env->NowMicros();
     for ( j = 0; j < NumKeys; ++j )
@@ -406,6 +422,15 @@ RunSequentialInsert(
     timeSpent.push_back( stop - start );
     //fprintf( stderr, "  Time for run %d: %llu\n", k, timeSpent[k] );
 
+    // the SkipList should still be in sequential mode iff ReverseInsert is false
+    ASSERT_TRUE( list.IsSequential() != ReverseInsert );
+
+    // ensure the SkipLlist is properly sorted
+    if ( AcquireLock ) mutex.Lock();
+    ASSERT_TRUE( list.Valid() );
+    if ( AcquireLock ) mutex.Unlock();
+
+    // ensure the SkipList contains all the keys we inserted
     for ( j = 0; j < NumKeys; ++j )
     {
       ASSERT_TRUE( list.Contains( j ) );
