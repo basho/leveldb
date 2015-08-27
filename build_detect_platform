@@ -62,12 +62,18 @@ case "$TARGET_OS" in
         oIFS="$IFS"; IFS=.
         set `uname -r`
         IFS="$oIFS"
-        if [ "$1" -ge 13 ]; then
-            # assume clang compiler
-#            COMMON_FLAGS="-mmacosx-version-min=10.8 -DOS_MACOSX"
-#            PLATFORM_LDFLAGS="-mmacosx-version-min=10.8"
+
+        # Setting macosx-version-min=10.8 on Yosemite causes C++11
+        # compilation to fail.  Eliminate this for now, leaving
+        # earlier versions to build as they please
+
+        if [ "$1" -eq 14 ]; then
             COMMON_FLAGS="-DOS_MACOSX"
             PLATFORM_LDFLAGS=""
+        elif [ "$1" -ge 13 ]; then
+            # assume clang compiler
+            COMMON_FLAGS="-mmacosx-version-min=10.8 -DOS_MACOSX"
+            PLATFORM_LDFLAGS="-mmacosx-version-min=10.8"
         else
             COMMON_FLAGS="-fno-builtin-memcmp -DOS_MACOSX"
         fi
