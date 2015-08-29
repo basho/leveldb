@@ -36,6 +36,8 @@ class SkipListTest : public SkipList<Key, Comparator>
   // check the validity of this SkipList object by calling the Valid() method
   // in the base class
   bool Valid() const { return SkipList<Key, Comparator>::Valid(); }
+
+  void DisableSequentialInsertMode() { SkipList<Key, Comparator>::DisableSequentialInsertMode(); }
 };
 
 class SkipTest { };
@@ -387,7 +389,8 @@ static void
 RunSequentialInsert(
   const int NumKeys,
   bool      AcquireLock,
-  bool      ReverseInsert )
+  bool      ReverseInsert,
+  bool      SequentialInsertModeEnabled )
 {
   const int loopCount = 5; // repeat the whole process this many times and average the time spent
   std::vector<uint64_t> timeSpent;
@@ -395,23 +398,32 @@ RunSequentialInsert(
   port::Mutex mutex;
   Env* env = Env::Default();
 
-  fprintf( stderr, "Sequentially inserting %d keys in %s order, %sacquiring a lock for each insert (averaging over %d runs)\n",
-           NumKeys, ReverseInsert ? "reverse" : "forward", AcquireLock ? "" : "not ", loopCount );
+  fprintf( stderr,
+           "Sequentially inserting %d keys in %s order,\n"
+           "      seqential insert mode is initially %sabled,\n"
+           "      %sacquiring a lock for each insert (averaging over %d runs)\n",
+           NumKeys, ReverseInsert ? "reverse" : "forward",
+           SequentialInsertModeEnabled ? "en" : "dis",
+           AcquireLock ? "" : "not ", loopCount );
 
   int k;
-  for ( k = 0; k < loopCount; ++k )
-  {
+  for ( k = 0; k < loopCount; ++k ) {
     int j;
     Arena arena;
     Comparator cmp;
     SkipListTest<Key, Comparator> list( cmp, &arena );
 
     // initially the SkipList should be in sequential mode
-    ASSERT_TRUE( list.IsSequential() );
+    ASSERT_TRUE( list.InSequentialInsertMode() );
+
+    // were we instructed to disable sequential insert mode?
+    if ( !SequentialInsertModeEnabled ) {
+      list.DisableSequentialInsertMode();
+      ASSERT_TRUE( !list.InSequentialInsertMode() );
+    }
 
     uint64_t start = env->NowMicros();
-    for ( j = 0; j < NumKeys; ++j )
-    {
+    for ( j = 0; j < NumKeys; ++j ) {
       Key key = ReverseInsert ? NumKeys - 1 - j : j;
 
       if ( AcquireLock ) mutex.Lock();
@@ -422,8 +434,14 @@ RunSequentialInsert(
     timeSpent.push_back( stop - start );
     //fprintf( stderr, "  Time for run %d: %llu\n", k, timeSpent[k] );
 
-    // the SkipList should still be in sequential mode iff ReverseInsert is false
-    ASSERT_TRUE( list.IsSequential() != ReverseInsert );
+    // if SequentialInsertModeEnabled is true, the SkipList should still be
+    // in sequential mode iff ReverseInsert is false
+    if ( SequentialInsertModeEnabled ) {
+      ASSERT_TRUE( list.InSequentialInsertMode() != ReverseInsert );
+    }
+    else {
+      ASSERT_TRUE( !list.InSequentialInsertMode() );
+    }
 
     // ensure the SkipLlist is properly sorted
     if ( AcquireLock ) mutex.Lock();
@@ -431,8 +449,7 @@ RunSequentialInsert(
     if ( AcquireLock ) mutex.Unlock();
 
     // ensure the SkipList contains all the keys we inserted
-    for ( j = 0; j < NumKeys; ++j )
-    {
+    for ( j = 0; j < NumKeys; ++j ) {
       ASSERT_TRUE( list.Contains( j ) );
     }
   }
@@ -440,8 +457,7 @@ RunSequentialInsert(
   // throw out the low and high times and average the rest
   uint64_t totalTime, lowTime, highTime;
   totalTime = lowTime = highTime = timeSpent[0];
-  for ( k = 1; k < loopCount; ++k )
-  {
+  for ( k = 1; k < loopCount; ++k ) {
     uint64_t currentTime = timeSpent[k];
     totalTime += currentTime;
     if ( lowTime > currentTime ) lowTime = currentTime;
@@ -451,7 +467,8 @@ RunSequentialInsert(
   totalTime -= (lowTime + highTime);
 
   uint64_t averageTime = (totalTime / (loopCount - 2));
-  fprintf( stderr, "Average insertion time: %llu\n", averageTime );
+  double timePerKey = (double)averageTime / (double)NumKeys;
+  fprintf( stderr, "   Average insertion time: %llu (%f/key)\n", averageTime, timePerKey );
 }
 
 TEST(SkipTest, SequentialInsert_NoLock_ForwardInsert)
@@ -459,7 +476,11 @@ TEST(SkipTest, SequentialInsert_NoLock_ForwardInsert)
   int numKeys = 100000;
   bool acquireLock = false;
   bool reverseInsert = false;
-  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+  bool sequentialInsertModeEnabled = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+
+  sequentialInsertModeEnabled = false;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
 }
 
 TEST(SkipTest, SequentialInsert_Lock_ForwardInsert)
@@ -467,7 +488,11 @@ TEST(SkipTest, SequentialInsert_Lock_ForwardInsert)
   int numKeys = 100000;
   bool acquireLock = true;
   bool reverseInsert = false;
-  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+  bool sequentialInsertModeEnabled = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+
+  sequentialInsertModeEnabled = false;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
 }
 
 TEST(SkipTest, SequentialInsert_NoLock_ReverseInsert)
@@ -475,7 +500,8 @@ TEST(SkipTest, SequentialInsert_NoLock_ReverseInsert)
   int numKeys = 100000;
   bool acquireLock = false;
   bool reverseInsert = true;
-  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+  bool sequentialInsertModeEnabled = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
 }
 
 TEST(SkipTest, SequentialInsert_Lock_ReverseInsert)
@@ -483,7 +509,85 @@ TEST(SkipTest, SequentialInsert_Lock_ReverseInsert)
   int numKeys = 100000;
   bool acquireLock = true;
   bool reverseInsert = true;
-  RunSequentialInsert( numKeys, acquireLock, reverseInsert );
+  bool sequentialInsertModeEnabled = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+}
+
+TEST(SkipTest, SequentialInsert_IncreasingNumberOfInserts)
+{
+  // test with increasing numbers of keys, with sequential-insert mode both
+  // enabled and disabled; we're looking to see if per-key insertion times
+  // trend upward as the number of keys increases
+  int numKeys = 10000;
+  bool acquireLock = false;
+  bool reverseInsert = false;
+  bool sequentialInsertModeEnabled = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+
+  sequentialInsertModeEnabled = false;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+
+  numKeys = 100000;
+  sequentialInsertModeEnabled = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+
+  sequentialInsertModeEnabled = false;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+
+  numKeys = 1000000;
+  sequentialInsertModeEnabled = true;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+
+  sequentialInsertModeEnabled = false;
+  RunSequentialInsert( numKeys, acquireLock, reverseInsert, sequentialInsertModeEnabled );
+}
+
+TEST(SkipTest, SequentialInsert_MixedInsertionModes)
+{
+  // start inserting sequentially, then switch to non-sequential inserts,
+  // ensuring all works as intended
+  int j, numSequentialKeys = 100000, numNonSequentialKeys = 100000;
+  int totalNumKeys = numSequentialKeys + numNonSequentialKeys;
+  Arena arena;
+  Comparator cmp;
+  SkipListTest<Key, Comparator> list( cmp, &arena );
+
+  // initially the SkipList should be in sequential mode
+  ASSERT_TRUE( list.InSequentialInsertMode() );
+
+  // start inserting at key=1; when we insert 0 below, the list should switch
+  // out of sequential insert mode
+  for ( j = 1; j < numSequentialKeys; ++j ) {
+    list.Insert( j );
+  }
+
+  // the SkipList should still be in sequential mode
+  ASSERT_TRUE( list.InSequentialInsertMode() );
+  ASSERT_TRUE( list.Valid() );
+
+  list.Insert( 0 );
+  ASSERT_TRUE( !list.InSequentialInsertMode() );
+  ASSERT_TRUE( list.Valid() );
+
+  // now insert the remaining keys in non-sequential order (they're not
+  // random, but that doesn't matter here; just ensure we switch to
+  // non-sequential mode and that all continues to work)
+  for ( j = 0; j < numNonSequentialKeys; j += 2 ) {
+    int key = totalNumKeys - j - 1;
+    list.Insert( key );
+  }
+  for ( j = 0; j < numNonSequentialKeys; j += 2 ) {
+    int key = numSequentialKeys + j;
+    list.Insert( key );
+  }
+
+  ASSERT_TRUE( !list.InSequentialInsertMode() );
+  ASSERT_TRUE( list.Valid() );
+
+  // ensure the SkipList contains all the keys we inserted
+  for ( j = 0; j < totalNumKeys; ++j ) {
+    ASSERT_TRUE( list.Contains( j ) );
+  }
 }
 
 }  // namespace leveldb

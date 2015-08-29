@@ -53,10 +53,9 @@ class SkipList {
   bool Contains(const Key& key) const;
 
   // Returns true if all inserts have been sequentially increasing;
-  // else this SkipList has had keys inserted in random order
-  bool IsSequential() const
-  {
-    return tailValid_;
+  // else this SkipList has had keys inserted in non-sequential order
+  bool InSequentialInsertMode() const {
+    return sequentialInsertMode_;
   }
 
   // Iteration over the contents of a skip list
@@ -107,6 +106,11 @@ class SkipList {
   // method as well
   bool Valid() const;
 
+  // Disables the sequential insert optimizations (used in performance testing)
+  void DisableSequentialInsertMode() {
+    sequentialInsertMode_ = false;
+  }
+
  private:
   enum { kMaxHeight = 17 };
 
@@ -138,7 +142,7 @@ class SkipList {
   int tailHeight_;
 
   // We track the tail node until we have a non-sequential insert
-  bool tailValid_;
+  bool sequentialInsertMode_;
 
   Node* NewNode(const Key& key, int height);
   int RandomHeight();
@@ -317,7 +321,7 @@ SkipList<Key,Comparator>::NoBarrier_FindGreaterOrEqual(const Key& key, Node** pr
 
   // If we have only seen sequential inserts up to this point, we can use
   // the tail_ node
-  if ( tailValid_ ) {
+  if ( sequentialInsertMode_ ) {
     if (tail_ == NULL) {
       // The list is currently empty, so the node being inserted
       // will be the new tail_
@@ -406,7 +410,7 @@ SkipList<Key,Comparator>::SkipList(Comparator cmp, Arena* arena)
       head_(NewNode(0 /* any key will do */, kMaxHeight)),
       tail_(NULL),
       tailHeight_(0),
-      tailValid_(true),
+      sequentialInsertMode_(true),
       max_height_(reinterpret_cast<void*>(1)),
       rnd_(0xdeadbeef) {
   for (int i = 0; i < kMaxHeight; i++) {
@@ -425,14 +429,14 @@ void SkipList<Key,Comparator>::Insert(const Key& key) {
   // If we're still in sequential-insert mode, check if the new node is being
   // inserted at the end of the list, which is indicated by x being NULL
   bool updateTail = false;
-  if (tailValid_) {
+  if (sequentialInsertMode_) {
     if (x == NULL) {
       updateTail = true;
     }
     else {
       // we have a non-sequential (AKA random) insert, so stop maintaining
       // the tail bookkeeping overhead
-      tailValid_ = false;
+      sequentialInsertMode_ = false;
     }
   }
 
@@ -508,7 +512,7 @@ bool SkipList<Key,Comparator>::Valid() const
   // Note that we can use barrier-free overloads in this method since is
   // protected by the same lock as Insert().
 
-  // Ensure that the list is properly sorted
+  // Ensure that the list is properly sorted; use an iterator for this check
   const Key* pPrevKey = NULL;
   SkipList<Key, Comparator>::Iterator iter(this);
   for ( iter.SeekToFirst(); iter.Valid(); iter.Next() ) {
@@ -520,16 +524,58 @@ bool SkipList<Key,Comparator>::Valid() const
     pPrevKey = &iter.key();
   }
 
+  // Now walk the linked list at each level and ensure it's sorted. Also track
+  // how many nodes we see at each level; the number of nodes in the linked
+  // list at level n must not be larger than the number of nodes at level n-1.
+  std::vector<int> nodeCounts( GetMaxHeight() );
+  for ( int level = GetMaxHeight() - 1; level >= 0; --level ) {
+    int nodeCount = 0;
+    pPrevKey = NULL;
+    for ( Node* pNode = head_->NoBarrier_Next( level );
+          pNode != NULL;
+          pNode = pNode->NoBarrier_Next( level ) ) {
+      ++nodeCount;
+      if ( pPrevKey != NULL ) {
+        if ( compare_( *pPrevKey, pNode->key ) >= 0 ) {
+          return false;
+        }
+      }
+      pPrevKey = &pNode->key;
+    }
+    nodeCounts[ level ] = nodeCount;
+  }
+
+  // Ensure the node counts do not increase as we move up the levels
+  int prevNodeCount = nodeCounts[0];
+  for ( int level = 1; level < GetMaxHeight(); ++level ) {
+    int currentNodeCount = nodeCounts[ level ];
+    if ( currentNodeCount > prevNodeCount ) {
+      return false;
+    }
+    prevNodeCount = currentNodeCount;
+  }
+
   // Ensure that tail_ points to the last node
-  if (tailValid_) {
-    if (tail_ == NULL) {
+  if ( sequentialInsertMode_ ) {
+    if ( tail_ == NULL ) {
       // tail_ is not set, so the list must be empty
-      if (tailPrev_[0] != NULL || head_->NoBarrier_Next(0) != NULL) {
+      if ( tailPrev_[0] != NULL || head_->NoBarrier_Next(0) != NULL ) {
         return false;
       }
     }
     else {
-      if (tailPrev_[0] == NULL) {
+      // we have a tail_ node; first ensure that it's prev pointer actually
+      // points to it
+      if ( tailPrev_[0] == NULL || tailPrev_[0]->NoBarrier_Next(0) != tail_ ) {
+        return false;
+      }
+      if ( compare_( tailPrev_[0]->key, tail_->key ) >= 0 ) {
+        return false;
+      }
+
+      // now ensure that FindLast() returns tail_
+      Node* lastNode = FindLast();
+      if ( lastNode != tail_ ) {
         return false;
       }
     }
