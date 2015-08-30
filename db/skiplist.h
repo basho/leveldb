@@ -428,12 +428,8 @@ void SkipList<Key,Comparator>::Insert(const Key& key) {
 
   // If we're still in sequential-insert mode, check if the new node is being
   // inserted at the end of the list, which is indicated by x being NULL
-  bool updateTail = false;
   if (sequentialInsertMode_) {
-    if (x == NULL) {
-      updateTail = true;
-    }
-    else {
+    if (x != NULL) {
       // we have a non-sequential (AKA random) insert, so stop maintaining
       // the tail bookkeeping overhead
       sequentialInsertMode_ = false;
@@ -471,7 +467,7 @@ void SkipList<Key,Comparator>::Insert(const Key& key) {
   }
 
   // Do we need to update our tail_ pointer?
-  if (updateTail) {
+  if (sequentialInsertMode_) {
     Node* prevTail = tail_;
     int prevTailHeight = tailHeight_;
 
@@ -509,7 +505,7 @@ bool SkipList<Key,Comparator>::Contains(const Key& key) const {
 template<typename Key, class Comparator>
 bool SkipList<Key,Comparator>::Valid() const
 {
-  // Note that we can use barrier-free overloads in this method since is
+  // Note that we can use barrier-free overloads in this method since it is
   // protected by the same lock as Insert().
 
   // Ensure that the list is properly sorted; use an iterator for this check
@@ -528,7 +524,8 @@ bool SkipList<Key,Comparator>::Valid() const
   // how many nodes we see at each level; the number of nodes in the linked
   // list at level n must not be larger than the number of nodes at level n-1.
   std::vector<int> nodeCounts( GetMaxHeight() );
-  for ( int level = GetMaxHeight() - 1; level >= 0; --level ) {
+  int level;
+  for ( level = GetMaxHeight() - 1; level >= 0; --level ) {
     int nodeCount = 0;
     pPrevKey = NULL;
     for ( Node* pNode = head_->NoBarrier_Next( level );
@@ -547,7 +544,7 @@ bool SkipList<Key,Comparator>::Valid() const
 
   // Ensure the node counts do not increase as we move up the levels
   int prevNodeCount = nodeCounts[0];
-  for ( int level = 1; level < GetMaxHeight(); ++level ) {
+  for ( level = 1; level < GetMaxHeight(); ++level ) {
     int currentNodeCount = nodeCounts[ level ];
     if ( currentNodeCount > prevNodeCount ) {
       return false;
@@ -564,13 +561,44 @@ bool SkipList<Key,Comparator>::Valid() const
       }
     }
     else {
-      // we have a tail_ node; first ensure that it's prev pointer actually
+      // we have a tail_ node; first ensure that its prev pointer actually
       // points to it
       if ( tailPrev_[0] == NULL || tailPrev_[0]->NoBarrier_Next(0) != tail_ ) {
         return false;
       }
       if ( compare_( tailPrev_[0]->key, tail_->key ) >= 0 ) {
         return false;
+      }
+
+      // now check the rest of the pointers in tailPrev_; up to tailHeight_,
+      // the next pointer of the node in tailPrev_ should point to tail_; after
+      // that, the next pointer should be NULL
+      for ( level = 1; level < GetMaxHeight(); ++level ) {
+        Node* tailPrev = tailPrev_[ level ];
+        if ( tailPrev == NULL ) {
+          return false;
+        }
+        if ( level < tailHeight_ ) {
+          if ( tailPrev->NoBarrier_Next( level ) != tail_ ) {
+            return false;
+          }
+          if ( compare_( tailPrev->key, tail_->key ) >= 0 ) {
+            return false;
+          }
+        }
+        else {
+          if ( tailPrev->NoBarrier_Next( level ) != NULL ) {
+            return false;
+          }
+        }
+      }
+
+      // the remainder of the tailPrev_ pointers (above max_height_)
+      // should be NULL
+      for ( /*continue with level*/; level < kMaxHeight; ++level ) {
+        if ( tailPrev_[ level ] != NULL ) {
+          return false;
+        }
       }
 
       // now ensure that FindLast() returns tail_
