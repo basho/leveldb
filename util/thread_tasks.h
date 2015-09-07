@@ -33,6 +33,7 @@
 #include "db/db_impl.h"
 #include "db/version_set.h"
 #include "leveldb/atomics.h"
+#include "refobject_base.h"
 
 namespace leveldb {
 
@@ -40,36 +41,18 @@ namespace leveldb {
 /**
  * Virtual base class for leveldb background tasks
  */
-class ThreadTask
+class ThreadTask : public RefObjectBase
 {
-public:
+ public:
     uint64_t m_QueueStart;        //!< NowMicros() time placed on work queue
 
-protected:
-    volatile uint32_t m_RefCount;
-
  public:
-    ThreadTask()
-        : m_QueueStart(0), m_RefCount(0) {};
+    ThreadTask() : m_QueueStart(0) {};
 
     virtual ~ThreadTask() {};
 
-    uint32_t RefInc() {return(inc_and_fetch(&m_RefCount));};
-
-    uint32_t RefDec()
-    {
-        uint32_t current_refs;
-
-        current_refs=dec_and_fetch(&m_RefCount);
-        if (0==current_refs)
-            delete this;
-
-        return(current_refs);
-
-    }   // RefObject::RefDec
-
     // this is the derived object's task routine
-    virtual void operator()()     = 0;
+    virtual void operator()() = 0;
 
 private:
     ThreadTask(const ThreadTask &);
@@ -182,4 +165,4 @@ private:
 } // namespace leveldb
 
 
-#endif  // INCL_WORKITEMS_H
+#endif  // STORAGE_LEVELDB_INCLUDE_THREAD_TASKS_H_
