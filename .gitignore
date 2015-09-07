@@ -9,4 +9,5 @@ db_bench
 leveldb_repair
 perf_dump
 sst_scan
+sst_rewrite
 *~
