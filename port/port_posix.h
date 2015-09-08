@@ -202,6 +202,22 @@ inline bool GetHeapProfile(void (*func)(void*, const char*, int), void* arg) {
   return false;
 }
 
+// sets the name of the current thread
+inline void SetThreadName(const char* threadName) {
+  if (NULL == threadName) {
+    threadName = "";
+  }
+#if defined(OS_MACOSX)
+  pthread_setname_np(threadName);
+#elif defined(OS_FREEBSD) || defined(OS_OPENBSD) || defined(OS_LINUX)
+  pthread_setname_np(pthread_self(), threadName);
+#elif defined(OS_NETBSD)
+  pthread_setname_np(pthread_self(), threadName, NULL);
+#else
+  // we have some other platform to support
+#endif
+}
+
 } // namespace port
 } // namespace leveldb
 
