@@ -2,7 +2,7 @@
 //
 // thread_tasks.h
 //
-// Copyright (c) 2011-2013 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2011-2015 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -43,18 +43,25 @@ namespace leveldb {
  */
 class ThreadTask : public RefObjectBase
 {
+ protected:
+    bool m_ResubmitWork;          //!< true if this work item is loaded for prefetch
+
  public:
     uint64_t m_QueueStart;        //!< NowMicros() time placed on work queue
 
  public:
-    ThreadTask() : m_QueueStart(0) {};
+    ThreadTask() : m_ResubmitWork(false), m_QueueStart(0) {}
 
-    virtual ~ThreadTask() {};
+    virtual ~ThreadTask() {}
 
     // this is the derived object's task routine
     virtual void operator()() = 0;
 
-private:
+    // methods used by the thread pool to potentially reuse this task object
+    bool resubmit() const {return(m_ResubmitWork);}
+    virtual void recycle() {}
+
+ private:
     ThreadTask(const ThreadTask &);
     ThreadTask & operator=(const ThreadTask &);
 
