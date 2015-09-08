@@ -2,7 +2,7 @@
 //
 // hot_threads.cc
 //
-// Copyright (c) 2011-2013 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2011-2015 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -67,7 +67,7 @@ HotThread::ThreadRoutine()
 
     submission=NULL;
 
-//    pthread_setname_np(m_Pool.m_PoolName.c_str());
+    port::SetThreadName(m_Pool.m_PoolName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
@@ -260,7 +260,7 @@ QueueThread::QueueThreadRoutine()
 
     submission=NULL;
 
-//    pthread_setname_np(m_QueueName.c_str());
+    port::SetThreadName(m_QueueName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
