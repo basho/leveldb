@@ -203,7 +203,7 @@ inline bool GetHeapProfile(void (*func)(void*, const char*, int), void* arg) {
 }
 
 // sets the name of the current thread
-inline void SetThreadName(const char* threadName) {
+inline void SetCurrentThreadName(const char* threadName) {
   if (NULL == threadName) {
     threadName = "";
   }
@@ -214,7 +214,9 @@ inline void SetThreadName(const char* threadName) {
 #elif defined(OS_NETBSD)
   pthread_setname_np(pthread_self(), threadName, NULL);
 #else
-  // we have some other platform to support
+  // we have some other platform(s) to support
+  //
+  // NOTE: do not fail here since this functionality is optional
 #endif
 }
 

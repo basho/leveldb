@@ -35,7 +35,19 @@
 namespace leveldb {
 
 /**
- * Virtual base class for reference-counted types
+ * Base class for reference-counted types
+ *
+ * A user of a reference-counted object makes the reference explicit by
+ * calling the RefInc() method, which increments the internal reference
+ * counter in a thread safe manner. When the user of the object is done
+ * with the object, it releases the reference by calling the RefDec()
+ * method, which decrements the internal counter in a thread safe manner.
+ * When the reference counter reaches 0, the RefDec() method deletes
+ * the current object by executing a "delete this" statement.
+ *
+ * Note that the because RefDec() executes "delete this" when the reference
+ * count reaches 0, the reference-counted object must be allocated on the
+ * heap.
  */
 class RefObjectBase
 {
