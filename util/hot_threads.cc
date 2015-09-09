@@ -67,7 +67,7 @@ HotThread::ThreadRoutine()
 
     submission=NULL;
 
-    port::SetThreadName(m_Pool.m_PoolName.c_str());
+    port::SetCurrentThreadName(m_Pool.m_PoolName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
@@ -260,7 +260,7 @@ QueueThread::QueueThreadRoutine()
 
     submission=NULL;
 
-    port::SetThreadName(m_QueueName.c_str());
+    port::SetCurrentThreadName(m_QueueName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
