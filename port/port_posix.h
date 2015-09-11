@@ -90,7 +90,7 @@ class CondVar;
 
 class Mutex {
  public:
-  Mutex();
+  Mutex(bool recursive=false); // true => creates a mutex that can be locked recursively
   ~Mutex();
 
   void Lock();
@@ -135,6 +135,11 @@ class CondVar {
   explicit CondVar(Mutex* mu);
   ~CondVar();
   void Wait();
+
+  // waits on the condition variable until the specified time is reached
+  bool // true => the condition variable was signaled, else timed out
+  Wait(struct timespec* pTimespec);
+
   void Signal();
   void SignalAll();
  private:

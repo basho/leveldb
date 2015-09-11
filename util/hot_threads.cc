@@ -121,11 +121,11 @@ HotThread::ThreadRoutine()
 
             // only wait if we are really sure no work pending
             if (0==m_Pool.m_WorkQueueAtomic)
-	    {
+            {
                 // yes, thread going to wait. set available now.
-	        m_Available=1;
+                m_Available=1;
                 m_Condition.Wait();
-	    }    // if
+            }    // if
 
             m_Available=0;    // safety
             submission=(ThreadTask *)m_DirectWork; // NULL is valid
