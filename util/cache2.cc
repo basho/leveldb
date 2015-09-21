@@ -449,6 +449,8 @@ private:
 
                   tf=(TableAndFile *)cursor->value;
 
+                  // this on disk format is read by PreloadTableCache()
+                  //  (db/tablecache.cc)
                   assert(0!= tf->file_number);
                   PutVarint32(&Dest, VersionEdit::kFileCacheObject);
                   PutVarint32(&Dest, tf->level);

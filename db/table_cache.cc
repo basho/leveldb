@@ -219,6 +219,8 @@ TableCache::SaveOpenFileList()
     {
         std::string buffer;
         size_t file_count;
+
+        buffer.reserve(4*1024L);
         cow_log=new log::Writer(cow_file);
         file_count=doublecache_.WriteCacheObjectWarming(buffer);
         s = cow_log->AddRecord(buffer);
@@ -258,7 +260,7 @@ TableCache::PreloadTableCache()
         Env* env;
         Logger* info_log;
         const char* fname;
-        Status* status;  // NULL if options_.paranoid_checks==false
+        Status* status;
         virtual void Corruption(size_t bytes, const Status& s) {
             Log(info_log, "%s%s: dropping %d bytes; %s",
                 (this->status == NULL ? "(ignoring error) " : ""),
@@ -297,6 +299,8 @@ TableCache::PreloadTableCache()
             Cache::Handle * handle;
             Status s2;
 
+            // the on disk format is created in WriteFileCacheObjectWarming()
+            //  (util/cache2.cc)
             while (GetVarint32(&input, &tag))
             {
                 if (VersionEdit::kFileCacheObject==tag)
@@ -308,7 +312,9 @@ TableCache::PreloadTableCache()
                   // do not care if this succeeds, but need status
                   //  for handle maintenance
                   handle=NULL;
-                  s2=FindTable(file_no, file_size, level, &handle, false);
+
+                  // set compaction flag to suggest Linux start pre-reading the files
+                  s2=FindTable(file_no, file_size, level, &handle, (level<config::kNumOverlapLevels));
 
                   if (s2.ok())
                   {
