@@ -1920,22 +1920,13 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.AssertHeld();
   assert(!writers_.empty());
   bool allow_delay = !force;
-  bool groom_good;
   Status s;
 
   // hint to background compaction.
   level0_good=(versions_->NumLevelFiles(0) < (int)config::kL0_CompactionTrigger);
 
   while (true) {
-      // maybe force a new imm file early to help performance:
-      //  criteria:  not internal db, buffer > 50% full, level 0 not full,
-      //             work queue empty at this moment (might not be later, but oh well)
-      groom_good=(NULL==imm_ && !options_.is_internal_db
-                  && ((options_.write_buffer_size*5)/10 < mem_->ApproximateMemoryUsage())
-                  && versions_->NumLevelFiles(0) < config::kL0_StopWritesTrigger
-                  && 0==gImmThreads->m_WorkQueueAtomic && 1==gImmThreads->m_Threads[0]->m_Available);
-
-     if (!bg_error_.ok()) {
+    if (!bg_error_.ok()) {
       // Yield previous error
         gPerfCounters->Inc(ePerfWriteError);
       s = bg_error_;
@@ -1957,7 +1948,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       allow_delay = false;  // Do not delay a single write more than once
       gPerfCounters->Inc(ePerfWriteSleep);
       mutex_.Lock();
-    } else if (!force && !groom_good &&
+    } else if (!force && 
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
         gPerfCounters->Inc(ePerfWriteNoWait);
@@ -2009,8 +2000,6 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mem_->Ref();
       force = false;   // Do not force another compaction if have room
       MaybeScheduleCompaction();
-      if (groom_good)
-          gPerfCounters->Inc(ePerfDebug0);
     }
   }
   return s;
