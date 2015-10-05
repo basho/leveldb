@@ -947,7 +947,7 @@ void DBImpl::BackgroundCall2(
   }   // else
   bg_compaction_scheduled_ = false;
   --running_compactions_;
-  versions_->SetCompactionDone(level);
+  versions_->SetCompactionDone(level, env_->NowMicros());
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
