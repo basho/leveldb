@@ -313,9 +313,10 @@ class VersionSet {
   void SetCompactionRunning(int level)
   {m_CompactionStatus[level].m_Running=true;}
 
-  void SetCompactionDone(int level)
+  void SetCompactionDone(int level, uint64_t Now)
   {   m_CompactionStatus[level].m_Running=false;
-      m_CompactionStatus[level].m_Submitted=false;}
+      m_CompactionStatus[level].m_Submitted=false;
+      m_CompactionStatus[level].m_LastCompaction=Now; }
 
   bool NeighborCompactionsQuiet(int level);
 
@@ -374,9 +375,10 @@ class VersionSet {
   {
       bool m_Submitted;     //!< level submitted to hot thread pool
       bool m_Running;       //!< thread actually running compaction
+      uint64_t m_LastCompaction; //!<NowMicros() when last compaction completed
 
       CompactionStatus_s()
-      : m_Submitted(false), m_Running(false)
+      : m_Submitted(false), m_Running(false), m_LastCompaction(0)
       {};
   } m_CompactionStatus[config::kNumLevels];
 

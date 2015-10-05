@@ -31,6 +31,12 @@ static const size_t kL0_CompactionTrigger = 6;
 // Level-0 (any overlapped level) number of files where a grooming
 //     compaction could start
 static const size_t kL0_GroomingTrigger = 4;
+static const size_t kL0_GroomingTrigger10min = 2;
+static const size_t kL0_GroomingTrigger20min = 1;
+
+// ... time limits in microseconds
+static const size_t kL0_Grooming10minMicros = 10 * 60 * 1000000;
+static const size_t kL0_Grooming20minMicros = 20 * 60 * 1000000;
 
 // Soft limit on number of level-0 files.  We slow down writes at this point.
 static const size_t kL0_SlowdownWritesTrigger = 8;

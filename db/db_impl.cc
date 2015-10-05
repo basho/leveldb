@@ -928,7 +928,7 @@ void DBImpl::BackgroundCall2(
 
   if (!shutting_down_.Acquire_Load()) {
     Status s = BackgroundCompaction(Compact);
-    if (!s.ok()) {
+    if (!s.ok() && !shutting_down_.Acquire_Load()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
       // chew up resources for failed compactions for the duration of
@@ -947,7 +947,7 @@ void DBImpl::BackgroundCall2(
   }   // else
   bg_compaction_scheduled_ = false;
   --running_compactions_;
-  versions_->SetCompactionDone(level);
+  versions_->SetCompactionDone(level, env_->NowMicros());
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
@@ -969,7 +969,7 @@ DBImpl::BackgroundImmCompactCall() {
 
   if (!shutting_down_.Acquire_Load()) {
     s = CompactMemTable();
-    if (!s.ok()) {
+    if (!s.ok() && !shutting_down_.Acquire_Load()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
       // chew up resources for failed compactions for the duration of
@@ -1194,7 +1194,6 @@ Status DBImpl::OpenCompactionOutputFile(
                   // did size change?
                   if (options.block_size!=old_size)
                   {
-                      gPerfCounters->Inc(ePerfDebug0);
                       block_size_changed_=now;
                   }   // if
               }   // if
@@ -1943,12 +1942,13 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
 #if 0   // see if this impacts smoothing or helps (but keep the counts)
+      // (original Google code left for reference)
       env_->SleepForMicroseconds(1000);
 #endif
       allow_delay = false;  // Do not delay a single write more than once
       gPerfCounters->Inc(ePerfWriteSleep);
       mutex_.Lock();
-    } else if (!force &&
+    } else if (!force && 
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
         gPerfCounters->Inc(ePerfWriteNoWait);

@@ -55,6 +55,8 @@ GroomingPollTask::operator()()
     // "false" only scan user databases, not internal
     if (0==gCompactionThreads->m_WorkQueueAtomic)
         DBList()->ScanDBs(false, &DBImpl::CheckAvailableCompactions);
+    if (0==gCompactionThreads->m_WorkQueueAtomic)
+        DBList()->ScanDBs(true, &DBImpl::CheckAvailableCompactions);
 
 }   // GroomingPollTask::operator()
 
