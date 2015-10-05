@@ -1094,9 +1094,6 @@ void Env::Shutdown()
 {
     if (started)
     {
-        delete default_env;
-        default_env=NULL;
-
         ThrottleShutdown();
     }   // if
 
@@ -1113,6 +1110,13 @@ void Env::Shutdown()
 
     delete gCompactionThreads;
     gCompactionThreads=NULL;
+
+    if (started)
+    {
+        delete default_env;
+        default_env=NULL;
+    }   // if
+
 
     // wait until compaction threads complete before
     //  releasing comparator object (else segfault possible)
