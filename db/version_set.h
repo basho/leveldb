@@ -316,7 +316,7 @@ class VersionSet {
   void SetCompactionDone(int level)
   {   m_CompactionStatus[level].m_Running=false;
       m_CompactionStatus[level].m_Submitted=false;
-      m_CompactionStatus[level].m_LastCompaction=env_->NowMicros(); }
+      m_CompactionStatus[level].m_LastCompaction=0; }
 
   bool NeighborCompactionsQuiet(int level);
 

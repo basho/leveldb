@@ -1129,15 +1129,23 @@ VersionSet::Finalize(Version* v)
         if (compact_ok)
         {
             size_t grooming_trigger;
+            uint64_t elapsed_micros;
+
+            // some platforms use gettimeofday() which can move backward
+            if ( m_CompactionStatus[level].m_LastCompaction < micros_now 
+                 && 0 != m_CompactionStatus[level].m_LastCompaction)
+                elapsed_micros=micros_now - m_CompactionStatus[level].m_LastCompaction;
+            else
+                elapsed_micros=0;
 
             // which grooming trigger point?  based upon how long
             //  since last compaction on this level
             //   - less than 10 minutes?
-            if (micros_now<(m_CompactionStatus[level].m_LastCompaction + (1000000 * 60 *10)))
+            if (elapsed_micros < config::kL0_Grooming10minMicros)
                 grooming_trigger=config::kL0_GroomingTrigger;
 
             //   - less than 20 minutes?
-            else if (micros_now<(m_CompactionStatus[level].m_LastCompaction + (1000000 * 60 *20)))
+            else if (elapsed_micros < config::kL0_Grooming20minMicros)
                 grooming_trigger=config::kL0_GroomingTrigger10min;
 
             //   - more than 20 minutes
