@@ -58,6 +58,8 @@ class Comparator {
 // must not be deleted.
 extern const Comparator* BytewiseComparator();
 
+extern const Comparator* GetBSComparator();
+
 // Riak specific: cleans up the default comparitor to make
 //  valgrind results clean
 extern void ComparatorShutdown();
