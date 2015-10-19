@@ -104,7 +104,7 @@ private:
 
 
 /**
- * Background compaction 
+ * Background compaction
  */
 
 class CompactionTask : public ThreadTask
@@ -119,11 +119,7 @@ public:
 
     virtual ~CompactionTask() {delete m_Compaction;};
 
-    virtual void operator()() 
-    {
-        m_DBImpl->BackgroundCall2(m_Compaction);
-        m_Compaction=NULL;
-    };
+    virtual void operator()();
 
 private:
     CompactionTask();
@@ -131,6 +127,28 @@ private:
     CompactionTask & operator=(const CompactionTask &);
 
 };  // class CompactionTask
+
+
+/**
+ * Poll all databases for grooming opportunities
+ */
+
+class GroomingPollTask : public ThreadTask
+{
+protected:
+
+public:
+    GroomingPollTask() {};
+
+    virtual ~GroomingPollTask() {};
+
+    virtual void operator()();
+
+private:
+    GroomingPollTask(const GroomingPollTask &);
+    GroomingPollTask & operator=(const GroomingPollTask &);
+
+};  // class GroomingPollTask
 
 
 /**
@@ -149,7 +167,7 @@ public:
 
     virtual ~LegacyTask() {};
 
-    virtual void operator()() 
+    virtual void operator()()
     {
         (*m_Function)(m_Arg);
     };

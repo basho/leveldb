@@ -961,7 +961,8 @@ TEST(DBTest, RepeatedWritesToSameKey) {
 
   // We must have at most one file per level except for level-0,
   // which may have up to kL0_StopWritesTrigger files.
-  const int kMaxFiles = config::kNumLevels + config::kL0_StopWritesTrigger;
+  //  ... basho adds *2 since level-1 is now overlapped too
+  const int kMaxFiles = config::kNumLevels + config::kL0_StopWritesTrigger*2;
 
   Random rnd(301);
   std::string value = RandomString(&rnd, 2 * options.write_buffer_size);
@@ -1199,26 +1200,27 @@ TEST(DBTest, DeletionMarkers1) {
   Put("foo", "v1");
   ASSERT_OK(dbfull()->TEST_CompactMemTable());
   const int last = config::kMaxMemCompactLevel;
-  //ASSERT_EQ(NumTableFilesAtLevel(last), 1);   // foo => v1 is now in last level
+  ASSERT_EQ(NumTableFilesAtLevel(last), 1);   // foo => v1 is now in last level
 
   // Place a table at level last-1 to prevent merging with preceding mutation
   Put("a", "begin");
   Put("z", "end");
   dbfull()->TEST_CompactMemTable();
-  //ASSERT_EQ(NumTableFilesAtLevel(last), 1);
-  //ASSERT_EQ(NumTableFilesAtLevel(last-1), 1);
+  ASSERT_EQ(NumTableFilesAtLevel(last), 1);
+  ASSERT_EQ(NumTableFilesAtLevel(last-1), 1);
 
   Delete("foo");
   Put("foo", "v2");
   ASSERT_EQ(AllEntriesFor("foo"), "[ v2, DEL, v1 ]");
-  ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level last-2
+  ASSERT_OK(dbfull()->TEST_CompactMemTable());  // stays at level 0
   ASSERT_EQ(AllEntriesFor("foo"), "[ v2, v1 ]"); // riak 1.3, DEL merged out by BuildTable
   Slice z("z");
-  dbfull()->TEST_CompactRange(last-2, NULL, &z);
+  dbfull()->TEST_CompactRange(0, NULL, &z);
+  dbfull()->TEST_CompactRange(1, NULL, &z);
   // DEL eliminated, but v1 remains because we aren't compacting that level
   // (DEL can be eliminated because v2 hides v1).
-  //ASSERT_EQ(AllEntriesFor("foo"), "[ v2, v1 ]"); Riak 1.4 has merged to level 1
-  //dbfull()->TEST_CompactRange(last-1, NULL, NULL);
+  ASSERT_EQ(AllEntriesFor("foo"), "[ v2, v1 ]"); // Riak 1.4 has merged to level 1
+  dbfull()->TEST_CompactRange(last-1, NULL, NULL);
   // Merging last-1 w/ last, so we are the base level for "foo", so
   // DEL is removed.  (as is v1).
   ASSERT_EQ(AllEntriesFor("foo"), "[ v2 ]");
@@ -1228,20 +1230,20 @@ TEST(DBTest, DeletionMarkers2) {
   Put("foo", "v1");
   ASSERT_OK(dbfull()->TEST_CompactMemTable());
   const int last = config::kMaxMemCompactLevel;
-  ASSERT_EQ(NumTableFilesAtLevel(0), 1);   // foo => v1 is now in last level
+  ASSERT_EQ(NumTableFilesAtLevel(last), 1);   // foo => v1 is now in last level
   dbfull()->TEST_CompactRange(0, NULL, NULL);
-  ASSERT_EQ(NumTableFilesAtLevel(1), 1);   // foo => v1 is now in last level
-  ASSERT_EQ(NumTableFilesAtLevel(0), 0);
+  ASSERT_EQ(NumTableFilesAtLevel(last), 1);   // foo => v1 is now in last level
+  ASSERT_EQ(NumTableFilesAtLevel(last-1), 0);
 
   // Place a table at level last-1 to prevent merging with preceding mutation
   Put("a", "begin");
   Put("z", "end");
-  dbfull()->TEST_CompactMemTable();
-  ASSERT_EQ(NumTableFilesAtLevel(0), 1);
+  dbfull()->TEST_CompactMemTable(); // goes to last-1
+  ASSERT_EQ(NumTableFilesAtLevel(last-1), 1);
 
   Delete("foo");
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
-  ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level last-2
+  ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level 0
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
   dbfull()->TEST_CompactRange(0, NULL, NULL);   // Riak overlaps level 1
   // DEL kept: "last" file overlaps
@@ -1249,7 +1251,7 @@ TEST(DBTest, DeletionMarkers2) {
   // Merging last-1 w/ last, so we are the base level for "foo", so
   // DEL is removed.  (as is v1).
   dbfull()->TEST_CompactRange(1, NULL, NULL);
-  ASSERT_EQ(AllEntriesFor("foo"), "[ DEL ]");
+  ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
 
   dbfull()->TEST_CompactRange(2, NULL, NULL);
   ASSERT_EQ(AllEntriesFor("foo"), "[ ]");
@@ -1257,7 +1259,7 @@ TEST(DBTest, DeletionMarkers2) {
 
 TEST(DBTest, OverlapInLevel0) {
   do {
-    ASSERT_EQ(config::kMaxMemCompactLevel, 2) << "Fix test to match config";
+    ASSERT_EQ(config::kMaxMemCompactLevel, 3) << "Fix test to match config";
 
     // Fill levels 1 and 2 to disable the pushing of new memtables to levels > 0.
     ASSERT_OK(Put("100", "v100"));
@@ -1269,7 +1271,7 @@ TEST(DBTest, OverlapInLevel0) {
     ASSERT_OK(Delete("999"));
     dbfull()->TEST_CompactMemTable();
     dbfull()->TEST_CompactRange(0, NULL, NULL);
-    ASSERT_EQ("0,1,1", FilesPerLevel());
+    ASSERT_EQ("0,0,1,1", FilesPerLevel());
 
     // Make files spanning the following ranges in level-0:
     //  files[0]  200 .. 900
@@ -1282,7 +1284,7 @@ TEST(DBTest, OverlapInLevel0) {
     ASSERT_OK(Put("600", "v600"));
     ASSERT_OK(Put("900", "v900"));
     dbfull()->TEST_CompactMemTable();
-    ASSERT_EQ("2,1,1", FilesPerLevel());
+    ASSERT_EQ("2,0,1,1", FilesPerLevel());
 
     // Compact away the placeholder files we created initially
     dbfull()->TEST_CompactRange(1, NULL, NULL);
@@ -1421,40 +1423,37 @@ TEST(DBTest, CustomComparator) {
 }
 
 TEST(DBTest, ManualCompaction) {
-  ASSERT_EQ(config::kMaxMemCompactLevel, 2)
+  ASSERT_EQ(config::kMaxMemCompactLevel, 3)
       << "Need to update this test to match kMaxMemCompactLevel";
 
   MakeTables(3, "p", "q");
-  ASSERT_EQ("3", FilesPerLevel());
+  ASSERT_EQ("1,0,1,1", FilesPerLevel());
 
   // Compaction range falls before files
-  // (Basho compacts all at zero no matter what)
   Compact("", "c");
-  //ASSERT_EQ("3", FilesPerLevel());
-  ASSERT_EQ("0,1", FilesPerLevel());
+  ASSERT_EQ("0,1,1,1", FilesPerLevel());
 
   // Compaction range falls after files
   Compact("r", "z");
-  //ASSERT_EQ("3", FilesPerLevel());
-  ASSERT_EQ("0,1", FilesPerLevel());
+  ASSERT_EQ("0,1,1,1", FilesPerLevel());
 
   // Compaction range overlaps files
   Compact("p1", "p9");
-  ASSERT_EQ("0,1", FilesPerLevel());
+  ASSERT_EQ("0,0,0,1", FilesPerLevel());
 
   // Populate a different range
   MakeTables(3, "c", "e");
-  ASSERT_EQ("3,1", FilesPerLevel());
+  ASSERT_EQ("1,0,1,2", FilesPerLevel());
 
   // Compact just the new range
   Compact("b", "f");
-  ASSERT_EQ("0,2", FilesPerLevel());
+  ASSERT_EQ("0,0,0,2", FilesPerLevel());
 
   // Compact all
   MakeTables(1, "a", "z");
-  ASSERT_EQ("1,2", FilesPerLevel());
+  ASSERT_EQ("0,0,1,2", FilesPerLevel());
   db_->CompactRange(NULL, NULL);
-  ASSERT_EQ("0,3", FilesPerLevel());
+  ASSERT_EQ("0,0,0,1", FilesPerLevel());
 }
 
 TEST(DBTest, DBOpen_Options) {

@@ -63,15 +63,6 @@ class TableCache {
 
   void Release(Cache::Handle * handle) {cache_->Release(handle);};
 
-  // routine called if Options::cache_object_warming is true.
-  //  Writes list of all file names currently in file cache to disk.
-  void SaveOpenFileList();
-
-  // routine called if Options::cache_object_warming is true.
-  //  Reads file created by SaveOpenFileList() and attempts to open
-  //  every file.
-  void PreloadTableCache();
-
  private:
   Env* const env_;
   const std::string dbname_;
@@ -87,13 +78,9 @@ struct TableAndFile {
   RandomAccessFile* file;
   Table* table;
   DoubleCache * doublecache;
-  uint64_t file_number;     // saved for cache object warming
-  int level;                // saved for cache object warming
 
    TableAndFile()
-   : file(NULL), table(NULL), doublecache(NULL),
-     file_number(0), level(0)
-   {};
+   : file(NULL), table(NULL), doublecache(NULL) {};
 };
 
 

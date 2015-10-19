@@ -220,11 +220,6 @@ struct Options {
   // array.  levels tiered_slow_level through 6 use this path prefix
   std::string tiered_slow_prefix;
 
-  // Riak specific option that writes a list of open table files
-  // to disk on close then automatically opens same files again
-  // upon restart.
-  bool cache_object_warming;
-
   // Create an Options object with default values for all fields.
   Options();
 

@@ -222,8 +222,8 @@ TEST(CorruptionTest, NewFileErrorDuringWrite) {
   const int num = 3 + (Options().write_buffer_size / kValueSize);
   std::string value_storage;
   Status s;
-  for (int i = 0; 
-       s.ok() && i < num && 0==env_.num_writable_file_errors_; 
+  for (int i = 0;
+       s.ok() && i < num && 0==env_.num_writable_file_errors_;
        i++) {
     WriteBatch batch;
     batch.Put("a", Value(100, &value_storage));
@@ -242,7 +242,7 @@ TEST(CorruptionTest, TableFile) {
   dbi->TEST_CompactRange(0, NULL, NULL);
   dbi->TEST_CompactRange(1, NULL, NULL);
 
-  Corrupt(kTableFile, 100, 1, 2);
+  Corrupt(kTableFile, 100, 1, config::kMaxMemCompactLevel);
   Check(95, 99);
 }
 
@@ -250,8 +250,8 @@ TEST(CorruptionTest, TableFileIndexData) {
   Build(100000);  // Enough to build multiple Tables
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  // was level-2, now level-0
-  Corrupt(kTableFile, -2000, 500, 0);
+
+  Corrupt(kTableFile, -2000, 500, config::kMaxMemCompactLevel);
   Reopen();
   Check(50000, 99999);
 }
@@ -305,10 +305,10 @@ TEST(CorruptionTest, CompactionInputError) {
   Build(10);
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  //const int last = config::kMaxMemCompactLevel; // Riak does not "move" files
-  //ASSERT_EQ(1, Property("leveldb.num-files-at-level" + NumberToString(last)));
+  const int last = config::kMaxMemCompactLevel; // Riak does not "move" files
+  ASSERT_EQ(1, Property("leveldb.num-files-at-level" + NumberToString(last)));
 
-  Corrupt(kTableFile, 100, 1, 0);
+  Corrupt(kTableFile, 100, 1, last);
   Check(5, 9);
 
   // Force compactions by writing lots of values
@@ -328,10 +328,10 @@ TEST(CorruptionTest, CompactionInputErrorParanoid) {
   // Fill levels >= 1 so memtable compaction outputs to level 1
   //  matthewv 1/10/14 - what does "levels" have to do with this,
   //  switching to compaction trigger.
-  // 7/10/14 - compaction starts between 4 and 6 files ... assume 4
+  // 7/10/14 - compaction starts between 4 and 6 files ... assume 4 and 1 move
   //  (will make a new, descriptive constant for 4)
   for (int level = Property("leveldb.num-files-at-level0")+1;
-       level < (config::kL0_GroomingTrigger -1); level++) {
+       level < config::kL0_GroomingTrigger; level++) {
     dbi->Put(WriteOptions(), "", "begin");
     dbi->Put(WriteOptions(), "~", "end");
     dbi->TEST_CompactMemTable();
@@ -360,7 +360,7 @@ TEST(CorruptionTest, UnrelatedKeys) {
   Build(10);
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  Corrupt(kTableFile, 100, 1, 0);
+  Corrupt(kTableFile, 100, 1, config::kMaxMemCompactLevel);
 
   std::string tmp1, tmp2;
   ASSERT_OK(db_->Put(WriteOptions(), Key(1000, &tmp1), Value(1000, &tmp2)));

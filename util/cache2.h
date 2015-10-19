@@ -24,7 +24,7 @@
 #define STORAGE_LEVELDB_INCLUDE_CACHE2_H_
 
 #include <stdint.h>
-#include <string>
+#include <time.h>
 #include "leveldb/atomics.h"
 #include "leveldb/cache.h"
 #include "leveldb/options.h"
@@ -58,7 +58,6 @@ public:
     void SetPlentySpace(bool PlentySpace) {m_PlentySpace=PlentySpace;};
     bool GetPlentySpace() const {return(m_PlentySpace);};
     void PurgeExpiredFiles();
-    size_t WriteCacheObjectWarming(std::string & Dest);
 
     bool IsInternalDB() const {return(m_IsInternalDB);};
 
