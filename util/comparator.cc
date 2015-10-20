@@ -123,10 +123,20 @@ class BSComparator : public Comparator {
     return actual;
   }
 
-  static uint32_t GetTsb( Slice &s) {
-    uint32_t actual = DecodeFixed32(s.data());
-    s.remove_prefix(4);
-    return actual;
+  static Slice GetTsb( Slice &s) {
+    Slice res = Slice(s.data(), 1); // one byte a or r
+    s.remove_prefix(1);
+    return res;
+  }
+
+  static Slice GetKeyType(Slice &s) {
+    Slice res = Slice(s.data(), 1); // one byte c, e, or z
+    s.remove_prefix(1);
+    return res;
+  }
+
+  static bool IsClock(Slice &s) {
+    return s[0] == 'c';
   }
 
     virtual int Compare(const Slice& a, const Slice& b) const {
@@ -142,16 +152,33 @@ class BSComparator : public Comparator {
       if(set_cmp) {
         return set_cmp;
       }
-      // Same set? check element (clock has no element so sorts lower?)
+      // Same set?
+      // check keytype byte (0=clock, 1=element,2=end_key)
+      Slice a_keytype = GetKeyType(ac), b_keytype = GetKeyType(bc);
 
+      int key_type_cmp = a_keytype.compare(b_keytype);
+
+      if(key_type_cmp) {
+        return key_type_cmp;
+      }
+
+      // same type & same set, but not the same key? can't be an end key!
+      if(IsClock(a_keytype)) {
+        // compare actor, actor is only data left in key, so just
+        // compare slices
+        return ac.compare(bc);
+      }
+
+      // compare element etc
       Slice aelem = Get32PrefData(ac), belem = Get32PrefData(bc);
-
       int elem_cmp = aelem.compare(belem);
 
       if(elem_cmp) {
         return elem_cmp;
       }
 
+      //if here, same element (even if element is absent (a clock))
+      // so check the actor
       //if here, same element (even if element is absent (a clock))
       // so check the actor
       Slice a_actor = Get32PrefData(ac), b_actor = Get32PrefData(bc);
@@ -174,10 +201,10 @@ class BSComparator : public Comparator {
       }
 
       // same set, element, actor and counter but not the same key?
-      // Look at the TSB @TODO need a DecodeFixed8 in coding.h
-      uint32_t a_tsb = GetTsb(ac), b_tsb=GetTsb(bc);
-      uint32_t tsb_cmp = a_tsb - b_tsb;
-      return tsb_cmp;
+      // Look at the TSB
+      Slice a_tsb = GetTsb(ac), b_tsb = GetTsb(bc);
+
+      return  a_tsb.compare(b_tsb);
     }
 
     // No need to shorten keys since it's fixed size.
@@ -189,7 +216,7 @@ class BSComparator : public Comparator {
     virtual void FindShortSuccessor(std::string* key) const {
     }
 
-};
+  };
 
 }  // namespace
 
