@@ -25,7 +25,7 @@ namespace leveldb {
 
 class AppendableFile;
 class FileLock;
-class Options;
+struct Options;
 class Logger;
 class RandomAccessFile;
 class SequentialFile;
