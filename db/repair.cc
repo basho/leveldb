@@ -54,8 +54,6 @@ class Repairer {
         icmp_(options.comparator),
         ipolicy_(options.filter_policy),
         owns_info_log_(options_.info_log != options.info_log),
-        owns_cache_(options_.block_cache != options.block_cache),
-        has_level_dirs_(false),
         db_lock_(NULL),
         next_file_number_(1)
   {
@@ -170,8 +168,6 @@ class Repairer {
   InternalKeyComparator const icmp_;
   InternalFilterPolicy const ipolicy_;
   bool owns_info_log_;
-  bool owns_cache_;
-  bool has_level_dirs_;
   FileLock* db_lock_;
   TableCache* table_cache_;
   VersionEdit edit_;

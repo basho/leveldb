@@ -857,18 +857,15 @@ class PosixEnv : public Env {
   // Entry per Schedule() call
   struct BGItem { void* arg; void (*function)(void*); int priority;};
 
-  volatile uint64_t write_rate_usec_; // recently experienced average time to
-                                      // write one key during background compaction
-
 };
 
 
 PosixEnv::PosixEnv() : page_size_(getpagesize()),
-                       clock_res_(1), write_rate_usec_(0)
+                       clock_res_(1)
 {
-  struct timespec ts;
 
 #if _POSIX_TIMERS >= 200801L
+  struct timespec ts;
   clock_getres(CLOCK_MONOTONIC, &ts);
   clock_res_=ts.tv_sec*1000000+ts.tv_nsec/1000;
   if (0==clock_res_)
