@@ -75,30 +75,27 @@ class BytewiseComparatorImpl : public Comparator {
 //  <<
 //    SetNameLen:32/little-unsigned-integer, %% the lengthof the set name
 //    SetName:SetNameLen/binary, %% Set name for bytewise comparison
-//    ElementLen:32/little-unsigned-integer, %% Zero for clock key
-//    ActorLen:32/little-unsigned-integer, %% Length of the actor ID
-//    Actor:ActorLen/binary, %% The actual actor
+//    $c, %% means clock
+//    Actor/binary, %% The actual actor
 //    >>
 // Element keys are
 //  <<
 //    SetNameLen:32/little-unsigned-integer, %% the length of the set name
 //    SetName:SetNameLen/binary, %% Set name for bytewise comparison
+//    $e, % indicates an element
 //    ElementLen:32/little-unsigned-integer, %% Length of the element
 //    Element:ElementLen/binary, %% The actual element
 //    ActorLen:32/little-unsigned-integer, %% Length of the actor ID
 //    Actor:ActorLen/binary, %% The actual actor
 //    Counter:64/little-unsigned-integer,
-//    TSB:32/little-unsigned-integer, %% 1|0 to determine if the key is an add or a tombstone
+//    $a | $r:8/binary, %% a|r single byte char to determine if the key is an add or a tombstone
 //    >>
-//
-// Assumes first 8 bytes are a little endian 64 bit unsigned integer,
-// followed by family name size encoded in 2 little endian bytes,
-// followed by the bytes forming the series name.
-// TODO: Implement data dictionary, which changes the second part of the key
-// from a byte array to a 4 byte little endian 32 bit unsigned integer.
-// TODO: Add series family. A variable length string before the series name.
-// When the family is present, sorting changes to (family, time, series).
-// Without a family, it's (series, time).
+//  End Key is:
+//  <<
+//    SetNameLen:32/little-unsigned-integer, %% the lengthof the set name
+//    SetName:SetNameLen/binary, %% Set name for bytewise comparison
+//    $z, %% means end key, used for limiting streaming fold
+//    >>
 
 class BSComparator : public Comparator {
   protected:
