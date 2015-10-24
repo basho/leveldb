@@ -126,7 +126,7 @@ main(
             bool ignore_file;
             std::string cur_path, record;
             size_t line_count;
-            char buffer[PATH_MAX], vnode[PATH_MAX], file[NAME_MAX], * chr_ptr;
+            char buffer[PATH_MAX+1], vnode[PATH_MAX+1], file[NAME_MAX+1], * chr_ptr;
             int level, ret_val;
             uint64_t file_no, file_size;
             struct stat file_stat;
@@ -250,7 +250,6 @@ main(
 
     // cleanup
     leveldb::Env::Default()->Shutdown();
-//    delete options.filter_policy;
 
     if (1==argc)
         command_help();
@@ -263,14 +262,9 @@ main(
 void
 command_help()
 {
-    fprintf(stderr, "sst_rewrite [option | file]*\n");
+    fprintf(stderr, "cache_warm [option | file]*\n");
     fprintf(stderr, "  options\n");
-    fprintf(stderr, "      -b  value  set Options.block_size to value\n");
-    fprintf(stderr, "      -n  set Options.compression to No compression\n");
-    fprintf(stderr, "      -s  set Options.compression to Snappy compression\n");
-    fprintf(stderr, "      -z  set Options.compression to LZ4 compression\n");
-    fprintf(stderr, "      -c  compare next two files (inverse of -w)\n");
-    fprintf(stderr, "      -w  rewrite next file (default, inverse of -c)\n");
+    fprintf(stderr, "     No options at this time.\n");
 }   // command_help
 
 namespace leveldb {

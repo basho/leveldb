@@ -5,8 +5,10 @@ build_config.mk
 *.so
 *.so.*
 *_test
+cache_warm
 db_bench
 leveldb_repair
 perf_dump
 sst_scan
+sst_rewrite
 *~
