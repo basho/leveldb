@@ -510,7 +510,7 @@ bool SkipList<Key,Comparator>::Valid() const
 
   // Ensure that the list is properly sorted; use an iterator for this check
   const Key* pPrevKey = NULL;
-  SkipList<Key, Comparator>::Iterator iter(this);
+  typename SkipList<Key, Comparator>::Iterator iter(this);
   for ( iter.SeekToFirst(); iter.Valid(); iter.Next() ) {
     if ( pPrevKey != NULL ) {
       if ( compare_( *pPrevKey, iter.key() ) >= 0 ) {
