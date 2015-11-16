@@ -408,11 +408,11 @@ SkipList<Key,Comparator>::SkipList(Comparator cmp, Arena* arena)
     : compare_(cmp),
       arena_(arena),
       head_(NewNode(0 /* any key will do */, kMaxHeight)),
+      max_height_(reinterpret_cast<void*>(1)),
+      rnd_(0xdeadbeef),
       tail_(NULL),
       tailHeight_(0),
-      sequentialInsertMode_(true),
-      max_height_(reinterpret_cast<void*>(1)),
-      rnd_(0xdeadbeef) {
+      sequentialInsertMode_(true) {
   for (int i = 0; i < kMaxHeight; i++) {
     head_->SetNext(i, NULL);
     tailPrev_[i] = NULL;
@@ -510,7 +510,7 @@ bool SkipList<Key,Comparator>::Valid() const
 
   // Ensure that the list is properly sorted; use an iterator for this check
   const Key* pPrevKey = NULL;
-  SkipList<Key, Comparator>::Iterator iter(this);
+  typename SkipList<Key, Comparator>::Iterator iter(this);
   for ( iter.SeekToFirst(); iter.Valid(); iter.Next() ) {
     if ( pPrevKey != NULL ) {
       if ( compare_( *pPrevKey, iter.key() ) >= 0 ) {

@@ -716,7 +716,7 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     const Slice max_user_key = meta.largest.user_key();
     if (base != NULL) {
         int level_limit;
-        if (0!=options_.tiered_slow_level && (options_.tiered_slow_level-1)<config::kMaxMemCompactLevel)
+        if (0!=options_.tiered_slow_level && (options_.tiered_slow_level-1)<static_cast<unsigned>(config::kMaxMemCompactLevel))
             level_limit=options_.tiered_slow_level-1;
         else
             level_limit=config::kMaxMemCompactLevel;
