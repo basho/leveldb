@@ -272,6 +272,15 @@ extern leveldb_env_t* leveldb_create_default_env();
 extern void leveldb_env_destroy(leveldb_env_t*);
 extern void leveldb_env_shutdown();
 
+/* Util */
+
+extern void leveldb_free(void* ptr);
+
+/* Version */
+
+extern int leveldb_major_version();
+extern int leveldb_minor_version();
+
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
