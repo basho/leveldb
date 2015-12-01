@@ -243,7 +243,7 @@ class VersionSet {
   // being compacted, or zero if there is no such log file.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
-  int WriteThrottleUsec(bool active_compaction)
+  int WriteThrottleUsec()
   {
       uint64_t penalty, throttle;
       int ret_val;

@@ -68,7 +68,7 @@ struct ThrottleData_t
 //  most recent interval statistics for last hour.
 ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
 
-uint64_t gThrottleRate, gUnadjustedThrottleRate;
+volatile uint64_t gThrottleRate, gUnadjustedThrottleRate;
 
 static volatile bool gThrottleRunning=false;
 static pthread_t gThrottleThreadId;
@@ -107,7 +107,7 @@ ThrottleThread(
 {
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
     int replace_idx, loop, ret_val;
-    uint64_t new_throttle, new_unadjusted;
+    uint64_t new_throttle, new_unadjusted, temp_throttle;
     time_t now_seconds, cache_expire;
     struct timespec wait_time;
 
@@ -184,6 +184,7 @@ ThrottleThread(
 
         // lock gThrottleMutex while we update gThrottleData
         {
+<<<<<<< HEAD
             MutexLock lock(gThrottleMutex);
 
             // capture current state of level-0 and other levels' backlog
@@ -252,6 +253,68 @@ ThrottleThread(
             // prepare for next interval
             memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
         } // unlock gThrottleMutex
+=======
+            if (0==tot_compact)
+                tot_compact=1;
+
+            // average write time for level 1+ compactions per key
+            //   times the average number of tasks waiting
+            //   ( the *100 stuff is to exploit fractional data in integers )
+            new_throttle=((tot_micros*100) / tot_keys)
+                * ((tot_backlog*100) / tot_compact);
+
+            new_throttle /= 10000;  // remove *100 stuff
+            //new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
+
+            if (0==new_throttle)
+                new_throttle=1;     // throttle must have an effect
+
+            new_unadjusted=(tot_micros*100) / tot_keys;
+            new_unadjusted /= 100;
+            if (0==new_unadjusted)
+                new_unadjusted=1;
+        }   // if
+
+        // attempt to most recent level0
+        //  (only use most recent level0 until level1+ data becomes available,
+        //   useful on restart of heavily loaded server)
+        else if (0!=gThrottleData[0].m_Keys && 0!=gThrottleData[0].m_Compactions)
+        {
+            new_throttle=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys)
+                * (gThrottleData[0].m_Backlog / gThrottleData[0].m_Compactions);
+
+            new_unadjusted=(gThrottleData[0].m_Micros / gThrottleData[0].m_Keys);
+            if (0==new_unadjusted)
+                new_unadjusted=1;
+        }   // else if
+        else
+        {
+            new_throttle=1;
+        }   // else
+
+        // change the throttle slowly
+        temp_throttle=gThrottleRate;
+
+        if (gThrottleRate < new_throttle)
+            temp_throttle+=(new_throttle - gThrottleRate)/THROTTLE_SCALING;
+        else
+            temp_throttle-=(gThrottleRate - new_throttle)/THROTTLE_SCALING;
+
+        if (0==temp_throttle)
+            temp_throttle=1;   // throttle must always have an effect
+
+        // use sync operation to force full barrier assignment
+        compare_and_swap(&gThrottleRate, (uint64_t)gThrottleRate, temp_throttle);
+        compare_and_swap(&gUnadjustedThrottleRate, (uint64_t)gUnadjustedThrottleRate, new_unadjusted);
+
+        gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
+        gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
+        gPerfCounters->Set(ePerfThrottleUnadjusted, gUnadjustedThrottleRate);
+
+        // prepare for next interval
+        memset(&gThrottleData[0], 0, sizeof(gThrottleData[0]));
+        pthread_mutex_unlock(&gThrottleMutex);
+>>>>>>> Initial coding of leveldb side. mutex_ still live but most other stuff bypassed.
 
         ++replace_idx;
         if (THROTTLE_INTERVALS==replace_idx)
@@ -326,8 +389,9 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
     return;
 };
 
-uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
-uint64_t GetUnadjustedThrottleWriteRate() {return(gUnadjustedThrottleRate);};
+// add_and_fetch() used to force memory barrier operations
+uint64_t GetThrottleWriteRate() {return(add_and_fetch(&gThrottleRate, (uint64_t)0));};
+uint64_t GetUnadjustedThrottleWriteRate() {return(add_and_fetch(&gUnadjustedThrottleRate,(uint64_t)0));};
 
 // clock_gettime but only updated once every 60 seconds (roughly)
 uint64_t GetTimeMinutes() {return(gCurrentTime);};

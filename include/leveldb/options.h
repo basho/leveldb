@@ -352,8 +352,18 @@ struct WriteOptions {
   // Default: false
   bool sync;
 
+  // This is used in conjunction with Erlang eleveldb driver.
+  // Not useful outside that context.  If write is known to
+  // block, for any reason, eleveldb must switch to non-scheduler
+  // thread.  This flag informs leveldb that eleveldb received
+  // a "ticket" to guarantee it would not block, throttle, etc.
+  // The guarantee is not 100%, but sufficient.
+  //
+  // Default:  false
+  bool non_blocking;
+
   WriteOptions()
-      : sync(false) {
+  : sync(false), non_blocking(false) {
   }
 };
 

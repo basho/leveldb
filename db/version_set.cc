@@ -1627,6 +1627,7 @@ VersionSet::PickCompaction(
 
   // perform this once per call ... since Finalize now loops
   UpdatePenalty(current_);
+  db_impl->SetLastPenalty(current_->write_penalty_);
 
   // submit a work object for every valid compaction needed
   current_->compaction_level_=-1;
