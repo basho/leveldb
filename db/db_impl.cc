@@ -1858,11 +1858,13 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   if (0==add_and_fetch(&non_block_tickets_, (uint32_t)0))
   {
       throttle=versions_->WriteThrottleUsec();
+      gPerfCounters->Inc(ePerfDebug0);
   }   // if
   else
   {
       dec_and_fetch(&non_block_tickets_);
       throttle=0;
+      gPerfCounters->Inc(ePerfDebug1);
   }   // else
   }  // release  MutexLock l(&mutex_)
 
