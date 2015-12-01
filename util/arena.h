@@ -9,6 +9,7 @@
 #include <vector>
 #include <assert.h>
 #include <stdint.h>
+#include "leveldb/atomics.h"
 
 namespace leveldb {
 
@@ -26,8 +27,9 @@ class Arena {
   // Returns an estimate of the total memory usage of data allocated
   // by the arena (including space allocated but not yet used for user
   // allocations).
-  size_t MemoryUsage() const {
-    return blocks_memory_ + blocks_.capacity() * sizeof(char*);
+  //  add_and_fetch( x, 0) used to create memory barrier for sync free retrieval
+  size_t MemoryUsage() {
+      return add_and_fetch(&blocks_memory_, (size_t)0);
   }
 
  private:
@@ -42,7 +44,8 @@ class Arena {
   std::vector<char*> blocks_;
 
   // Bytes of memory in blocks allocated so far
-  size_t blocks_memory_;
+  //  (volatile likely not needed, but safe)
+  volatile size_t blocks_memory_;
 
   // No copying allowed
   Arena(const Arena&);

@@ -1118,7 +1118,7 @@ VersionSet::Finalize(Version* v)
             uint64_t elapsed_micros;
 
             // some platforms use gettimeofday() which can move backward
-            if ( m_CompactionStatus[level].m_LastCompaction < micros_now 
+            if ( m_CompactionStatus[level].m_LastCompaction < micros_now
                  && 0 != m_CompactionStatus[level].m_LastCompaction)
                 elapsed_micros=micros_now - m_CompactionStatus[level].m_LastCompaction;
             else
@@ -1572,6 +1572,7 @@ VersionSet::PickCompaction(
 
   // perform this once per call ... since Finalize now loops
   UpdatePenalty(current_);
+  db_impl->SetLastPenalty(current_->write_penalty_);
 
   // submit a work object for every valid compaction needed
   current_->compaction_level_=-1;

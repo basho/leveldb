@@ -46,6 +46,7 @@ class DBImpl : public DB {
   virtual void CompactRange(const Slice* begin, const Slice* end);
   virtual Status VerifyLevels();
   virtual void CheckAvailableCompactions();
+  virtual bool RequestNonBlockTicket();
 
   // Extra methods (for testing) that are not in the public DB interface
 
@@ -72,6 +73,11 @@ class DBImpl : public DB {
   void BackgroundImmCompactCall();
   bool IsCompactionScheduled();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
+
+  // memory barrier set/retrieval of last_penalty_
+  uint64_t GetLastPenalty() {return(add_and_fetch(&last_penalty_, (uint64_t)0));};
+  void SetLastPenalty(uint64_t NewPenalty)
+  {compare_and_swap(&last_penalty_, (uint64_t)last_penalty_, NewPenalty);};
 
  private:
   friend class DB;
@@ -210,6 +216,8 @@ class DBImpl : public DB {
   volatile size_t current_block_size_;    // last dynamic block size computed
   volatile uint64_t block_size_changed_;  // NowMicros() when block size computed
   volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
+  volatile uint32_t non_block_tickets_;   // how many non-blocking writes promised?
+  volatile uint64_t last_penalty_;        // most recent Version->penalty_ value seen
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};
