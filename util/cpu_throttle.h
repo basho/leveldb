@@ -19,7 +19,10 @@
 #ifndef STORAGE_LEVELDB_CPU_THROTTLE_H_
 #define STORAGE_LEVELDB_CPU_THROTTLE_H_ 1
 
-#include <pthread.h>
+#include "port/port.h"
+
+#define CPU_THROTTLER_STATS 1
+#define CPU_THROTTLER_DEBUG 1
 
 namespace leveldb {
 
@@ -30,28 +33,24 @@ public:
     CpuThrottler(unsigned max_cpu_percent);
     ~CpuThrottler();
 
+    //  These return the value the resulting 'held' status
     bool    acquire();
-    void    release();
+    bool    release();
 
+#if CPU_THROTTLER_STATS
     inline  unsigned    running() { return cpus_used; }
     inline  unsigned    waiters() { return n_waiting; }
+#endif
 
 private:
 
     unsigned      const cpus_max;
     unsigned   volatile cpus_used;
-
-    //  just for observation, may be removed
+#if CPU_THROTTLER_STATS
     unsigned   volatile n_waiting;
-
-    pthread_mutex_t     sync;
-    pthread_cond_t      cond;
-
-    //  report a fatal error, does not return!
-    static  void        fatal_error(unsigned line, const char * func, int err);
-
-    //  get the maximum number of CPUs to use
-    static  unsigned    calc_cpu_max(unsigned max_cpu_percent);
+#endif
+    ::leveldb::port::Mutex      sync;
+    ::leveldb::port::CondVar    cond;
 
     //  prohibit copies
     CpuThrottler(const CpuThrottler &);
@@ -62,48 +61,26 @@ class CpuThrottle
 {
 public:
 
-    inline  void  acquire()
-    {
-        if (! held)
-            held = inst->acquire();
-    }
-    inline  void  release()
-    {
-        if (held)
-        {
-            inst->release();
-            held = false;
-        }
-    }
-    inline  CpuThrottle(bool hold) : held(false)
-    {
-        if (hold)
-            acquire();
-    }
-    inline  CpuThrottle() : held(false)
-    {
-        acquire();
-    }
-    inline ~CpuThrottle()
-    {
-        release();
-    }
+    inline  void  acquire() { if (! held) held = inst->acquire(); }
+    inline  void  release() { if (held) held = inst->release(); }
+
+    inline  CpuThrottle(bool hold) : held(false) { if (hold) acquire(); }
+    inline  CpuThrottle() : held(false) { acquire(); }
+    inline ~CpuThrottle() { release(); }
     //
     //  Initialize to a reasonable number of in-use CPUs based on a specified
     //  percentage from 1 to 100.  Silly values will be adjusted accordingly.
     //  In all cases, at least one CPU will be used.
     //
     static  void  init(unsigned max_cpu_percent);
-    //
-    //  These are just for access to the implementation state, they have no
-    //  value beyond evaluation.
-    //
+#if CPU_THROTTLER_STATS
     static  inline  unsigned    running()   { return inst->running(); }
     static  inline  unsigned    waiters()   { return inst->waiters(); }
+#endif
 
 private:
 
-            bool            held;
+    bool    held;
     static  CpuThrottler *  inst;
 
     //  prohibit copies
