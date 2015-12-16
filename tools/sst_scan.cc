@@ -1,5 +1,7 @@
 #include <stdlib.h>
 #include <libgen.h>
+#include <arpa/inet.h>
+#include <ctype.h>
 
 #include "db/filename.h"
 #include "leveldb/env.h"
@@ -18,6 +20,11 @@
 //#include "db/log_reader.h"
 
 void command_help();
+
+static bool DumpRiakValue(const char * Data, size_t Size);
+static bool DumpRiakObj1(const char * Data, size_t Size);
+static bool DumpSibling(size_t & FieldSize, const char * Data, size_t Size);
+static void DumpBinary(const char * Header, const char * Data, size_t Size);
 
 int
 main(
@@ -211,6 +218,9 @@ main(
                     // Walk all keys in each block.
                     for (it->SeekToFirst(), count=0; it->Valid() && !summary_only; it->Next())
                     {
+                        std::string ckey, pkey;
+                        std::string cvalue, pvalue;
+
                         ++count;
                         it2=leveldb::Table::TEST_BlockReader(table, read_options, it->value());
                         for (it2->SeekToFirst(), count2=0; it2->Valid(); it2->Next())
@@ -230,6 +240,26 @@ main(
                                     ParseInternalKey(key, &parsed);
                                     printf("%s block_key %s\n", parsed.DebugStringHex().c_str(), table_name.c_str());
                                 }   // if
+
+                                leveldb::ParsedInternalKey cur;
+                                ParseInternalKey(it2->key(), &cur);
+                                ckey=cur.user_key.ToString();
+                                cvalue=it2->value().ToString();
+
+                                if (1!=count2)
+                                {
+                                    if (0==pkey.compare(ckey))
+                                    {
+//                                        printf("prev %zd, cur %zd, memcmp %d\n", pvalue.size(), cvalue.size(),
+//                                               memcmp(pvalue.data(), cvalue.data(), pvalue.size()));
+                                        DumpRiakValue(pvalue.data(), pvalue.size());
+                                        printf("\n");
+                                        DumpRiakValue(cvalue.data(), cvalue.size());
+                                        printf("\n\n");
+                                    }
+                                }   // if
+                                pkey=ckey;
+                                pvalue=cvalue;
                             }   // if
                             else
                             {
@@ -334,3 +364,217 @@ namespace leveldb {
 
 }  // namespace leveldb
 
+
+static bool
+DumpRiakValue(
+    const char * Data,
+    size_t Size)
+{
+    bool good(true);
+    const char * cursor;
+
+    if (2<=Size && NULL!=Data && 0x35==*Data)
+    {
+        cursor=Data;
+        ++cursor;
+
+        // object type / version
+        switch(*cursor)
+        {
+            case 1:
+                good=DumpRiakObj1(cursor+1, Size-2);
+                break;
+
+            default:
+                good=false;
+                break;
+        }   // switch
+    }   // if
+    else
+    {
+        // do not know this type, version 0 maybe?
+        good=false;
+    }   // else
+
+    return(good);
+
+}   // DumpRiakValue
+
+
+static bool
+DumpRiakObj1(
+    const char * Data,
+    size_t Size)
+{
+    bool good(true);
+    int32_t vclock_len, sib_count, loop;
+    const char * vclock_ptr, * sib_ptr, *cursor;
+    size_t remaining, field_size;
+
+    remaining=Size;
+    cursor=Data;
+
+    field_size=sizeof(vclock_len);
+    if (good && field_size<=remaining)
+    {
+        vclock_len=ntohl(*(int32_t *)cursor);
+        cursor+=field_size;
+        remaining-=field_size;
+    }   // if
+    else
+        good=false;
+
+    field_size=vclock_len;
+    if (good && field_size<=remaining)
+    {
+        vclock_ptr=cursor;
+        cursor+=field_size;
+        remaining-=field_size;
+
+        DumpBinary("Vclock:", vclock_ptr, vclock_len);
+    }   // if
+    else
+        good=false;
+
+    field_size=sizeof(sib_count);
+    if (good && field_size<=remaining)
+    {
+        sib_count=ntohl(*(int32_t *)cursor);
+        cursor+=field_size;
+        remaining-=field_size;
+    }   // if
+    else
+        good=false;
+
+    for (loop=0; loop<sib_count && good && 0<remaining; ++loop)
+    {
+        good=DumpSibling(field_size, cursor, remaining);
+        cursor+=field_size;
+        remaining-=field_size;
+    }   // for
+
+    return(good);
+
+}   // DumpRiakObj1
+
+
+static bool
+DumpSibling(
+    size_t & FieldSize,
+    const char * Data,
+    size_t Size)
+{
+    bool good(true);
+    int32_t val_len, meta_len;
+    const char * val_ptr, * meta_ptr, *cursor;
+    size_t remaining, field_size;
+
+    remaining=Size;
+    cursor=Data;
+
+    field_size=sizeof(val_len);
+    if (good && field_size<=remaining)
+    {
+        val_len=ntohl(*(int32_t *)cursor);
+        cursor+=field_size;
+        remaining-=field_size;
+    }   // if
+    else
+        good=false;
+
+    field_size=val_len;
+    if (good && field_size<=remaining)
+    {
+        val_ptr=cursor;
+        cursor+=field_size;
+        remaining-=field_size;
+
+        DumpBinary("Value:", val_ptr, val_len);
+    }   // if
+    else
+        good=false;
+
+    field_size=sizeof(meta_len);
+    if (good && field_size<=remaining)
+    {
+        meta_len=ntohl(*(int32_t *)cursor);
+        cursor+=field_size;
+        remaining-=field_size;
+    }   // if
+    else
+        good=false;
+
+    field_size=meta_len;
+    if (good && field_size<=remaining)
+    {
+        meta_ptr=cursor;
+        cursor+=field_size;
+        remaining-=field_size;
+
+        DumpBinary("Meta:", meta_ptr, meta_len);
+    }   // if
+    else
+        good=false;
+
+    FieldSize=cursor - Data;
+
+    return(good);
+
+}   // DumpSibling
+
+
+static void
+DumpBinary(
+    const char * Header,
+    const char * Data,
+    size_t Size)
+{
+    const char * cursor;
+    size_t pos;
+
+    if (NULL!=Header)
+        printf("%s:", Header);
+
+    printf("(length %zd)\n", Size);
+
+    if (NULL!=Data && 0!=Size)
+    {
+        pos=0;
+        cursor=Data;
+
+        while(pos<Size)
+        {
+            int loop;
+            const unsigned char * cursor1;
+            size_t pos1;
+
+            cursor1=(unsigned char *)cursor;
+            pos1=pos;
+
+            for (loop=0; loop<16; ++loop, ++cursor1, ++pos1)
+            {
+                if (0==loop)
+                    printf("   %4x: ", pos1);
+
+                if (pos1<Size)
+                    printf(" %02x ", (unsigned)*cursor1);
+                else
+                    printf("    ");
+            }   // for
+
+            for (loop=0; loop<16; ++loop, ++cursor, ++pos)
+            {
+                if (0==loop)
+                    printf("    ", pos);
+
+                if (pos<Size)
+                    printf("%c", isprint(*cursor)?(int)*cursor:'.');
+                else
+                    printf(" ");
+            }   // for
+
+            printf("\n");
+        }   // while
+    }   // if
+
+}   // DumpBinary
