@@ -65,7 +65,7 @@ ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
 
 uint64_t gThrottleRate, gUnadjustedThrottleRate;
 
-static bool gThrottleRunning=false;
+static volatile bool gThrottleRunning=false;
 static pthread_t gThrottleThreadId;
 
 static void * ThrottleThread(void * arg);
