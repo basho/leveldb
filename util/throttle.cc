@@ -293,7 +293,13 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
 uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
 uint64_t GetUnadjustedThrottleWriteRate() {return(gUnadjustedThrottleRate);};
 
-void ThrottleShutdown()
+/**
+ * ThrottleStopThreads() is the first step in a two step shutdown.
+ * This stops the 1 minute throttle calculation loop that also
+ * can initiate leveldb compaction actions.  Background compaction
+ * threads should stop between these two steps.
+ */
+void ThrottleStopThreads()
 {
     if (gThrottleRunning)
     {
@@ -306,13 +312,30 @@ void ThrottleShutdown()
         } // unlock gThrottleMutex
 
         pthread_join(gThrottleThreadId, NULL);
-
-        delete gThrottleCond;
-        gThrottleCond = NULL;
-
-        delete gThrottleMutex;
-        gThrottleMutex = NULL;
     }   // if
+
+    return;
+
+}   // ThrottleShutdown
+
+/**
+ * ThrottleClose is the second step in a two step shutdown of
+ *  throttle.  The intent is for background compaction threads
+ *  to stop between these two steps.
+ */
+void ThrottleClose()
+{
+    // safety check
+    if (gThrottleRunning)
+        ThrottleStopThreads();
+
+    delete gThrottleCond;
+    gThrottleCond = NULL;
+
+    delete gThrottleMutex;
+    gThrottleMutex = NULL;
+
+    return;
 }   // ThrottleShutdown
 
 }  // namespace leveldb

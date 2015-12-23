@@ -1094,10 +1094,8 @@ void Env::Shutdown()
 {
     if (started)
     {
-        delete default_env;
-        default_env=NULL;
-
-        ThrottleShutdown();
+        // prevent throttle from initiating new compactions
+        ThrottleStopThreads();
     }   // if
 
     DBListShutdown();
@@ -1113,6 +1111,16 @@ void Env::Shutdown()
 
     delete gCompactionThreads;
     gCompactionThreads=NULL;
+
+    if (started)
+    {
+        // release throttle globals now that
+        //  background compaction threads done
+        ThrottleClose();
+
+        delete default_env;
+        default_env=NULL;
+    }   // if
 
     // wait until compaction threads complete before
     //  releasing comparator object (else segfault possible)
