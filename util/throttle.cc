@@ -81,7 +81,15 @@ ThrottleInit()
     gThrottleRate=0;
     gUnadjustedThrottleRate=0;
 
-    pthread_create(&gThrottleThreadId, NULL,  &ThrottleThread, NULL);
+    // addresses race condition during fast start/stop
+    {
+        MutexLock lock(gThrottleMutex);
+
+        pthread_create(&gThrottleThreadId, NULL,  &ThrottleThread, NULL);
+
+        while(!gThrottleRunning)
+            gThrottleCond->Wait();
+    }   // mutex
 
     return;
 
@@ -99,10 +107,16 @@ ThrottleThread(
     struct timespec wait_time;
 
     replace_idx=2;
-    gThrottleRunning=true;
     now_seconds=0;
     cache_expire=0;
     new_unadjusted=1;
+
+    // addresses race condition during fast start/stop
+    {
+        MutexLock lock(gThrottleMutex);
+        gThrottleRunning=true;
+        gThrottleCond->Signal();
+    }   // mutex
 
     while(gThrottleRunning)
     {
