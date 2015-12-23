@@ -62,16 +62,17 @@ void CondVar::Wait() {
 }
 
 bool CondVar::Wait(struct timespec* pTimespec) {
+  bool signaled = true;
   int result = pthread_cond_timedwait(&cv_, &mu_->mu_, pTimespec);
-  if (0 == result) {
-    return true; // condition variable signaled
-  }
+  if (0 != result) {
+    signaled = false;
 
-  // the only expected errno is ETIMEDOUT; anything else is a real error
-  if (ETIMEDOUT != result) {
-    PthreadCall("timed wait", result);
+    // the only expected errno is ETIMEDOUT; anything else is a real error
+    if (ETIMEDOUT != result) {
+      PthreadCall("timed wait", result);
+    }
   }
-  return false; // timed out waiting for condition variable to be signaled
+  return signaled;
 }
 
 void CondVar::Signal() {
