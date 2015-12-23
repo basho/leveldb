@@ -36,8 +36,8 @@
 namespace leveldb {
 
 // mutex and condition variable objects for use in the code below
-port::Mutex* gThrottleMutex;
-port::CondVar* gThrottleCond;
+port::Mutex* gThrottleMutex=NULL;
+port::CondVar* gThrottleCond=NULL;
 
 #define THROTTLE_SECONDS 60
 #define THROTTLE_TIME THROTTLE_SECONDS*1000000
