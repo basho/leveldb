@@ -2,7 +2,7 @@
 //
 // hot_threads.cc
 //
-// Copyright (c) 2011-2013 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2011-2015 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -67,7 +67,7 @@ HotThread::ThreadRoutine()
 
     submission=NULL;
 
-//    pthread_setname_np(m_Pool.m_PoolName.c_str());
+    port::SetCurrentThreadName(m_Pool.m_PoolName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
@@ -100,6 +100,11 @@ HotThread::ThreadRoutine()
         {
             // execute the job
             (*submission)();
+            if (submission->resubmit())
+            {
+                submission->recycle();
+                m_Pool.Submit(submission);
+            }
 
             submission->RefDec();
 
@@ -116,11 +121,11 @@ HotThread::ThreadRoutine()
 
             // only wait if we are really sure no work pending
             if (0==m_Pool.m_WorkQueueAtomic)
-	    {
+            {
                 // yes, thread going to wait. set available now.
-	        m_Available=1;
+                m_Available=1;
                 m_Condition.Wait();
-	    }    // if
+            }    // if
 
             m_Available=0;    // safety
             submission=(ThreadTask *)m_DirectWork; // NULL is valid
@@ -255,7 +260,7 @@ QueueThread::QueueThreadRoutine()
 
     submission=NULL;
 
-//    pthread_setname_np(m_QueueName.c_str());
+    port::SetCurrentThreadName(m_QueueName.c_str());
 
     while(!m_Pool.m_Shutdown)
     {
