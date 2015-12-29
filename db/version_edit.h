@@ -103,6 +103,21 @@ class VersionEdit {
 
   std::string DebugString() const;
 
+// Tag numbers for serialized VersionEdit.  These numbers are written to
+// disk and should not be changed.
+enum Tag {
+  kComparator           = 1,
+  kLogNumber            = 2,
+  kNextFileNumber       = 3,
+  kLastSequence         = 4,
+  kCompactPointer       = 5,
+  kDeletedFile          = 6,
+  kNewFile              = 7,
+  // 8 was used for large value refs
+  kPrevLogNumber        = 9,
+  kFileCacheObject      = 10
+};
+
  private:
   friend class VersionSet;
 

@@ -56,6 +56,7 @@ TESTS = \
 	write_batch_test
 
 TOOLS = \
+	cache_warm \
 	leveldb_repair \
 	perf_dump \
 	sst_rewrite \
@@ -112,6 +113,9 @@ clean:
 $(LIBRARY): $(LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(LIBOBJECTS)
+
+cache_warm: tools/cache_warm.o $(LIBOBJECTS)
+	$(CXX) tools/cache_warm.o $(LIBOBJECTS) -o $@ $(LDFLAGS)
 
 db_bench: db/db_bench.o $(LIBOBJECTS) $(TESTUTIL)
 	$(CXX) db/db_bench.o $(LIBOBJECTS) $(TESTUTIL) -o $@  $(LDFLAGS)
