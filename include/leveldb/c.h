@@ -274,6 +274,11 @@ extern void leveldb_env_shutdown();
 
 /* Util */
 
+/**
+ * CAUTION:  this call is only for char * objects returned by
+ *           functions like leveldb_get and leveldb_property_value.
+ *           Also used to release errptr strings.
+ */
 extern void leveldb_free(void* ptr);
 
 /* Version */
