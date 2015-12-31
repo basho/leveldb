@@ -201,14 +201,16 @@ LDB_CONFIG="include/leveldb/ldb_config.h"
 # Delete existing output, if it exists
 rm -f $LDB_CONFIG
 
-function write_config_h
+write_config_h()
 {
     for param in $@
     do
-        if [ ${param:0:2} = "-D" ]; then
+        prefix=$(expr $param : "\(..\)")
+        if [ X$prefix = "X-D" ]
+        then
             echo "" >>$LDB_CONFIG
-            echo "#ifndef ${param#-D}" >>$LDB_CONFIG
-            echo "    #define ${param#-D}" >>$LDB_CONFIG
+            echo "#ifndef $(expr $param : '..\(.*\)')" >>$LDB_CONFIG
+            echo "    #define $(expr $param : '..\(.*\)')" >>$LDB_CONFIG
             echo "#endif" >>$LDB_CONFIG
         fi
     done
