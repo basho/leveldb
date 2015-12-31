@@ -56,7 +56,7 @@ PLATFORM_SHARED_CFLAGS="-fPIC"
 PLATFORM_SHARED_VERSIONED=true
 
 if test -n "$LEVELDB_VSN"; then
-    PLATFORM_CXXFLAGS="$PLATFORM_CXXFLAGS -DLEVELDB_VSN=\"$LEVELDB_VSN\""
+    COMMON_FLAGS="$COMMON_FLAGS -DLEVELDB_VSN=\"$LEVELDB_VSN\""
 fi
 
 # On GCC, we pick libc's memcmp over GCC's memcmp via -fno-builtin-memcmp
@@ -191,3 +191,33 @@ echo "PLATFORM_SHARED_CFLAGS=$PLATFORM_SHARED_CFLAGS" >> $OUTPUT
 echo "PLATFORM_SHARED_EXT=$PLATFORM_SHARED_EXT" >> $OUTPUT
 echo "PLATFORM_SHARED_LDFLAGS=$PLATFORM_SHARED_LDFLAGS" >> $OUTPUT
 echo "PLATFORM_SHARED_VERSIONED=$PLATFORM_SHARED_VERSIONED" >> $OUTPUT
+
+#
+# Basho extension to place -D variable in include/leveldb/ldb_config.h
+#
+
+LDB_CONFIG="include/leveldb/ldb_config.h"
+
+# Delete existing output, if it exists
+rm -f $LDB_CONFIG
+
+function write_config_h
+{
+    for param in $@
+    do
+        if [ ${param:0:2} = "-D" ]; then
+            echo "" >>$LDB_CONFIG
+            echo "#ifndef ${param#-D}" >>$LDB_CONFIG
+            echo "    #define ${param#-D}" >>$LDB_CONFIG
+            echo "#endif" >>$LDB_CONFIG
+        fi
+    done
+}
+
+echo "/** build_detect_platform generated" >$LDB_CONFIG
+echo " *   Saves compile flag state for include files used" >>$LDB_CONFIG
+echo " *   outside of leveldb build." >>$LDB_CONFIG
+echo " */" >>$LDB_CONFIG
+
+write_config_h $COMMON_FLAGS
+
