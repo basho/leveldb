@@ -105,7 +105,7 @@ tools: all $(TOOLS)
 
 
 clean:
-	-rm -f $(PROGRAMS) $(BENCHMARKS) $(LIBRARY) $(SHARED) $(MEMENVLIBRARY) */*.o */*/*.o ios-x86/*/*.o ios-arm/*/*.o build_config.mk
+	-rm -f $(PROGRAMS) $(BENCHMARKS) $(LIBRARY) $(SHARED) $(MEMENVLIBRARY) */*.o */*/*.o ios-x86/*/*.o ios-arm/*/*.o build_config.mk include/leveldb/ldb_config.h
 	-rm -rf ios-x86/* ios-arm/*
 
 
