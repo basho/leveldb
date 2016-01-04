@@ -205,7 +205,7 @@ else
 	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) -c $< -o $@
 
 .c.o:
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(PLATFORM_SHARED_CFLAGS) -c $< -o $@
 
 %.d: %.cc
 	@echo -- Creating dependency file for $<
@@ -217,7 +217,7 @@ else
 	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ -l:$(LIBRARY) $(LDFLAGS)
 
 %: db/%.c
-	$(CC) $(CFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ -l:$(LIBRARY) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ -l:$(LIBRARY) $(LDFLAGS)
 
 # for tools, omits test harness
 %: tools/%.cc
