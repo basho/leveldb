@@ -1,11 +1,3 @@
-# Goals:
-#  - dependency files
-#  - debug target
-#  - profile target
-#  - shared lib build from objects
-#  - test and tools build from library
-
-
 # Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -110,7 +102,7 @@ endif  # PLATFORM_SHARED_EXT
 
 all: $(SHARED) $(LIBRARY)
 
-check: all $(PROGRAMS) $(TESTS)
+test check: all $(PROGRAMS) $(TESTS)
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done
 
 tools: all $(TOOLS)
@@ -157,7 +149,7 @@ vpath %.cc db:table:util
 vpath %.c db
 
 db_bench: db/db_bench.o $(LIBRARY) $(TESTUTIL)
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTUTIL) -o $@ $(LDFLAGS) -l:$(LIBRARY)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTUTIL) -o $@  -l:$(LIBRARY) $(LDFLAGS)
 
 db_bench_sqlite3: doc/bench/db_bench_sqlite3.o $(LIBRARY) $(TESTUTIL)
 
@@ -222,14 +214,14 @@ else
 
 # generic build for command line tests
 %: %.cc
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ $(LDFLAGS) -l:$(LIBRARY)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ -l:$(LIBRARY) $(LDFLAGS)
 
 %: db/%.c
-	$(CC) $(CFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ $(LDFLAGS) -l:$(LIBRARY)
+	$(CC) $(CFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ -l:$(LIBRARY) $(LDFLAGS)
 
 # for tools, omits test harness
 %: tools/%.cc
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< -o $@ $(LDFLAGS) -l:$(LIBRARY)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< -o $@ -l:$(LIBRARY) $(LDFLAGS)
 
 endif
 
@@ -237,5 +229,5 @@ endif
 # load dependency files
 #
 ifeq ($(filter tar clean allclean distclean,$(MAKECMDGOALS)),)
-include $(DEPEND)
+-include $(DEPEND)
 endif
