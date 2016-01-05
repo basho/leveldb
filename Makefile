@@ -125,7 +125,6 @@ debug: all
 endif
 
 ifneq ($(filter prof,$(MAKECMDGOALS)),)
-$(info prof)
 OPT := -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
 prof: all
 MK_PROF := 1
