@@ -166,8 +166,12 @@ EOF
 EOF
     if [ "$?" = 0 ]; then
         COMMON_FLAGS="$COMMON_FLAGS -DSNAPPY"
-        # Basho: switching to static snappy library to make tools more portable
-        PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -l:libsnappy.a"
+        if [ "$PLATFORM" = "OS_LINUX" ]; then
+            # Basho: switching to static snappy library to make tools more portable
+            PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -l:libsnappy.a"
+        else
+            PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lsnappy"
+        fi
     fi
 
     # Test whether tcmalloc is available

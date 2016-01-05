@@ -71,6 +71,15 @@ BENCHMARKS = db_bench_sqlite3 db_bench_tree_db
 LIBRARY = libleveldb.a
 MEMENVLIBRARY = libmemenv.a
 
+#
+# static link leveldb to tools to simplify platform usage (if Linux)
+#
+ifeq ($(PLATFORM),OS_LINUX)
+LEVEL_LDFLAGS := -L . -l:$(LIBRARY)
+else
+LEVEL_LDFLAGS := -L . -lleveldb
+endif
+
 default: all
 
 # Should we build shared libraries?
@@ -149,7 +158,7 @@ vpath %.cc db:table:util
 vpath %.c db
 
 db_bench: db/db_bench.o $(LIBRARY) $(TESTUTIL)
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTUTIL) -o $@  -l:$(LIBRARY) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTUTIL) -o $@  $(LEVEL_LDFLAGS) $(LDFLAGS)
 
 db_bench_sqlite3: doc/bench/db_bench_sqlite3.o $(LIBRARY) $(TESTUTIL)
 
@@ -214,14 +223,14 @@ else
 
 # generic build for command line tests
 %: %.cc
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ -l:$(LIBRARY) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ $(LEVEL_LDFLAGS) $(LDFLAGS)
 
 %: db/%.c
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ -l:$(LIBRARY) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ $(LEVEL_LDFLAGS) $(LDFLAGS)
 
 # for tools, omits test harness
 %: tools/%.cc
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< -o $@ -l:$(LIBRARY) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< -o $@ $(LEVEL_LDFLAGS) $(LDFLAGS)
 
 endif
 
