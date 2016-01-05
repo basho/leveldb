@@ -134,7 +134,7 @@ endif
 
 clean:
 	-rm -f $(PROGRAMS) $(BENCHMARKS) $(LIBRARY) $(SHARED) $(MEMENVLIBRARY) */*.o */*/*.o */*.d */*/*.d ios-x86/*/*.o ios-arm/*/*.o build_config.mk include/leveldb/ldb_config.h
-	-rm -rf ios-x86/* ios-arm/*
+	-rm -rf ios-x86/* ios-arm/* *.dSYM
 
 
 $(LIBRARY): $(LIBOBJECTS)

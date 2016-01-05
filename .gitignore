@@ -7,7 +7,6 @@ include/leveldb/ldb_config.h
 *.so
 *.so.*
 *_test
-*.dSYM
 db_bench
 leveldb_repair
 perf_dump
