@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <libgen.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "db/filename.h"
 #include "leveldb/env.h"
 #include "leveldb/db.h"
@@ -26,7 +29,7 @@ main(
 {
     bool error_seen, index_keys, all_keys, block_info, csv_header, counter_info,
         running, no_csv, summary_only;
-    int counter, error_counter;
+    int error_counter;
     char ** cursor;
 
     running=true;
@@ -40,7 +43,6 @@ main(
     no_csv=false;
     summary_only=false;
 
-    counter=0;
     error_counter=0;
 
 
@@ -178,7 +180,7 @@ main(
 
                         if (block_info)
                         {
-                            printf("block %d, offset %llu, size %llu, next %llu\n",
+                            printf("block %d, offset %" PRIu64 ", size %" PRIu64 ", next %" PRIu64 "\n",
                                    block_count, bhandle.offset(), bhandle.size(), bhandle.offset()+bhandle.size());
                         }   // if
 
@@ -225,7 +227,6 @@ main(
                                 {
                                     leveldb::ParsedInternalKey parsed;
                                     leveldb::Slice key = it2->key();
-                                    leveldb::Slice value = it2->value();
 
                                     ParseInternalKey(key, &parsed);
                                     printf("%s block_key %s\n", parsed.DebugStringHex().c_str(), table_name.c_str());
@@ -266,7 +267,7 @@ main(
                             printf("\n");
                         }   // if
 
-                        printf("%s, %llu, %zd, %d,",
+                        printf("%s, %" PRIu64 ", %zd, %d,",
                                table_name.c_str(), meta.file_size, table->TEST_GetIndexBlock()->size(), count);
 
                         printf(" %d, %zd, %zd, %zd, %zd,",
@@ -284,7 +285,7 @@ main(
                             counters=table->GetSstCounters();
 
                             for (loop=0; loop<counters.Size(); ++loop)
-                                printf(", %llu", counters.Value(loop));
+                                printf(", %" PRIu64 "", counters.Value(loop));
                         }   // if
 
                         printf("\n");

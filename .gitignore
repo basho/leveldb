@@ -3,6 +3,8 @@ include/leveldb/ldb_config.h
 *.a
 *.o
 *.dylib*
+*.dSYM
+*.d
 *.so
 *.so.*
 *_test

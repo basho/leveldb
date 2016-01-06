@@ -23,7 +23,9 @@
 #include <memory>
 #include <stdio.h>
 #include <stdlib.h>
-//#include <libgen.h>
+
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
@@ -322,27 +324,24 @@ main(
                         else
                         {
                             if (file1.GetSstCounter(leveldb::eSstCountKeys)==file2.GetSstCounter(leveldb::eSstCountKeys))
-                                fprintf(stderr, "%s, %s: Number of keys different, %ld vs %ld.\n",
+                                fprintf(stderr, "%s, %s: Number of keys different, %" PRIu64 " vs %" PRIu64 ".\n",
                                         file1.GetFileName(), file2.GetFileName(),
                                         file1.GetSstCounter(leveldb::eSstCountKeys),
                                         file2.GetSstCounter(leveldb::eSstCountKeys));
 
                             if (file1.GetSstCounter(leveldb::eSstCountKeySize)==file2.GetSstCounter(leveldb::eSstCountKeySize))
-                                fprintf(stderr, "%s, %s: Byte size of all keys different, %ld vs %ld\n",
+                                fprintf(stderr, "%s, %s: Byte size of all keys different, %" PRIu64 " vs %" PRIu64 "\n",
                                         file1.GetFileName(), file2.GetFileName(),
                                         file1.GetSstCounter(leveldb::eSstCountKeySize),
                                         file2.GetSstCounter(leveldb::eSstCountKeySize));
 
                             if (file1.GetSstCounter(leveldb::eSstCountValueSize)==file2.GetSstCounter(leveldb::eSstCountValueSize))
-                             fprintf(stderr, "%s, %s: Byte size of all values different, %ld vs %ld\n",
-                                     file1.GetFileName(), file2.GetFileName(),
-                                     file1.GetSstCounter(leveldb::eSstCountValueSize),
-                                     file2.GetSstCounter(leveldb::eSstCountValueSize));
+                                fprintf(stderr, "%s, %s: Byte size of all values different, %" PRIu64 " vs %" PRIu64 "\n",
+                                        file1.GetFileName(), file2.GetFileName(),
+                                        file1.GetSstCounter(leveldb::eSstCountValueSize),
+                                        file2.GetSstCounter(leveldb::eSstCountValueSize));
                             error_seen=true;
-                           }   // else
-
-
-
+                        }   // else
                     }   // if
                     else
                     {
