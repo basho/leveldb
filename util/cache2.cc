@@ -423,47 +423,32 @@ private:
 
   } // ShardedLRUCache2::PurgeExpiredFiles
 
-  // Initial implementation only implemented against file cache.
+  // Walk all cache entries, calling functor Acc
   //  Writes list of open files to log record
-  size_t
-  WriteFileCacheObjectWarming(
-      std::string & Dest)
+  bool
+  WalkCache(
+      CacheAccumulator & Acc)
   {
-      size_t obj_count(0);
+      int loop;
+      bool good(true);
 
-      if (is_file_cache_)
+      SpinLock l(&id_spin_);
+
+      for (loop=0; loop<kNumShards && good; ++loop)
       {
-          int loop;
+          LRUHandle2 * cursor;
 
-          SpinLock l(&id_spin_);
-
-          for (loop=0; loop<kNumShards; ++loop)
+          for (cursor=shard_[loop].LRUHead()->next;
+               cursor != shard_[loop].LRUHead() && good;
+               cursor=cursor->next)
           {
-              LRUHandle2 * cursor;
-
-              for (cursor=shard_[loop].LRUHead()->next;
-                   cursor != shard_[loop].LRUHead();
-                   cursor=cursor->next)
-              {
-                  TableAndFile * tf;
-
-                  tf=(TableAndFile *)cursor->value;
-
-                  // this on disk format is read by PreloadTableCache()
-                  //  (db/tablecache.cc)
-                  assert(0!= tf->file_number);
-                  PutVarint32(&Dest, VersionEdit::kFileCacheObject);
-                  PutVarint32(&Dest, tf->level);
-                  PutVarint64(&Dest, tf->file_number);
-                  PutVarint64(&Dest, tf->table->GetFileSize());
-                  ++obj_count;
-              }   // for
+              good=Acc(cursor->value);
           }   // for
-      }   // if
+      }   // for
 
-      return(obj_count);
+      return(good);
 
-  } // ShardedLRUCache2::WritefileCacheObjectWarming
+  } // ShardedLRUCache2::WalkCache
 
 };  //ShardedLRUCache2
 
@@ -633,20 +618,6 @@ DoubleCache::PurgeExpiredFiles()
     return;
 
 }   // DoubleCache::PurgExpiredFiles
-
-
-/**
- * Write list of open sst files to log.  List used to
- * quickly repopulate file cache on next start-up
- */
-size_t
-DoubleCache::WriteCacheObjectWarming(
-    std::string & Dest)
-{
-
-    return(m_FileCache->WriteFileCacheObjectWarming(Dest));
-
-}   // DoubleCache::WriteCacheObjectWarming
 
 
 //

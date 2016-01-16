@@ -150,7 +150,7 @@ $(TESTS) : $(TESTHARNESS)
 #
 # tools, programs, and tests will compile to the root directory
 #  but their .cc source file will be in one of the following subdirectories
-vpath %.cc db:table:util
+vpath %.cc db:table:util:leveldb_ee:stubs
 
 # special case for c_test
 vpath %.c db

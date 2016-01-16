@@ -37,11 +37,25 @@ namespace leveldb {
 
 class ShardedLRUCache2;
 
+
+/**
+ * CacheAccumulator is an object to process values
+ *  when walking the contents of a cache, i.e. a functor
+ */
+class CacheAccumulator
+{
+public:
+    CacheAccumulator() {};
+    virtual ~CacheAccumulator() {};
+
+    virtual bool operator()(void * Value) = 0;
+};
+
+
 /**
  * DoubleCache holds the file cache and the block cache to easy
  *  interactive sizing
  */
-
 class DoubleCache
 {
 public:
@@ -60,7 +74,6 @@ public:
     void SetPlentySpace(bool PlentySpace) {m_PlentySpace=PlentySpace;};
     bool GetPlentySpace() const {return(m_PlentySpace);};
     void PurgeExpiredFiles();
-    size_t WriteCacheObjectWarming(std::string & Dest);
 
     bool IsInternalDB() const {return(m_IsInternalDB);};
 

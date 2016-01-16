@@ -130,7 +130,11 @@ esac
 # except for the test and benchmark files. By default, find will output a list
 # of all files matching either rule, so we need to append -print to make the
 # prune take effect.
-DIRS="util db table"
+if [ -f leveldb_ee/README.md ]; then
+DIRS="util db table leveldb_ee"
+else
+DIRS="util db table stubs"
+fi
 set -f # temporarily disable globbing so that our patterns aren't expanded
 PRUNE_TEST="-name *test*.cc -prune"
 PRUNE_BENCH="-name *_bench.cc -prune"
