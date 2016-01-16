@@ -22,6 +22,8 @@
 
 #include "db/table_cache.h"
 
+namespace leveldb {
+
 
 /**
  * Riak specific routine to push list of open files to disk
@@ -40,3 +42,5 @@ void
 TableCache::PreloadTableCache()
 {
 }   // TableCache::PreloadTableCache
+
+}  // namespace leveldb
