@@ -192,7 +192,6 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       block_size_changed_(0), last_low_mem_(0)
 {
   current_block_size_=options_.block_size;
-  DBList()->AddDB(this, options_.is_internal_db);
 
   mem_->Ref();
   has_imm_.Release_Store(NULL);
@@ -202,15 +201,17 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_);
 
-  gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
-
   // switch global for everyone ... tacky implementation for now
   gFadviseWillNeed=options_.fadvise_willneed;
+
+  // CAUTION: all object initialization must be completed
+  //          before the AddDB and SetTotalMemory calls.
+  DBList()->AddDB(this, options_.is_internal_db);
+  gFlexCache.SetTotalMemory(options_.total_leveldb_mem);
 
   options_.Dump(options_.info_log);
   Log(options_.info_log,"               File cache size: %zd", double_cache.GetCapacity(true));
   Log(options_.info_log,"              Block cache size: %zd", double_cache.GetCapacity(false));
-
 }
 
 DBImpl::~DBImpl() {
@@ -1948,7 +1949,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       allow_delay = false;  // Do not delay a single write more than once
       gPerfCounters->Inc(ePerfWriteSleep);
       mutex_.Lock();
-    } else if (!force && 
+    } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
         gPerfCounters->Inc(ePerfWriteNoWait);
