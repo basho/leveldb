@@ -35,29 +35,7 @@ DEPEND := $(SOURCES:.cc=.d)
 TESTUTIL = ./util/testutil.o
 TESTHARNESS = ./util/testharness.o $(TESTUTIL)
 
-TESTS = \
-	arena_test \
-	bloom_test \
-	c_test \
-	cache_test \
-	cache2_test \
-	coding_test \
-	corruption_test \
-	crc32c_test \
-	db_test \
-	dbformat_test \
-	env_test \
-	filename_test \
-	filter_block_test \
-	flexcache_test \
-	log_test \
-	memenv_test \
-	perf_count_test \
-	skiplist_test \
-	table_test \
-	version_edit_test \
-	version_set_test \
-	write_batch_test
+TESTS := $(sort $(notdir $(basename $(TEST_SOURCES))))
 
 TOOLS = \
 	leveldb_repair \

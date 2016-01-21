@@ -64,7 +64,8 @@ class Table {
   size_t TableObjectSize();
 
   // riak routine to retrieve disk size of table file
-  uint64_t GetFileSize();
+  //  ("virtual" is for unit test activites)
+  virtual uint64_t GetFileSize();
 
   // access routines for testing tools, not for public use
   Block * TEST_GetIndexBlock();
@@ -73,7 +74,7 @@ class Table {
   static Iterator* TEST_BlockReader(void* Ptr, const ReadOptions& ROptions, const Slice& SliceReturn)
     {return(BlockReader(Ptr, ROptions, SliceReturn));};
 
- private:
+ protected:  // was private, made protected for unit tests
   struct Rep;
   Rep* rep_;
 
