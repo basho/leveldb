@@ -21,6 +21,7 @@ class Env;
 
 class TableCache {
  public:
+  // clean up note:  file_cache is redundant to GetFileCache available from doublecache
   TableCache(const std::string& dbname, const Options* options, Cache * file_cache,
              DoubleCache & doublecache);
   ~TableCache();
@@ -65,21 +66,23 @@ class TableCache {
 
   // routine called if Options::cache_object_warming is true.
   //  Writes list of all file names currently in file cache to disk.
-  void SaveOpenFileList();
+  Status SaveOpenFileList();
 
   // routine called if Options::cache_object_warming is true.
   //  Reads file created by SaveOpenFileList() and attempts to open
   //  every file.
-  void PreloadTableCache();
+  Status PreloadTableCache();
 
- private:
+ // was private, now protected to allow easy unit test overrides
+ protected:
   Env* const env_;
   const std::string dbname_;
   const Options* options_;
   Cache * cache_;
   DoubleCache & doublecache_;
 
-  Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
+  // virtual to enable unit test overrides
+  virtual Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
 };
 
 

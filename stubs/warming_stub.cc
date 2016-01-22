@@ -28,9 +28,10 @@ namespace leveldb {
 /**
  * Riak specific routine to push list of open files to disk
  */
-void
+Status
 TableCache::SaveOpenFileList()
 {
+    return(Status::OK());
 }   // TableCache::SaveOpenFiles
 
 
@@ -38,9 +39,10 @@ TableCache::SaveOpenFileList()
  * Riak specific routine to read list of previously open files
  *  and preload them into the table cache
  */
-void
+Status
 TableCache::PreloadTableCache()
 {
+    return(Status::OK());
 }   // TableCache::PreloadTableCache
 
 }  // namespace leveldb
