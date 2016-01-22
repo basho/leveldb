@@ -423,8 +423,7 @@ private:
 
   } // ShardedLRUCache2::PurgeExpiredFiles
 
-  // Walk all cache entries, calling functor Acc
-  //  Writes list of open files to log record
+  // Walk all cache entries, calling functor Acc for each
   bool
   WalkCache(
       CacheAccumulator & Acc)
