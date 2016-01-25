@@ -41,7 +41,7 @@ class Table {
                      uint64_t file_size,
                      Table** table);
 
-  ~Table();
+  virtual ~Table();
 
   // Returns a new iterator over the table contents.
   // The result of NewIterator() is initially invalid (caller must

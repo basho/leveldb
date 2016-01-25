@@ -24,7 +24,7 @@ class TableCache {
   // clean up note:  file_cache is redundant to GetFileCache available from doublecache
   TableCache(const std::string& dbname, const Options* options, Cache * file_cache,
              DoubleCache & doublecache);
-  ~TableCache();
+  virtual ~TableCache();
 
   // Return an iterator for the specified file number (the corresponding
   // file length must be exactly "file_size" bytes).  If "tableptr" is
