@@ -46,7 +46,8 @@ Options::Options()
       mmap_size(0),
       delete_threshold(1000),
       fadvise_willneed(false),
-      tiered_slow_level(0)
+      tiered_slow_level(0),
+      cache_object_warming(true)
 {
 }
 
@@ -83,6 +84,7 @@ Options::Dump(
     Log(log,"    Options.tiered_fast_prefix: %s", tiered_fast_prefix.c_str());
     Log(log,"    Options.tiered_slow_prefix: %s", tiered_slow_prefix.c_str());
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
+    Log(log,"  Options.cache_object_warming: %s", cache_object_warming ? "true" : "false");
 }   // Options::Dump
 
 }  // namespace leveldb

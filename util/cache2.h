@@ -24,7 +24,9 @@
 #define STORAGE_LEVELDB_INCLUDE_CACHE2_H_
 
 #include <stdint.h>
+#include <string>
 #include <time.h>
+
 #include "leveldb/atomics.h"
 #include "leveldb/cache.h"
 #include "leveldb/options.h"
@@ -35,11 +37,25 @@ namespace leveldb {
 
 class ShardedLRUCache2;
 
+
+/**
+ * CacheAccumulator is an object to process values
+ *  when walking the contents of a cache, i.e. a functor
+ */
+class CacheAccumulator
+{
+public:
+    CacheAccumulator() {};
+    virtual ~CacheAccumulator() {};
+
+    virtual bool operator()(void * Value) = 0;
+};
+
+
 /**
  * DoubleCache holds the file cache and the block cache to easy
  *  interactive sizing
  */
-
 class DoubleCache
 {
 public:

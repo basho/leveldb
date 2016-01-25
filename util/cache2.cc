@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "db/table_cache.h"
+#include "db/version_edit.h"
 #include "leveldb/atomics.h"
 #include "leveldb/env.h"
 #include "util/cache2.h"
@@ -394,7 +396,7 @@ private:
 
           now=Env::Default()->NowMicros() / 1000000L;
 
-          SpinLock l(&id_spin_);  // release between shards to give access
+          SpinLock l(&id_spin_);
 
           for (loop=0; loop<kNumShards; ++loop)
           {
@@ -421,6 +423,32 @@ private:
 
   } // ShardedLRUCache2::PurgeExpiredFiles
 
+  // Walk all cache entries, calling functor Acc for each
+  bool
+  WalkCache(
+      CacheAccumulator & Acc)
+  {
+      int loop;
+      bool good(true);
+
+      SpinLock l(&id_spin_);
+
+      for (loop=0; loop<kNumShards && good; ++loop)
+      {
+          LRUHandle2 * cursor;
+
+          for (cursor=shard_[loop].LRUHead()->next;
+               cursor != shard_[loop].LRUHead() && good;
+               cursor=cursor->next)
+          {
+              good=Acc(cursor->value);
+          }   // for
+      }   // for
+
+      return(good);
+
+  } // ShardedLRUCache2::WalkCache
+
 };  //ShardedLRUCache2
 
 
@@ -440,7 +468,7 @@ DoubleCache::DoubleCache(
     //  (with 64 or open databases, this is a serious number)
     // and fixed allocation for two write buffers
 
-    m_Overhead=options.write_buffer_size*2 
+    m_Overhead=options.write_buffer_size*2
         + options.env->RecoveryMmapSize(&options) + 4096;
     m_TotalAllocation=gFlexCache.GetDBCacheCapacity(m_IsInternalDB);
 

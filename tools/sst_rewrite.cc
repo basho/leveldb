@@ -181,7 +181,10 @@ main(
                 {
                     error_seen=(NULL==(cursor+1));
                     if (!error_seen)
-                    {options.block_size=atol(*(cursor+1));};
+                    {
+                        ++cursor;
+                        options.block_size=atol(*cursor);
+                    };
                     break;
                 }   // case b
 

@@ -235,6 +235,10 @@ DBImpl::~DBImpl() {
   delete tmp_batch_;
   delete log_;
   delete logfile_;
+
+  if (options_.cache_object_warming)
+      table_cache_->SaveOpenFileList();
+
   delete table_cache_;
 
   if (owns_info_log_) {
@@ -2170,6 +2174,10 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->CheckCompactionState();
     }
   }
+
+  if (impl->options_.cache_object_warming)
+      impl->table_cache_->PreloadTableCache();
+
   impl->mutex_.Unlock();
   if (s.ok()) {
     *dbptr = impl;

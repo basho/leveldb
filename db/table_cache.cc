@@ -5,6 +5,9 @@
 #include "db/table_cache.h"
 
 #include "db/filename.h"
+#include "db/log_reader.h"
+#include "db/log_writer.h"
+#include "db/version_edit.h"
 #include "leveldb/env.h"
 #include "leveldb/table.h"
 #include "util/coding.h"
@@ -72,9 +75,10 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       tf->file = file;
       tf->table = table;
       tf->doublecache = &doublecache_;
+      tf->file_number = file_number;
+      tf->level = level;
 
       *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
-//      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
       gPerfCounters->Inc(ePerfTableOpened);
       doublecache_.AddFileSize(table->GetFileSize());
 
