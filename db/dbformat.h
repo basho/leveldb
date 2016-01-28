@@ -62,7 +62,9 @@ class InternalKey;
 // data structures.
 enum ValueType {
   kTypeDeletion = 0x0,
-  kTypeValue = 0x1
+  kTypeValue = 0x1,
+  kTypeValueWriteTime = 0x2,
+  kTypeValueExplicitExpiry = 0x3
 };
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
@@ -70,9 +72,15 @@ enum ValueType {
 // and the value type is embedded as the low 8 bits in the sequence
 // number in internal keys, we need to use the highest-numbered
 // ValueType, not the lowest).
+//  Riak note: kValueTypeForSeek is placed within temporary keys
+//             for comparisons.  Using kTypeValueExplicitExpiry would
+//             force more code changes to increase internal key size.
+//             But ValueTypeForSeek is redundant to sequence number for
+//             disambiguaty. Therefore going for easiest path and NOT changing.
 static const ValueType kValueTypeForSeek = kTypeValue;
 
 typedef uint64_t SequenceNumber;
+typedef uint64_t ExpiryTime;
 
 // We leave eight bits empty at the bottom so a type and sequence#
 // can be packed together into 64-bits.
@@ -91,11 +99,6 @@ struct ParsedInternalKey {
   std::string DebugStringHex() const;
 };
 
-// Return the length of the encoding of "key".
-inline size_t InternalKeyEncodingLength(const ParsedInternalKey& key) {
-  return key.user_key.size() + 8;
-}
-
 // Append the serialization of "key" to *result.
 extern void AppendInternalKey(std::string* result,
                               const ParsedInternalKey& key);
@@ -107,18 +110,54 @@ extern void AppendInternalKey(std::string* result,
 extern bool ParseInternalKey(const Slice& internal_key,
                              ParsedInternalKey* result);
 
-// Returns the user key portion of an internal key.
-inline Slice ExtractUserKey(const Slice& internal_key) {
-  assert(internal_key.size() >= 8);
-  return Slice(internal_key.data(), internal_key.size() - 8);
-}
-
 inline ValueType ExtractValueType(const Slice& internal_key) {
   assert(internal_key.size() >= 8);
   const size_t n = internal_key.size();
-  uint64_t num = DecodeFixed64(internal_key.data() + n - 8);
-  unsigned char c = num & 0xff;
+  unsigned char c = DecodeLeastFixed64(internal_key.data() + n - 8);
   return static_cast<ValueType>(c);
+}
+
+inline size_t KeySuffixSize(ValueType val_type) {
+  size_t ret_val;
+  switch(val_type)
+  {
+      case kTypeDeletion:
+      case kTypeValue:
+          ret_val=sizeof(SequenceNumber);
+          break;
+
+      case kTypeValueWriteTime:
+      case kTypeValueExplicitExpiry:
+          ret_val=sizeof(SequenceNumber) + sizeof(ExpiryTime);
+          break;
+
+      default:
+          assert(0);
+          ret_val=sizeof(SequenceNumber);
+          break;
+  }   // switch
+  return(ret_val);
+}
+
+inline size_t KeySuffixSize(const Slice & internal_key) {
+    return(KeySuffixSize(ExtractValueType(internal_key)));
+}
+
+// Returns the user key portion of an internal key.
+inline Slice ExtractUserKey(const Slice& internal_key) {
+  assert(internal_key.size() >= 8);
+  return Slice(internal_key.data(), internal_key.size() - KeySuffixSize(internal_key));
+}
+
+// Returns the sequence number with ValueType removed
+inline SequenceNumber ExtractSequenceNumber(const Slice& internal_key) {
+  assert(internal_key.size() >= 8);
+  return(DecodeFixed64(internal_key.data() + internal_key.size() - 8)>>8);
+}
+
+// Return the length of the encoding of "key".
+inline size_t InternalKeyEncodingLength(const ParsedInternalKey& key) {
+  return key.user_key.size() + KeySuffixSize(key.type);
 }
 
 // A comparator for internal keys that uses a specified comparator for
@@ -200,7 +239,7 @@ inline bool ParseInternalKey(const Slice& internal_key,
   unsigned char c = num & 0xff;
   result->sequence = num >> 8;
   result->type = static_cast<ValueType>(c);
-  result->user_key = Slice(internal_key.data(), n - 8);
+  result->user_key = Slice(internal_key.data(), n - KeySuffixSize((ValueType)c));
   return (c <= static_cast<unsigned char>(kTypeValue));
 }
 
@@ -220,12 +259,14 @@ class LookupKey {
   Slice internal_key() const { return Slice(kstart_, end_ - kstart_); }
 
   // Return the user key
-  Slice user_key() const { return Slice(kstart_, end_ - kstart_ - 8); }
+  Slice user_key() const
+  { return Slice(kstart_, end_ - kstart_ - KeySuffixSize(internal_key())); }
 
  private:
   // We construct a char array of the form:
   //    klength  varint32               <-- start_
   //    userkey  char[klength]          <-- kstart_
+  //    optional uint64
   //    tag      uint64
   //                                    <-- end_
   // The array is a suitable MemTable key.

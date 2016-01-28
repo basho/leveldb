@@ -307,7 +307,7 @@ static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   } else {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
       match=true;
-      s->state = (parsed_key.type == kTypeValue) ? kFound : kDeleted;
+      s->state = (parsed_key.type != kTypeDeletion) ? kFound : kDeleted;
       if (s->state == kFound) {
         s->value->assign(v.data(), v.size());
       }
@@ -1118,7 +1118,7 @@ VersionSet::Finalize(Version* v)
             uint64_t elapsed_micros;
 
             // some platforms use gettimeofday() which can move backward
-            if ( m_CompactionStatus[level].m_LastCompaction < micros_now 
+            if ( m_CompactionStatus[level].m_LastCompaction < micros_now
                  && 0 != m_CompactionStatus[level].m_LastCompaction)
                 elapsed_micros=micros_now - m_CompactionStatus[level].m_LastCompaction;
             else
