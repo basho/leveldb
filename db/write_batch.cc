@@ -47,6 +47,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
 
   input.remove_prefix(kHeader);
   Slice key, value;
+  ExpiryTime expiry;
   int found = 0;
   while (!input.empty()) {
     found++;
@@ -66,6 +67,16 @@ Status WriteBatch::Iterate(Handler* handler) const {
           handler->Delete(key);
         } else {
           return Status::Corruption("bad WriteBatch Delete");
+        }
+        break;
+      case kTypeValueWriteTime:
+      case kTypeValueExplicitExpiry:
+        if (GetLengthPrefixedSlice(&input, &key) &&
+            GetVarint64(&input, &expiry) &&
+            GetLengthPrefixedSlice(&input, &value)) {
+          handler->Put(key, value);
+        } else {
+          return Status::Corruption("bad WriteBatch Expiry");
         }
         break;
       default:
