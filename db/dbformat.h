@@ -89,12 +89,13 @@ static const SequenceNumber kMaxSequenceNumber =
 
 struct ParsedInternalKey {
   Slice user_key;
+  ExpiryTime expiry;
   SequenceNumber sequence;
   ValueType type;
 
   ParsedInternalKey() { }  // Intentionally left uninitialized (for speed)
-  ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t)
-      : user_key(u), sequence(seq), type(t) { }
+  ParsedInternalKey(const Slice& u, const ExpiryTime & exp, const SequenceNumber& seq, ValueType t)
+      : user_key(u), expiry(exp), sequence(seq), type(t) { }
   std::string DebugString() const;
   std::string DebugStringHex() const;
 };
@@ -160,6 +161,11 @@ inline size_t InternalKeyEncodingLength(const ParsedInternalKey& key) {
   return key.user_key.size() + KeySuffixSize(key.type);
 }
 
+// Riak: is this an expiry key and therefore contain extra ExpiryTime field
+inline bool IsExpiryKey(ValueType val_type) {
+  return(kTypeValueWriteTime==val_type || kTypeValueExplicitExpiry==val_type);
+}
+
 // A comparator for internal keys that uses a specified comparator for
 // the user key portion and breaks ties by decreasing sequence number.
 class InternalKeyComparator : public Comparator {
@@ -204,8 +210,8 @@ class InternalKey {
   std::string rep_;
  public:
   InternalKey() { }   // Leave rep_ as empty to indicate it is invalid
-  InternalKey(const Slice& user_key, SequenceNumber s, ValueType t) {
-    AppendInternalKey(&rep_, ParsedInternalKey(user_key, s, t));
+  InternalKey(const Slice& user_key, ExpiryTime exp, SequenceNumber s, ValueType t) {
+    AppendInternalKey(&rep_, ParsedInternalKey(user_key, exp, s, t));
   }
 
   void DecodeFrom(const Slice& s) { rep_.assign(s.data(), s.size()); }
@@ -239,8 +245,12 @@ inline bool ParseInternalKey(const Slice& internal_key,
   unsigned char c = num & 0xff;
   result->sequence = num >> 8;
   result->type = static_cast<ValueType>(c);
+  if (IsExpiryKey((ValueType)c))
+    result->expiry=DecodeFixed64(internal_key.data() + n - 16);
+  else
+    result->expiry=0;
   result->user_key = Slice(internal_key.data(), n - KeySuffixSize((ValueType)c));
-  return (c <= static_cast<unsigned char>(kTypeValue));
+  return (c <= static_cast<unsigned char>(kTypeValueExplicitExpiry));
 }
 
 // A helper class useful for DBImpl::Get()

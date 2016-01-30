@@ -849,13 +849,13 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
   if (begin == NULL) {
     manual.begin = NULL;
   } else {
-    begin_storage = InternalKey(*begin, kMaxSequenceNumber, kValueTypeForSeek);
+    begin_storage = InternalKey(*begin, 0, kMaxSequenceNumber, kValueTypeForSeek);
     manual.begin = &begin_storage;
   }
   if (end == NULL) {
     manual.end = NULL;
   } else {
-    end_storage = InternalKey(*end, 0, static_cast<ValueType>(0));
+    end_storage = InternalKey(*end, 0, 0, static_cast<ValueType>(0));
     manual.end = &end_storage;
   }
 
@@ -2105,8 +2105,8 @@ void DBImpl::GetApproximateSizes(
 
   for (int i = 0; i < n; i++) {
     // Convert user_key into a corresponding internal key.
-    InternalKey k1(range[i].start, kMaxSequenceNumber, kValueTypeForSeek);
-    InternalKey k2(range[i].limit, kMaxSequenceNumber, kValueTypeForSeek);
+    InternalKey k1(range[i].start, 0, kMaxSequenceNumber, kValueTypeForSeek);
+    InternalKey k2(range[i].limit, 0, kMaxSequenceNumber, kValueTypeForSeek);
     uint64_t start = versions_->ApproximateOffsetOf(v, k1);
     uint64_t limit = versions_->ApproximateOffsetOf(v, k2);
     sizes[i] = (limit >= start ? limit - start : 0);

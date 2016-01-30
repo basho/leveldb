@@ -26,10 +26,10 @@ TEST(VersionEditTest, EncodeDecode) {
   for (int i = 0; i < 4; i++) {
     TestEncodeDecode(edit);
     edit.AddFile(3, kBig + 300 + i, kBig + 400 + i,
-                 InternalKey("foo", kBig + 500 + i, kTypeValue),
-                 InternalKey("zoo", kBig + 600 + i, kTypeDeletion));
+                 InternalKey("foo", 0, kBig + 500 + i, kTypeValue),
+                 InternalKey("zoo", 0, kBig + 600 + i, kTypeDeletion));
     edit.DeleteFile(4, kBig + 700 + i);
-    edit.SetCompactPointer(i, InternalKey("x", kBig + 900 + i, kTypeValue));
+    edit.SetCompactPointer(i, InternalKey("x", 0, kBig + 900 + i, kTypeValue));
   }
 
   edit.SetComparatorName("foo");
