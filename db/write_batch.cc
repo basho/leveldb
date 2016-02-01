@@ -13,6 +13,8 @@
 //    len: varint32
 //    data: uint8[len]
 
+#include <stdint.h>
+
 #include "leveldb/write_batch.h"
 
 #include "leveldb/db.h"
