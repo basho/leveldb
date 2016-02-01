@@ -104,7 +104,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   FileMetaData f;
   Slice str;
   InternalKey key;
-  ExpiryTime expiry1, expiry2;
+  ExpiryTime expiry1, expiry2, expiry3;
 
   while (msg == NULL && GetVarint32(&input, &tag)) {
     switch (tag) {
@@ -188,7 +188,8 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest) &&
             GetVarint64(&input, &expiry1) &&
-            GetVarint64(&input, &expiry2))
+            GetVarint64(&input, &expiry2) &&
+            GetVarint64(&input, &expiry3))
         {
           f.level=level;
           new_files_.push_back(std::make_pair(level, f));
