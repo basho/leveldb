@@ -115,7 +115,8 @@ enum Tag {
   kNewFile              = 7,
   // 8 was used for large value refs
   kPrevLogNumber        = 9,
-  kFileCacheObject      = 10
+  kFileCacheObject      = 10,
+  kNewFile2             = 11  // expiry capable file
 };
 
  private:

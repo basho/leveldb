@@ -104,6 +104,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   FileMetaData f;
   Slice str;
   InternalKey key;
+  ExpiryTime expiry1, expiry2;
 
   while (msg == NULL && GetVarint32(&input, &tag)) {
     switch (tag) {
@@ -177,6 +178,22 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           new_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";
+        }
+        break;
+
+      case kNewFile2:
+        if (GetLevel(&input, &level) &&
+            GetVarint64(&input, &f.number) &&
+            GetVarint64(&input, &f.file_size) &&
+            GetInternalKey(&input, &f.smallest) &&
+            GetInternalKey(&input, &f.largest) &&
+            GetVarint64(&input, &expiry1) &&
+            GetVarint64(&input, &expiry2))
+        {
+          f.level=level;
+          new_files_.push_back(std::make_pair(level, f));
+        } else {
+          msg = "new-file2 entry";
         }
         break;
 
