@@ -24,6 +24,8 @@ using leveldb::Env;
 using leveldb::FileLock;
 using leveldb::FilterPolicy;
 using leveldb::Iterator;
+using leveldb::kMajorVersion;
+using leveldb::kMinorVersion;
 using leveldb::Logger;
 using leveldb::NewBloomFilterPolicy;
 using leveldb::NewLRUCache;
@@ -589,6 +591,24 @@ void leveldb_env_destroy(leveldb_env_t* env) {
 
 void leveldb_env_shutdown() {
   Env::Shutdown();
+}
+
+/**
+ * CAUTION:  this call is only for char * objects returned by
+ *           functions like leveldb_get and leveldb_property_value.
+ *           Also used to release errptr strings.
+ */
+void leveldb_free(void* ptr) {
+  if (NULL!=ptr)
+    free(ptr);
+}
+
+int leveldb_major_version() {
+  return kMajorVersion;
+}
+
+int leveldb_minor_version() {
+  return kMinorVersion;
 }
 
 }  // end extern "C"

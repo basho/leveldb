@@ -20,9 +20,9 @@
 #define PORT_ATOMIC_POINTER_H_
 
 #include <stdint.h>
-#ifdef LEVELDB_CSTDATOMIC_PRESENT
-#include <cstdatomic>
-#endif
+//#ifdef LEVELDB_CSTDATOMIC_PRESENT
+//#include <cstdatomic>              ... moved below
+//#endif
 #ifdef OS_WIN
 #include <windows.h>
 #endif
@@ -116,6 +116,8 @@ class AtomicPointer {
 
 // AtomicPointer based on <cstdatomic>
 #elif defined(LEVELDB_CSTDATOMIC_PRESENT)
+#include <cstdatomic>
+
 class AtomicPointer {
  private:
   std::atomic<void*> rep_;

@@ -94,6 +94,9 @@ class Cache {
   //  in memory
   virtual void Addref(Handle* e) = 0;
 
+  // Riak specific:  walk contents of entire cache, calling functor Acc
+  // with the "value" for each cache entry.  Locks cache throughout call.
+  virtual bool WalkCache(class CacheAccumulator & Acc) {return(true);};
 
  private:
   void LRU_Remove(Handle* e);

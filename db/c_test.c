@@ -141,7 +141,7 @@ static char* FilterCreate(
     int num_keys,
     size_t* filter_length) {
   *filter_length = 4;
-  char* result = malloc(4);
+  char* result = (char*)malloc(4);
   memcpy(result, "fake", 4);
   return result;
 }
@@ -164,6 +164,9 @@ int main(int argc, char** argv) {
   leveldb_writeoptions_t* woptions;
   char* err = NULL;
   int run = -1;
+
+  CheckCondition(leveldb_major_version() >= 1);
+  CheckCondition(leveldb_minor_version() >= 1);
 
   snprintf(dbname, sizeof(dbname),
            "%s/leveldb_c_test-%d",

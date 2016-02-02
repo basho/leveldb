@@ -13,8 +13,10 @@
 //    len: varint32
 //    data: uint8[len]
 
-#include "leveldb/write_batch.h"
+#include <stdint.h>
 
+#include "leveldb/write_batch.h"
+#include "leveldb/env.h"
 #include "leveldb/db.h"
 #include "db/dbformat.h"
 #include "db/memtable.h"
@@ -47,6 +49,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
 
   input.remove_prefix(kHeader);
   Slice key, value;
+  ExpiryTime expiry;
   int found = 0;
   while (!input.empty()) {
     found++;
@@ -66,6 +69,16 @@ Status WriteBatch::Iterate(Handler* handler) const {
           handler->Delete(key);
         } else {
           return Status::Corruption("bad WriteBatch Delete");
+        }
+        break;
+      case kTypeValueWriteTime:
+      case kTypeValueExplicitExpiry:
+        if (GetLengthPrefixedSlice(&input, &key) &&
+            GetVarint64(&input, &expiry) &&
+            GetLengthPrefixedSlice(&input, &value)) {
+          handler->Put(key, value);
+        } else {
+          return Status::Corruption("bad WriteBatch Expiry");
         }
         break;
       default:
@@ -99,6 +112,22 @@ void WriteBatch::Put(const Slice& key, const Slice& value) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeValue));
   PutLengthPrefixedSlice(&rep_, key);
+  PutLengthPrefixedSlice(&rep_, value);
+}
+
+void WriteBatch::PutWriteTime(const Slice& key, const Slice& value) {
+  WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
+  rep_.push_back(static_cast<char>(kTypeValueWriteTime));
+  PutLengthPrefixedSlice(&rep_, key);
+  PutVarint64(&rep_,Env::Default()->NowMicros());
+  PutLengthPrefixedSlice(&rep_, value);
+}
+
+void WriteBatch::PutExplicitExpiry(const Slice& key, const Slice& value, ExpiryTime expiry) {
+  WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
+  rep_.push_back(static_cast<char>(kTypeValueExplicitExpiry));
+  PutLengthPrefixedSlice(&rep_, key);
+  PutVarint64(&rep_, expiry);
   PutLengthPrefixedSlice(&rep_, value);
 }
 

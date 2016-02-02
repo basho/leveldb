@@ -2,7 +2,7 @@
 //
 // perf_count.h:  performance counters LevelDB
 //
-// Copyright (c) 2012-2013 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2012-2015 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -229,6 +229,9 @@ enum PerformanceCountersEnum
     ePerfBGMoveFail=91,       //!< compaction move failed, regular compaction attempted
 
     ePerfThrottleUnadjusted=92,//!< current unadjusted throttle gauge
+
+    // this one was added to the other ePerfElevelXxx counters above when we backported HotThreadPool to eleveldb
+    ePerfElevelWeighted=93,   //!< total microseconds item spent on queue
 
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)

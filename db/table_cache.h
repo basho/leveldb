@@ -21,9 +21,10 @@ class Env;
 
 class TableCache {
  public:
+  // clean up note:  file_cache is redundant to GetFileCache available from doublecache
   TableCache(const std::string& dbname, const Options* options, Cache * file_cache,
              DoubleCache & doublecache);
-  ~TableCache();
+  virtual ~TableCache();
 
   // Return an iterator for the specified file number (the corresponding
   // file length must be exactly "file_size" bytes).  If "tableptr" is
@@ -63,14 +64,25 @@ class TableCache {
 
   void Release(Cache::Handle * handle) {cache_->Release(handle);};
 
- private:
+  // routine called if Options::cache_object_warming is true.
+  //  Writes list of all file names currently in file cache to disk.
+  Status SaveOpenFileList();
+
+  // routine called if Options::cache_object_warming is true.
+  //  Reads file created by SaveOpenFileList() and attempts to open
+  //  every file.
+  Status PreloadTableCache();
+
+ // was private, now protected to allow easy unit test overrides
+ protected:
   Env* const env_;
   const std::string dbname_;
   const Options* options_;
   Cache * cache_;
   DoubleCache & doublecache_;
 
-  Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
+  // virtual to enable unit test overrides
+  virtual Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
 };
 
 
@@ -78,9 +90,13 @@ struct TableAndFile {
   RandomAccessFile* file;
   Table* table;
   DoubleCache * doublecache;
+  uint64_t file_number;     // saved for cache object warming
+  int level;                // saved for cache object warming
 
    TableAndFile()
-   : file(NULL), table(NULL), doublecache(NULL) {};
+   : file(NULL), table(NULL), doublecache(NULL),
+     file_number(0), level(0)
+   {};
 };
 
 

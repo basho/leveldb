@@ -1,8 +1,8 @@
 // -------------------------------------------------------------------
 //
-// throttle.h
+// cache_warm.cc
 //
-// Copyright (c) 2011-2013 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2011-2016 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -20,23 +20,29 @@
 //
 // -------------------------------------------------------------------
 
-#include <pthread.h>
+#include "db/table_cache.h"
+
+namespace leveldb {
 
 
-namespace leveldb
+/**
+ * Riak specific routine to push list of open files to disk
+ */
+Status
+TableCache::SaveOpenFileList()
 {
+    return(Status::OK());
+}   // TableCache::SaveOpenFiles
 
-void ThrottleInit();
 
-void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0);
-
-uint64_t GetThrottleWriteRate();
-uint64_t GetUnadjustedThrottleWriteRate();
-
-// step 1 in two step shutdown
-void ThrottleStopThreads();
-
-// step 2 in two step shutdown
-void ThrottleClose();
+/**
+ * Riak specific routine to read list of previously open files
+ *  and preload them into the table cache
+ */
+Status
+TableCache::PreloadTableCache()
+{
+    return(Status::OK());
+}   // TableCache::PreloadTableCache
 
 }  // namespace leveldb

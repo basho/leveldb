@@ -9,20 +9,6 @@
 
 namespace leveldb {
 
-// Tag numbers for serialized VersionEdit.  These numbers are written to
-// disk and should not be changed.
-enum Tag {
-  kComparator           = 1,
-  kLogNumber            = 2,
-  kNextFileNumber       = 3,
-  kLastSequence         = 4,
-  kCompactPointer       = 5,
-  kDeletedFile          = 6,
-  kNewFile              = 7,
-  // 8 was used for large value refs
-  kPrevLogNumber        = 9
-};
-
 void VersionEdit::Clear() {
   comparator_.clear();
   log_number_ = 0;
@@ -38,7 +24,7 @@ void VersionEdit::Clear() {
   new_files_.clear();
 }
 
-void VersionEdit::EncodeTo(std::string* dst) const {
+void VersionEdit::EncodeTo(std::string* dst, bool format2) const {
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
     PutLengthPrefixedSlice(dst, comparator_);
@@ -76,12 +62,21 @@ void VersionEdit::EncodeTo(std::string* dst) const {
 
   for (size_t i = 0; i < new_files_.size(); i++) {
     const FileMetaData& f = new_files_[i].second;
-    PutVarint32(dst, kNewFile);
+    if (format2)
+      PutVarint32(dst, kNewFile2);
+    else
+      PutVarint32(dst, kNewFile);
     PutVarint32(dst, new_files_[i].first);  // level
     PutVarint64(dst, f.number);
     PutVarint64(dst, f.file_size);
     PutLengthPrefixedSlice(dst, f.smallest.Encode());
     PutLengthPrefixedSlice(dst, f.largest.Encode());
+    if (format2)
+    {
+      PutVarint64(dst, f.expiry1);
+      PutVarint64(dst, f.expiry2);
+      PutVarint64(dst, f.expiry3);
+    }
   }
 }
 
@@ -191,6 +186,23 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           new_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";
+        }
+        break;
+
+      case kNewFile2:
+        if (GetLevel(&input, &level) &&
+            GetVarint64(&input, &f.number) &&
+            GetVarint64(&input, &f.file_size) &&
+            GetInternalKey(&input, &f.smallest) &&
+            GetInternalKey(&input, &f.largest) &&
+            GetVarint64(&input, &f.expiry1) &&
+            GetVarint64(&input, &f.expiry2) &&
+            GetVarint64(&input, &f.expiry3))
+        {
+          f.level=level;
+          new_files_.push_back(std::make_pair(level, f));
+        } else {
+          msg = "new-file2 entry";
         }
         break;
 

@@ -4,3 +4,5 @@ script: ulimit -n 2048 && make check
 
 compiler: gcc
 
+git:
+  submodules: false

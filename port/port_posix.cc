@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include "util/logging.h"
 
 namespace leveldb {
@@ -19,7 +20,19 @@ static void PthreadCall(const char* label, int result) {
   }
 }
 
-Mutex::Mutex() { PthreadCall("init mutex", pthread_mutex_init(&mu_, NULL)); }
+Mutex::Mutex(bool recursive) {
+  if (recursive) {
+    pthread_mutexattr_t attr;
+
+    PthreadCall("init mutex attr", pthread_mutexattr_init(&attr));
+    PthreadCall("set mutex recursive", pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE));
+    PthreadCall("init recursive mutex", pthread_mutex_init(&mu_, &attr));
+    PthreadCall("destroy mutex attr", pthread_mutexattr_destroy(&attr));
+  }
+  else {
+    PthreadCall("init mutex", pthread_mutex_init(&mu_, NULL));
+  }
+}
 
 Mutex::~Mutex() { PthreadCall("destroy mutex", pthread_mutex_destroy(&mu_)); }
 
@@ -46,6 +59,20 @@ CondVar::~CondVar() { PthreadCall("destroy cv", pthread_cond_destroy(&cv_)); }
 
 void CondVar::Wait() {
   PthreadCall("wait", pthread_cond_wait(&cv_, &mu_->mu_));
+}
+
+bool CondVar::Wait(struct timespec* pTimespec) {
+  bool signaled = true;
+  int result = pthread_cond_timedwait(&cv_, &mu_->mu_, pTimespec);
+  if (0 != result) {
+    signaled = false;
+
+    // the only expected errno is ETIMEDOUT; anything else is a real error
+    if (ETIMEDOUT != result) {
+      PthreadCall("timed wait", result);
+    }
+  }
+  return signaled;
 }
 
 void CondVar::Signal() {
