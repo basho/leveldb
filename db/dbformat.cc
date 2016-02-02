@@ -12,7 +12,8 @@ namespace leveldb {
 
 static uint64_t PackSequenceAndType(uint64_t seq, ValueType t) {
   assert(seq <= kMaxSequenceNumber);
-  assert(t <= kValueTypeForSeek);
+  // assert(t <= kValueTypeForSeek);  requires revisit once expiry live
+  assert(t <= kTypeValueExplicitExpiry);  // temp replacement for above
   return (seq << 8) | t;
 }
 

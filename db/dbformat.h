@@ -133,7 +133,7 @@ inline size_t KeySuffixSize(ValueType val_type) {
           break;
 
       default:
-          assert(0);
+          // assert(0);  cannot use because bloom filter block's name is passed as internal key
           ret_val=sizeof(SequenceNumber);
           break;
   }   // switch
