@@ -169,6 +169,9 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
           SaveKey(ikey.user_key, skip);
           skipping = true;
           break;
+
+        case kTypeValueWriteTime:
+        case kTypeValueExplicitExpiry:
         case kTypeValue:
           if (skipping &&
               user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
@@ -263,7 +266,7 @@ void DBIter::Seek(const Slice& target) {
   ClearSavedValue();
   saved_key_.clear();
   AppendInternalKey(
-      &saved_key_, ParsedInternalKey(target, sequence_, kValueTypeForSeek));
+      &saved_key_, ParsedInternalKey(target, 0, sequence_, kValueTypeForSeek));
   iter_->Seek(saved_key_);
   if (iter_->Valid()) {
     FindNextUserEntry(false, &saved_key_ /* temporary storage */);

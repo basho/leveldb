@@ -12,20 +12,29 @@ namespace leveldb {
 
 static uint64_t PackSequenceAndType(uint64_t seq, ValueType t) {
   assert(seq <= kMaxSequenceNumber);
-  assert(t <= kValueTypeForSeek);
+  // assert(t <= kValueTypeForSeek);  requires revisit once expiry live
+  assert(t <= kTypeValueExplicitExpiry);  // temp replacement for above
   return (seq << 8) | t;
 }
 
 void AppendInternalKey(std::string* result, const ParsedInternalKey& key) {
   result->append(key.user_key.data(), key.user_key.size());
+  if (IsExpiryKey(key.type))
+    PutFixed64(result, key.expiry);
   PutFixed64(result, PackSequenceAndType(key.sequence, key.type));
 }
 
 std::string ParsedInternalKey::DebugString() const {
   char buf[50];
-  snprintf(buf, sizeof(buf), "' @ %llu : %d",
-           (unsigned long long) sequence,
-           int(type));
+  if (IsExpiryKey(type))
+    snprintf(buf, sizeof(buf), "' @ %llu %llu : %d",
+             (unsigned long long) expiry,
+             (unsigned long long) sequence,
+             int(type));
+  else
+    snprintf(buf, sizeof(buf), "' @ %llu : %d",
+             (unsigned long long) sequence,
+             int(type));
   std::string result = "'";
   result += HexString(user_key.ToString());
   result += buf;
@@ -34,9 +43,15 @@ std::string ParsedInternalKey::DebugString() const {
 
 std::string ParsedInternalKey::DebugStringHex() const {
   char buf[50];
-  snprintf(buf, sizeof(buf), "' @ %llu : %d",
-           (unsigned long long) sequence,
-           int(type));
+  if (IsExpiryKey(type))
+    snprintf(buf, sizeof(buf), "' @ %llu %llu : %d",
+             (unsigned long long) expiry,
+             (unsigned long long) sequence,
+             int(type));
+  else
+    snprintf(buf, sizeof(buf), "' @ %llu : %d",
+             (unsigned long long) sequence,
+             int(type));
   std::string result = "'";
   result += HexString(user_key);
   result += buf;
@@ -66,8 +81,10 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   //    decreasing type (though sequence# should be enough to disambiguate)
   int r = user_comparator_->Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
   if (r == 0) {
-    const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
-    const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);
+    uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
+    uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);
+    if (IsExpiryKey((ValueType)*(unsigned char *)&anum)) *(unsigned char*)&anum=(unsigned char)kTypeValue;
+    if (IsExpiryKey((ValueType)*(unsigned char *)&bnum)) *(unsigned char*)&bnum=(unsigned char)kTypeValue;
     if (anum > bnum) {
       r = -1;
     } else if (anum < bnum) {

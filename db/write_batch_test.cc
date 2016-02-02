@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <sstream>
 #include "leveldb/db.h"
 
 #include "db/memtable.h"
@@ -19,6 +20,7 @@ static std::string PrintContents(WriteBatch* b) {
   std::string state;
   Status s = WriteBatchInternal::InsertInto(b, mem);
   int count = 0;
+  std::stringstream sstr;
   Iterator* iter = mem->NewIterator();
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey ikey;
@@ -27,6 +29,28 @@ static std::string PrintContents(WriteBatch* b) {
       case kTypeValue:
         state.append("Put(");
         state.append(ikey.user_key.ToString());
+        state.append(", ");
+        state.append(iter->value().ToString());
+        state.append(")");
+        count++;
+        break;
+      case kTypeValueWriteTime:
+        state.append("PutWT(");
+        state.append(ikey.user_key.ToString());
+        state.append(", ");
+        sstr << ikey.expiry;
+        state.append(sstr.str());
+        state.append(", ");
+        state.append(iter->value().ToString());
+        state.append(")");
+        count++;
+        break;
+      case kTypeValueExplicitExpiry:
+        state.append("PutEE(");
+        state.append(ikey.user_key.ToString());
+        state.append(", ");
+        sstr << ikey.expiry;
+        state.append(sstr.str());
         state.append(", ");
         state.append(iter->value().ToString());
         state.append(")");
@@ -71,6 +95,26 @@ TEST(WriteBatchTest, Multiple) {
   ASSERT_EQ("Put(baz, boo)@102"
             "Delete(box)@101"
             "Put(foo, bar)@100",
+            PrintContents(&batch));
+}
+
+TEST(WriteBatchTest, MultipleExpiry) {
+  WriteBatch batch;
+  batch.Put(Slice("Mary"), Slice("Lamb"));
+  batch.PutExplicitExpiry(Slice("Adam"), Slice("Ant"), 2347);
+  batch.Put(Slice("Frosty"), Slice("Snowman"));
+  batch.Put(Slice("Tip"), Slice("ONeal"));
+  batch.Delete(Slice("Frosty"));
+  batch.PutExplicitExpiry(Slice("The"), Slice("Fonz"), 987654321);
+  WriteBatchInternal::SetSequence(&batch, 200);
+  ASSERT_EQ(200, WriteBatchInternal::Sequence(&batch));
+  ASSERT_EQ(6, WriteBatchInternal::Count(&batch));
+  ASSERT_EQ("Put(Adam, Ant)@201"
+            "Delete(Frosty)@204"
+            "Put(Frosty, Snowman)@202"
+            "Put(Mary, Lamb)@200"
+            "Put(The, Fonz)@205"
+            "Put(Tip, ONeal)@203",
             PrintContents(&batch));
 }
 

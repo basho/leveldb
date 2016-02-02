@@ -89,7 +89,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   //  value bytes  : char[value.size()]
   size_t key_size = key.size();
   size_t val_size = value.size();
-  size_t internal_key_size = key_size + 8;
+  size_t internal_key_size = key_size + KeySuffixSize(type);
   const size_t encoded_len =
       VarintLength(internal_key_size) + internal_key_size +
       VarintLength(val_size) + val_size;
@@ -113,6 +113,7 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s) {
     // entry format is:
     //    klength  varint32
     //    userkey  char[klength]
+    //    optional uint64
     //    tag      uint64
     //    vlength  varint32
     //    value    char[vlength]
@@ -122,13 +123,16 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s) {
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
+    Slice internal_key(key_ptr, key_length);
     if (comparator_.comparator.user_comparator()->Compare(
-            Slice(key_ptr, key_length - 8),
+            ExtractUserKey(internal_key),
             key.user_key()) == 0) {
       // Correct user key
-      const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
-      switch (static_cast<ValueType>(tag & 0xff)) {
-        case kTypeValue: {
+      switch (ExtractValueType(internal_key)) {
+        case kTypeValue:
+        case kTypeValueWriteTime:
+        case kTypeValueExplicitExpiry:
+        {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           value->assign(v.data(), v.size());
           return true;
