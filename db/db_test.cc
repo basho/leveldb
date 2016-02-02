@@ -345,6 +345,8 @@ class DBTest {
           }
           first = false;
           switch (ikey.type) {
+            case kTypeValueWriteTime:
+            case kTypeValueExplicitExpiry:
             case kTypeValue:
               result += iter->value().ToString();
               break;

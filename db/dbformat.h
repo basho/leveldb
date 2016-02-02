@@ -114,7 +114,7 @@ extern bool ParseInternalKey(const Slice& internal_key,
 inline ValueType ExtractValueType(const Slice& internal_key) {
   assert(internal_key.size() >= 8);
   const size_t n = internal_key.size();
-  unsigned char c = DecodeLeastFixed64(internal_key.data() + n - 8);
+  unsigned char c = DecodeLeastFixed64(internal_key.data() + n - sizeof(SequenceNumber));
   return static_cast<ValueType>(c);
 }
 
@@ -246,7 +246,7 @@ inline bool ParseInternalKey(const Slice& internal_key,
   result->sequence = num >> 8;
   result->type = static_cast<ValueType>(c);
   if (IsExpiryKey((ValueType)c))
-    result->expiry=DecodeFixed64(internal_key.data() + n - 16);
+    result->expiry=DecodeFixed64(internal_key.data() + n - KeySuffixSize((ValueType)c));
   else
     result->expiry=0;
   result->user_key = Slice(internal_key.data(), n - KeySuffixSize((ValueType)c));
