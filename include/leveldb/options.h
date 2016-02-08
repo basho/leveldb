@@ -15,6 +15,7 @@ namespace leveldb {
 class Cache;
 class Comparator;
 class Env;
+class ExpiryModule;
 class FilterPolicy;
 class Logger;
 class Snapshot;
@@ -224,6 +225,10 @@ struct Options {
   // to disk on close then automatically opens same files again
   // upon restart.
   bool cache_object_warming;
+
+  // Riak specific object that defines expiry policy for data
+  // written to leveldb.
+  ExpiryModule * expiry_module;
 
   // Create an Options object with default values for all fields.
   Options();

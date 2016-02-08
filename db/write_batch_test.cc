@@ -20,10 +20,10 @@ static std::string PrintContents(WriteBatch* b) {
   std::string state;
   Status s = WriteBatchInternal::InsertInto(b, mem);
   int count = 0;
-  std::stringstream sstr;
   Iterator* iter = mem->NewIterator();
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey ikey;
+    std::stringstream sstr;
     ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
     switch (ikey.type) {
       case kTypeValue:
@@ -109,11 +109,11 @@ TEST(WriteBatchTest, MultipleExpiry) {
   WriteBatchInternal::SetSequence(&batch, 200);
   ASSERT_EQ(200, WriteBatchInternal::Sequence(&batch));
   ASSERT_EQ(6, WriteBatchInternal::Count(&batch));
-  ASSERT_EQ("Put(Adam, Ant)@201"
+  ASSERT_EQ("PutEE(Adam, 2347, Ant)@201"
             "Delete(Frosty)@204"
             "Put(Frosty, Snowman)@202"
             "Put(Mary, Lamb)@200"
-            "Put(The, Fonz)@205"
+            "PutEE(The, 987654321, Fonz)@205"
             "Put(Tip, ONeal)@203",
             PrintContents(&batch));
 }

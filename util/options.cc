@@ -9,6 +9,7 @@
 
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/filter_policy.h"
 #include "util/cache2.h"
 #include "util/crc32c.h"
@@ -47,7 +48,8 @@ Options::Options()
       delete_threshold(1000),
       fadvise_willneed(false),
       tiered_slow_level(0),
-      cache_object_warming(true)
+      cache_object_warming(true),
+      expiry_module(NULL)
 {
 }
 
@@ -85,6 +87,12 @@ Options::Dump(
     Log(log,"    Options.tiered_slow_prefix: %s", tiered_slow_prefix.c_str());
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
     Log(log,"  Options.cache_object_warming: %s", cache_object_warming ? "true" : "false");
+
+    if (NULL!=expiry_module)
+        expiry_module->Dump(log);
+    else
+        Log(log,"         Options.expiry_module: NULL");
+
 }   // Options::Dump
 
 }  // namespace leveldb

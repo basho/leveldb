@@ -1752,7 +1752,7 @@ class ModelDB: public DB {
     class Handler : public WriteBatch::Handler {
      public:
       KVMap* map_;
-      virtual void Put(const Slice& key, const Slice& value) {
+      virtual void Put(const Slice& key, const Slice& value, const uint8_t &, const uint64_t &) {
         (*map_)[key.ToString()] = value.ToString();
       }
       virtual void Delete(const Slice& key) {

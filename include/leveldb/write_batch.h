@@ -54,9 +54,7 @@ class WriteBatch {
   class Handler {
    public:
     virtual ~Handler();
-    virtual void Put(const Slice& key, const Slice& value) = 0;
-//    virtual void PutWriteTime(const Slice& key, const Slice& value);
-//    virtual void PutExplicitExpiry(const Slice& key, const Slice& value, uint64_t expiry);
+    virtual void Put(const Slice& key, const Slice& value, const uint8_t & type, const uint64_t & expiry) = 0;
     virtual void Delete(const Slice& key) = 0;
   };
   Status Iterate(Handler* handler) const;

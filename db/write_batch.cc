@@ -15,9 +15,10 @@
 
 #include <stdint.h>
 
-#include "leveldb/write_batch.h"
-#include "leveldb/env.h"
 #include "leveldb/db.h"
+#include "leveldb/env.h"
+#include "leveldb/expiry.h"
+#include "leveldb/write_batch.h"
 #include "db/dbformat.h"
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
@@ -59,7 +60,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
       case kTypeValue:
         if (GetLengthPrefixedSlice(&input, &key) &&
             GetLengthPrefixedSlice(&input, &value)) {
-          handler->Put(key, value);
+            handler->Put(key, value, kTypeValue, 0);
         } else {
           return Status::Corruption("bad WriteBatch Put");
         }
@@ -76,7 +77,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
         if (GetLengthPrefixedSlice(&input, &key) &&
             GetVarint64(&input, &expiry) &&
             GetLengthPrefixedSlice(&input, &value)) {
-          handler->Put(key, value);
+            handler->Put(key, value, tag, expiry);
         } else {
           return Status::Corruption("bad WriteBatch Expiry");
         }
@@ -142,23 +143,33 @@ class MemTableInserter : public WriteBatch::Handler {
  public:
   SequenceNumber sequence_;
   MemTable* mem_;
+  Options * options_;
 
-  virtual void Put(const Slice& key, const Slice& value) {
-    mem_->Add(sequence_, kTypeValue, key, value);
+  MemTableInserter() : mem_(NULL), options_(NULL) {};
+
+  virtual void Put(const Slice& key, const Slice& value, const uint8_t &type, const uint64_t &expiry) {
+    uint8_t type_use(type);
+    uint64_t expiry_use(expiry);
+
+    if (NULL!=options_ && NULL!=options_->expiry_module)
+        options_->expiry_module->MemTableInserterCallback(key, value, type_use, expiry_use);
+    mem_->Add(sequence_, (ValueType)type_use, key, value, expiry_use);
     sequence_++;
   }
   virtual void Delete(const Slice& key) {
-    mem_->Add(sequence_, kTypeDeletion, key, Slice());
+    mem_->Add(sequence_, kTypeDeletion, key, Slice(), 0);
     sequence_++;
   }
 };
 }  // namespace
 
 Status WriteBatchInternal::InsertInto(const WriteBatch* b,
-                                      MemTable* memtable) {
+                                      MemTable* memtable,
+                                      Options * options) {
   MemTableInserter inserter;
   inserter.sequence_ = WriteBatchInternal::Sequence(b);
   inserter.mem_ = memtable;
+  inserter.options_ = options;
   return b->Iterate(&inserter);
 }
 

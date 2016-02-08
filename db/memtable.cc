@@ -81,7 +81,8 @@ Iterator* MemTable::NewIterator() {
 
 void MemTable::Add(SequenceNumber s, ValueType type,
                    const Slice& key,
-                   const Slice& value) {
+                   const Slice& value,
+                   const ExpiryTime & expiry) {
   // Format of an entry is concatenation of:
   //  key_size     : varint32 of internal_key.size()
   //  key bytes    : char[internal_key.size()]
@@ -97,6 +98,11 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   char* p = EncodeVarint32(buf, internal_key_size);
   memcpy(p, key.data(), key_size);
   p += key_size;
+  if (IsExpiryKey(type))
+  {
+      EncodeFixed64(p, expiry);
+      p+=8;
+  }
   EncodeFixed64(p, (s << 8) | type);
   p += 8;
   p = EncodeVarint32(p, val_size);
