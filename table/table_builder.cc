@@ -8,6 +8,7 @@
 #include "db/dbformat.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
 #include "leveldb/perf_count.h"
@@ -137,6 +138,12 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   // unit tests use non-standard keys ... must ignore the short ones
   if (8 < key.size() && kTypeDeletion==ExtractValueType(key))
       r->sst_counters.Inc(eSstCountDeleteKey);
+
+  // statistics if an expiry key
+  if (NULL!=r->options.expiry_module && IsExpiryKey(key))
+  {
+      r->options.expiry_module->TableBuilderCallback(key, r->sst_counters);
+  } // if
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
   if (estimated_block_size >= r->options.block_size) {

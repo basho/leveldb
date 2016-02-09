@@ -49,6 +49,9 @@ enum SstCountEnum
     eSstCountDeleteKey=12,     //!< tombstone count
     eSstCountBlockSizeUsed=13, //!< Options::block_size used with this file
     eSstCountUserDataSize=14,  //!< post-compression size of non-metadata (user keys/values/block overhead)
+    eSstCountExpiry1=15,       //!< undocumented expiry counter 1
+    eSstCountExpiry2=16,       //!< undocumented expiry counter 2
+    eSstCountExpiry3=17,       //!< undocumented expiry counter 3
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values

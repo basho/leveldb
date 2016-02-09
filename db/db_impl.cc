@@ -1493,7 +1493,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input->SeekToFirst();
   Status status;
 
-  KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
+  KeyRetirement retire(user_comparator(), compact->smallest_snapshot, &options_, compact->compaction);
 
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {

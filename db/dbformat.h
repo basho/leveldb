@@ -9,6 +9,7 @@
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
 #include "leveldb/filter_policy.h"
+#include "leveldb/options.h"
 #include "leveldb/slice.h"
 #include "leveldb/table_builder.h"
 #include "util/coding.h"
@@ -166,6 +167,18 @@ inline bool IsExpiryKey(ValueType val_type) {
   return(kTypeValueWriteTime==val_type || kTypeValueExplicitExpiry==val_type);
 }
 
+// Riak: is this an expiry key and therefore contain extra ExpiryTime field
+inline bool IsExpiryKey(const Slice & internal_key) {
+    return(IsExpiryKey(ExtractValueType(internal_key)));
+}
+
+// Riak: extracts expiry value
+inline ExpiryTime ExtractExpiry(const Slice& internal_key) {
+  assert(internal_key.size() >= KeySuffixSize(kTypeValueWriteTime));
+  assert(IsExpiryKey(internal_key));
+  return(DecodeFixed64(internal_key.data() + internal_key.size() - KeySuffixSize(kTypeValueWriteTime)));
+}
+
 // A comparator for internal keys that uses a specified comparator for
 // the user key portion and breaks ties by decreasing sequence number.
 class InternalKeyComparator : public Comparator {
@@ -309,13 +322,14 @@ protected:
     // database values needed for processing
     const Comparator * user_comparator;
     SequenceNumber smallest_snapshot;
+    const Options * options;
     Compaction * const compaction;
 
     bool valid;
 
 public:
     KeyRetirement(const Comparator * UserComparator, SequenceNumber SmallestSnapshot,
-                  Compaction * const Compaction=NULL);
+                  const Options * Opts, Compaction * const Compaction=NULL);
 
     virtual ~KeyRetirement() {};
 

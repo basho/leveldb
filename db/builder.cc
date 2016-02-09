@@ -34,7 +34,7 @@ Status BuildTable(const std::string& dbname,
   meta->file_size = 0;
   iter->SeekToFirst();
 
-  KeyRetirement retire(user_comparator, smallest_snapshot);
+  KeyRetirement retire(user_comparator, smallest_snapshot, &options);
 
   std::string fname = TableFileName(options, meta->number, meta->level);
   if (iter->Valid()) {

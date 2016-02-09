@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <stdio.h>
+#include "leveldb/expiry.h"
 #include "db/dbformat.h"
 #include "db/version_set.h"
 #include "port/port.h"
@@ -170,10 +171,11 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
 KeyRetirement::KeyRetirement(
     const Comparator * Comparator,
     SequenceNumber SmallestSnapshot,
+    const Options * Opts,
     Compaction * const Compaction)
     : has_current_user_key(false), last_sequence_for_key(kMaxSequenceNumber),
       user_comparator(Comparator), smallest_snapshot(SmallestSnapshot),
-      compaction(Compaction),
+      options(Opts), compaction(Compaction),
       valid(false)
 {
     // NULL is ok for compaction
@@ -217,20 +219,28 @@ KeyRetirement::operator()(
                 drop = true;    // (A)
             }   // if
 
-            else if (ikey.type == kTypeDeletion
-                     && ikey.sequence <= smallest_snapshot
-                     && NULL!=compaction  // mem to level0 ignores this test
-                     && compaction->IsBaseLevelForKey(ikey.user_key))
+            else
             {
-                // For this user key:
-                // (1) there is no data in higher levels
-                // (2) data in lower levels will have larger sequence numbers
-                // (3) data in layers that are being compacted here and have
-                //     smaller sequence numbers will be dropped in the next
-                //     few iterations of this loop (by rule (A) above).
-                // Therefore this deletion marker is obsolete and can be dropped.
-                drop = true;
-            }   // else if
+                bool expired = false;
+
+                if (NULL!=options && NULL!=options->expiry_module)
+                    expired=options->expiry_module->KeyRetirementCallback(ikey);
+
+                if ((ikey.type == kTypeDeletion || expired)
+                    && ikey.sequence <= smallest_snapshot
+                    && NULL!=compaction  // mem to level0 ignores this test
+                    && compaction->IsBaseLevelForKey(ikey.user_key))
+                {
+                    // For this user key:
+                    // (1) there is no data in higher levels
+                    // (2) data in lower levels will have larger sequence numbers
+                    // (3) data in layers that are being compacted here and have
+                    //     smaller sequence numbers will be dropped in the next
+                    //     few iterations of this loop (by rule (A) above).
+                    // Therefore this deletion marker is obsolete and can be dropped.
+                    drop = true;
+                }   // if
+            }   // else
 
             last_sequence_for_key = ikey.sequence;
         }   // else
