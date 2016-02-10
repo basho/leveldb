@@ -49,21 +49,29 @@ public:
         const Slice & Key,   // input: user's key about to be written
         const Slice & Value, // input: user's value object
         uint8_t & ValType,   // input/output: key type. call might change
-        uint64_t & Expiry)   // input/output: 0 or specific expiry. call might change
+        uint64_t & Expiry) const  // input/output: 0 or specific expiry. call might change
     {return(true);};
 
     // db/dbformat.cc KeyRetirement::operator() calls this.
+    // db/version_set.cc SaveValue() calls this too.
     // returns true if key is expired, returns false if key not expired
     virtual bool KeyRetirementCallback(
-        const ParsedInternalKey & Ikey)
+        const ParsedInternalKey & Ikey) const
     {return(false);};
 
     // table/table_builder.cc TableBuilder::Add() calls this.
     // returns false on internal error
     virtual bool TableBuilderCallback(
         const Slice & Key,       // input: internal key
-        SstCounters & Counters)  // input/output: counters for new sst table
+        SstCounters & Counters) const // input/output: counters for new sst table
     {return(true);};
+
+    // db/memtable.cc MemTable::Get() calls this.
+    // returns true if type/expiry is expired, returns false if not expired
+    virtual bool MemTableCallback(
+        uint8_t Type,              // input: ValueType from key
+        const uint64_t & Expiry) const // input: Expiry from key, or zero
+    {return(false);};
 
 
 };  // ExpiryModule

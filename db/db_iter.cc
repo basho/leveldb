@@ -7,6 +7,7 @@
 #include "db/filename.h"
 #include "db/dbformat.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/iterator.h"
 #include "leveldb/perf_count.h"
 #include "port/port.h"
@@ -48,14 +49,16 @@ class DBIter: public Iterator {
   };
 
   DBIter(const std::string* dbname, Env* env,
-         const Comparator* cmp, Iterator* iter, SequenceNumber s)
+         const Comparator* cmp, Iterator* iter, SequenceNumber s,
+         const ExpiryModule * expiry)
       : dbname_(dbname),
         env_(env),
         user_comparator_(cmp),
         iter_(iter),
         sequence_(s),
         direction_(kForward),
-        valid_(false) {
+        valid_(false),
+        expiry_(expiry) {
   }
   virtual ~DBIter() {
     gPerfCounters->Inc(ePerfIterDelete);
@@ -113,6 +116,7 @@ class DBIter: public Iterator {
   std::string saved_value_;   // == current raw value when direction_==kReverse
   Direction direction_;
   bool valid_;
+  const ExpiryModule * expiry_;
 
   // No copying allowed
   DBIter(const DBIter&);
@@ -162,6 +166,9 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
   do {
     ParsedInternalKey ikey;
     if (ParseKey(&ikey) && ikey.sequence <= sequence_) {
+      if (IsExpiryKey(ikey.type) && NULL!=expiry_
+          && expiry_->MemTableCallback(ikey.type, ikey.expiry))
+        ikey.type=kTypeDeletion;
       switch (ikey.type) {
         case kTypeDeletion:
           // Arrange to skip all upcoming entries for this key since
@@ -231,6 +238,10 @@ void DBIter::FindPrevUserEntry() {
           // We encountered a non-deleted value in entries for previous keys,
           break;
         }
+        if (IsExpiryKey(ikey.type) && NULL!=expiry_
+            && expiry_->MemTableCallback(ikey.type, ikey.expiry))
+          ikey.type=kTypeDeletion;
+
         value_type = ikey.type;
         if (value_type == kTypeDeletion) {
           saved_key_.clear();
@@ -302,8 +313,9 @@ Iterator* NewDBIterator(
     Env* env,
     const Comparator* user_key_comparator,
     Iterator* internal_iter,
-    const SequenceNumber& sequence) {
-  return new DBIter(dbname, env, user_key_comparator, internal_iter, sequence);
+    const SequenceNumber& sequence,
+    const ExpiryModule * expiry) {
+  return new DBIter(dbname, env, user_key_comparator, internal_iter, sequence, expiry);
 }
 
 }  // namespace leveldb

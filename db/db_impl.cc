@@ -1682,10 +1682,10 @@ Status DBImpl::Get(const ReadOptions& options,
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
-    if (mem->Get(lkey, value, &s)) {
+    if (mem->Get(lkey, value, &s, &options_)) {
       // Done
         gPerfCounters->Inc(ePerfGetMem);
-    } else if (imm != NULL && ((MemTable *)imm)->Get(lkey, value, &s)) {
+    } else if (imm != NULL && ((MemTable *)imm)->Get(lkey, value, &s, &options_)) {
       // Done
         gPerfCounters->Inc(ePerfGetImm);
     } else {

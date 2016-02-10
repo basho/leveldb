@@ -12,6 +12,7 @@
 #include "db/memtable.h"
 #include "db/table_cache.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/table_builder.h"
 #include "table/block.h"
 #include "table/merger.h"
@@ -294,12 +295,14 @@ enum SaverState {
 struct Saver {
   SaverState state;
   const Comparator* ucmp;
+  const Options* options;
   Slice user_key;
   Value* value;
 };
 }
 static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   bool match=false;
+  bool expired=false;
   Saver* s = reinterpret_cast<Saver*>(arg);
   ParsedInternalKey parsed_key;
   if (!ParseInternalKey(ikey, &parsed_key)) {
@@ -307,7 +310,9 @@ static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   } else {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
       match=true;
-      s->state = (parsed_key.type != kTypeDeletion) ? kFound : kDeleted;
+      if (NULL!=s->options && NULL!=s->options->expiry_module)
+        expired=s->options->expiry_module->KeyRetirementCallback(parsed_key);
+      s->state = (parsed_key.type != kTypeDeletion && !expired) ? kFound : kDeleted;
       if (s->state == kFound) {
         s->value->assign(v.data(), v.size());
       }
@@ -397,6 +402,7 @@ Status Version::Get(const ReadOptions& options,
       Saver saver;
       saver.state = kNotFound;
       saver.ucmp = ucmp;
+      saver.options = vset_->options_;
       saver.user_key = user_key;
       saver.value = value;
       s = vset_->table_cache_->Get(options, f->number, f->file_size, level,

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include "leveldb/db.h"
+#include "leveldb/expiry.h"
 #include "db/dbformat.h"
 
 namespace leveldb {
@@ -19,7 +20,8 @@ extern Iterator* NewDBIterator(
     Env* env,
     const Comparator* user_key_comparator,
     Iterator* internal_iter,
-    const SequenceNumber& sequence);
+    const SequenceNumber& sequence,
+    const ExpiryModule * expiry=NULL);
 
 }  // namespace leveldb
 

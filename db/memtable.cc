@@ -6,6 +6,7 @@
 #include "db/dbformat.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/iterator.h"
 #include "util/coding.h"
 
@@ -111,7 +112,8 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   table_.Insert(buf);
 }
 
-bool MemTable::Get(const LookupKey& key, Value* value, Status* s) {
+bool MemTable::Get(const LookupKey& key, Value* value, Status* s,
+    const Options * options) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -134,10 +136,24 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s) {
             ExtractUserKey(internal_key),
             key.user_key()) == 0) {
       // Correct user key
-      switch (ExtractValueType(internal_key)) {
-        case kTypeValue:
+      ValueType type=ExtractValueType(internal_key);
+      switch (type) {
         case kTypeValueWriteTime:
         case kTypeValueExplicitExpiry:
+        {
+            bool expired=false;
+            if (NULL!=options && NULL!=options->expiry_module)
+                expired=options->expiry_module->MemTableCallback(type, ExtractExpiry(internal_key));
+            if (expired)
+            {
+                // like kTypeDeletion
+                *s = Status::NotFound(Slice());
+                return true;
+            }   // if
+            //otherwise fall into kTypeValue code
+        }   // case
+
+        case kTypeValue:
         {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           value->assign(v.data(), v.size());
