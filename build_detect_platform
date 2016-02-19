@@ -218,12 +218,12 @@ write_config_h()
 {
     for param in $@
     do
-        prefix=$(expr $param : "\(..\)")
+        prefix=$(expr -- $param : "\(..\)")
         if [ X$prefix = "X-D" ]
         then
             echo "" >>$LDB_CONFIG
-            echo "#ifndef $(expr $param : '..\(.*\)')" >>$LDB_CONFIG
-            echo "    #define $(expr $param : '..\(.*\)')" >>$LDB_CONFIG
+            echo "#ifndef $(expr -- $param : '..\(.*\)')" >>$LDB_CONFIG
+            echo "    #define $(expr -- $param : '..\(.*\)')" >>$LDB_CONFIG
             echo "#endif" >>$LDB_CONFIG
         fi
     done
