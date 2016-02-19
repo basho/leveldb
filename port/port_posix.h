@@ -214,12 +214,13 @@ inline void SetCurrentThreadName(const char* threadName) {
   }
 #if defined(OS_MACOSX)
   pthread_setname_np(threadName);
-#elif defined(OS_FREEBSD) || defined(OS_OPENBSD) || defined(OS_LINUX)
+#elif defined(OS_OPENBSD) || defined(OS_LINUX)
   pthread_setname_np(pthread_self(), threadName);
 #elif defined(OS_NETBSD)
   pthread_setname_np(pthread_self(), threadName, NULL);
 #else
   // we have some other platform(s) to support
+  //   defined(OS_FREEBSD) ... freebsd-9.2, Feb 19, 2016 not working
   //
   // NOTE: do not fail here since this functionality is optional
 #endif
