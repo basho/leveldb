@@ -63,11 +63,15 @@ if [ $# == 2 ]; then
         if ssh_command_test $builder "which gmake"
         then 
             ssh_command $builder "cd ~/$USER/$REPO && gmake -j 4"
-            #ssh_command $builder "cd ~/$USER/$REPO && export LD_LIBRARY_PATH=. && gmake -j 4 check"
+            echo -n "Test $builder: " >>./builder.log
+            date >>./builder.log
+            ssh_command $builder "cd ~/$USER/$REPO && export LD_LIBRARY_PATH=. && gmake -j 4 check"
             # freebsd error: util/cache2_test.cc:170: failed: -1 == 201 ... fixed
         else
             ssh_command $builder "cd ~/$USER/$REPO && make -j 4"
-            # ssh_command $builder "cd ~/$USER/$REPO && export LD_LIBRARY_PATH=. && make -j 4 check"
+            echo -n "Test $builder: " >>./builder.log
+            date >>./builder.log
+            ssh_command $builder "cd ~/$USER/$REPO && export LD_LIBRARY_PATH=. && make -j 4 check"
         fi
 
         echo -n "End $builder: " >>./builder.log
