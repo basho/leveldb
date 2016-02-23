@@ -51,6 +51,8 @@ class CacheTest {
      : double_cache_(options_)
   {
     current_ = this;
+    gFlexCache.SetTotalMemory((120+kCacheSize)*kOneMeg);
+    double_cache_.ResizeCaches();
     cache_=double_cache_.GetBlockCache();
     file_=double_cache_.GetFileCache();
   }
