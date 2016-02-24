@@ -1077,11 +1077,12 @@ VersionSet::Finalize(Version* v)
     int best_level = -1;
     double best_score = -1;
     bool compaction_found;
-    bool is_grooming;
+    bool is_grooming, no_move;
     uint64_t micros_now;
 
     compaction_found=false;
     is_grooming=false;
+    no_move=false;
     micros_now=env_->NowMicros();
 
     for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level)
@@ -1211,6 +1212,7 @@ VersionSet::Finalize(Version* v)
                             v->file_to_compact_=*it;
                             v->file_to_compact_level_=level;
                             is_grooming=true;
+                            no_move=true;
                         }
                     }   // for
                 }   // if
@@ -1229,6 +1231,7 @@ VersionSet::Finalize(Version* v)
     v->compaction_level_ = best_level;
     v->compaction_score_ = best_score;
     v->compaction_grooming_ = is_grooming;
+    v->compaction_no_move_=no_move;
 
     return(compaction_found);
 
@@ -1623,6 +1626,7 @@ VersionSet::PickCompaction(
 
       c->input_version_ = current_;
       c->input_version_->Ref();
+      c->no_move_ = current_->compaction_no_move_;
 
       // m_OverlappedFiles==true levels have files that
       //   may overlap each other, so pick up all overlapping ones
@@ -1804,7 +1808,8 @@ Compaction::Compaction(int level)
       tot_user_data_(0), tot_index_keys_(0),
       avg_value_size_(0), avg_key_size_(0), avg_block_size_(0),
       compressible_(true),
-      stats_done_(false)
+      stats_done_(false),
+      no_move_(false)
   {
   for (int i = 0; i < config::kNumLevels; i++) {
     level_ptrs_[i] = 0;
@@ -1823,6 +1828,7 @@ bool Compaction::IsTrivialMove() const {
   // a very expensive merge later on.
 #if 1
   return (!gLevelTraits[level_].m_OverlappedFiles &&
+          IsMoveOk() &&
           num_input_files(0) == 1 &&
           num_input_files(1) == 0 &&
           (uint64_t)TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);

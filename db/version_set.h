@@ -144,6 +144,7 @@ class Version {
   double compaction_score_;
   int compaction_level_;
   bool compaction_grooming_;
+  bool compaction_no_move_;
   volatile int write_penalty_;
 
   explicit Version(VersionSet* vset)
@@ -152,6 +153,8 @@ class Version {
         file_to_compact_level_(-1),
         compaction_score_(-1),
         compaction_level_(-1),
+        compaction_grooming_(false),
+        compaction_no_move_(false),
         write_penalty_(0)
   {
   }
@@ -439,6 +442,9 @@ class Compaction {
   size_t AverageBlockSize()  const {return(avg_block_size_);};
   bool IsCompressible()      const {return(compressible_);};
 
+  // Riak specific:  is move operation ok for compaction?
+  bool IsMoveOk()            const {return(!no_move_);};
+
  private:
   friend class Version;
   friend class VersionSet;
@@ -477,6 +483,7 @@ class Compaction {
   size_t avg_block_size_;
   bool compressible_;
   bool stats_done_;
+  bool no_move_;
 };
 
 }  // namespace leveldb
