@@ -331,6 +331,36 @@ struct WriteOptions {
   }
 };
 
+
+//  Originally located in db/dbformat.h.  Now available publically.
+// Value types encoded as the last component of internal keys.
+// DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
+// data structures.
+enum ValueType {
+  kTypeDeletion = 0x0,
+  kTypeValue = 0x1,
+  kTypeValueWriteTime = 0x2,
+  kTypeValueExplicitExpiry = 0x3
+};
+
+//  Originally located in db/dbformat.h
+typedef uint64_t SequenceNumber;
+typedef uint64_t ExpiryTime;
+
+
+// Riak specific object that can return key metadata
+//  during get or iterate operation
+struct KeyMetaData
+{
+    ValueType m_Type;          // see above
+    SequenceNumber m_Sequence; // output only, leveldb internal
+    ExpiryTime m_Expiry;       // microseconds since Epoch, UTC
+
+    KeyMetaData()
+    : m_Type(kTypeValue), m_Sequence(0), m_Expiry(0)
+    {};
+};  // struct KeyMetaData
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_OPTIONS_H_

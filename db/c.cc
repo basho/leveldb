@@ -370,7 +370,7 @@ void leveldb_writebatch_iterate(
     void* state_;
     void (*put_)(void*, const char* k, size_t klen, const char* v, size_t vlen);
     void (*deleted_)(void*, const char* k, size_t klen);
-    virtual void Put(const Slice& key, const Slice& value, const uint8_t &, const uint64_t &) {
+      virtual void Put(const Slice& key, const Slice& value, const leveldb::ValueType &, const leveldb::ExpiryTime &) {
       (*put_)(state_, key.data(), key.size(), value.data(), value.size());
     }
     virtual void Delete(const Slice& key) {

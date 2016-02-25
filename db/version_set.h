@@ -107,6 +107,8 @@ class Version {
 
   size_t NumFiles(int level) const { return files_[level].size(); }
 
+  const VersionSet * GetVersionSet() const { return vset_; }
+
   typedef std::vector<FileMetaData*> FileMetaDataVector_t;
 
   const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
@@ -145,6 +147,7 @@ class Version {
   int compaction_level_;
   bool compaction_grooming_;
   bool compaction_no_move_;
+  bool compaction_expire_;
   volatile int write_penalty_;
 
   explicit Version(VersionSet* vset)
@@ -155,6 +158,7 @@ class Version {
         compaction_level_(-1),
         compaction_grooming_(false),
         compaction_no_move_(false),
+        compaction_expire_(false),
         write_penalty_(0)
   {
   }
@@ -307,6 +311,8 @@ class VersionSet {
 
   TableCache* GetTableCache() {return(table_cache_);};
 
+  const Options * GetOptions() const {return(options_);};
+
   bool IsCompactionSubmitted(int level)
   {return(m_CompactionStatus[level].m_Submitted);}
 
@@ -399,6 +405,9 @@ class Compaction {
   // Return the level that is being compacted.  Inputs from "level"
   // and "level+1" will be merged to produce a set of "level+1" files.
   int level() const { return level_; }
+
+  // Return parent Version object
+  const Version * version() const { return input_version_; }
 
   // Return the object that holds the edits to the descriptor done
   // by this compaction.

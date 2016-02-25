@@ -4,6 +4,7 @@
 
 #include "leveldb/env.h"
 #include "leveldb/perf_count.h"
+#include "port/port.h"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -63,7 +64,6 @@ main(
             running=false;
             error_counter=1;
             error_seen=true;
-
         }   // else
     }   // for
 
@@ -78,12 +78,10 @@ main(
 
         if (NULL!=perf_ptr)
         {
-            leveldb::Env * env;
             uint64_t first_time;
             int loop;
 
-            env=leveldb::Env::Default();
-            first_time=env->NowMicros();
+            first_time=leveldb::port::NowUint64();
 
             if (csv_header)
             {
@@ -99,7 +97,7 @@ main(
                 do
                 {
                     // capture state before reporting
-                    cur_time=env->NowMicros();
+                    cur_time=leveldb::port::NowUint64();
                     for (loop=0; loop<leveldb::ePerfCountEnumSize; ++loop)
                     {
                         cur_counters[loop]=perf_ptr->Value(loop);

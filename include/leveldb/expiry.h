@@ -24,6 +24,7 @@
 #define EXPIRY_H
 
 #include <stdint.h>
+#include "leveldb/options.h"
 
 namespace leveldb {
 
@@ -31,6 +32,8 @@ class Logger;
 class Slice;
 class SstCounters;
 class ParsedInternalKey;
+class Version;
+class Compaction;
 
 class ExpiryModule
 {
@@ -42,14 +45,12 @@ public:
     virtual void Dump(Logger * log) const = 0;
 
     // db/write_batch.cc MemTableInserter::Put() calls this.
-    //  using uint8_t and uint64_t types instead of ValType and ExpiryTime
-    //  to prevent exposing internal db/dbformat.h
     // returns false on internal error
     virtual bool MemTableInserterCallback(
         const Slice & Key,   // input: user's key about to be written
         const Slice & Value, // input: user's value object
-        uint8_t & ValType,   // input/output: key type. call might change
-        uint64_t & Expiry) const  // input/output: 0 or specific expiry. call might change
+        ValueType & ValType,   // input/output: key type. call might change
+        ExpiryTime & Expiry) const  // input/output: 0 or specific expiry. call might change
     {return(true);};
 
     // db/dbformat.cc KeyRetirement::operator() calls this.
@@ -69,9 +70,21 @@ public:
     // db/memtable.cc MemTable::Get() calls this.
     // returns true if type/expiry is expired, returns false if not expired
     virtual bool MemTableCallback(
-        uint8_t Type,              // input: ValueType from key
-        const uint64_t & Expiry) const // input: Expiry from key, or zero
+        ValueType Type,                  // input: ValueType from key
+        const ExpiryTime & Expiry) const // input: Expiry from key, or zero
     {return(false);};
+
+    // db/version_set.cc VersionSet::Finalize() calls this if no
+    //  other compaction selected for a level
+    // returns true if there is an expiry compaction eligible
+    virtual bool CompactionFinalizeCallback(
+        Version * current,     // input/output: Version considering compaction
+        const int level) const // input: ... at this level
+    {return(false);};
+
+    virtual void ExpiryBackgroundCall(
+        Compaction * Compact) const  // input: ... data for compaction
+    {};
 
 
 };  // ExpiryModule

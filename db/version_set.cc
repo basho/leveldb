@@ -1077,12 +1077,13 @@ VersionSet::Finalize(Version* v)
     int best_level = -1;
     double best_score = -1;
     bool compaction_found;
-    bool is_grooming, no_move;
+    bool is_grooming, no_move, expire;
     uint64_t micros_now;
 
     compaction_found=false;
     is_grooming=false;
     no_move=false;
+    expire=false;
     micros_now=env_->NowMicros();
 
     for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level)
@@ -1218,20 +1219,38 @@ VersionSet::Finalize(Version* v)
                 }   // if
             }   // else
 
-
+            // this code block is old, should be rewritten
             if (1<=score)
             {
                 best_level = level;
                 best_score = score;
                 compaction_found=true;
             }   // if
+
+            // finally test for expiry if no compaction candidates
+            if (!compaction_found)
+            {
+                compaction_found=options_->expiry_module->CompactionFinalizeCallback(v, level);
+                if (compaction_found)
+                {
+                    best_level=level;
+                    best_score=0;
+                    is_grooming=false;
+                    no_move=true;
+                    expire=true;
+                }   // if
+            }   // if
         }   // if
     }   // for
 
+    // set (almost) all at once to ensure
+    //  no hold over from prior Finalize() call on this version.
+    //  (could rewrite cleaner by doing reset of these at top of function)
     v->compaction_level_ = best_level;
     v->compaction_score_ = best_score;
     v->compaction_grooming_ = is_grooming;
-    v->compaction_no_move_=no_move;
+    v->compaction_no_move_ = no_move;
+    v->compaction_expire_ = expire;
 
     return(compaction_found);
 
@@ -1620,6 +1639,10 @@ VersionSet::PickCompaction(
           level = current_->file_to_compact_level_;
           c = new Compaction(level);
           c->inputs_[0].push_back(current_->file_to_compact_);
+      } else if (current_->compaction_expire_) {
+          level = current_->file_to_compact_level_;
+          c = new Compaction(level);
+          c->inputs_[0]=current_->files_[level];
       } else {
           return;
       }
@@ -1628,41 +1651,51 @@ VersionSet::PickCompaction(
       c->input_version_->Ref();
       c->no_move_ = current_->compaction_no_move_;
 
-      // m_OverlappedFiles==true levels have files that
-      //   may overlap each other, so pick up all overlapping ones
-      if (gLevelTraits[level].m_OverlappedFiles) {
-          InternalKey smallest, largest;
-          GetRange(c->inputs_[0], &smallest, &largest);
-          // Note that the next call will discard the file we placed in
-          // c->inputs_[0] earlier and replace it with an overlapping set
-          // which will include the picked file.
-          current_->GetOverlappingInputs(level, &smallest, &largest, &c->inputs_[0]);
-          assert(!c->inputs_[0].empty());
-
-          // this can get into tens of thousands after a repair
-          //  keep it sane
-          size_t max_open_files=100;  // previously an options_ member variable
-          if (max_open_files < c->inputs_[0].size())
-          {
-              std::nth_element(c->inputs_[0].begin(),
-                               c->inputs_[0].begin()+max_open_files-1,
-                               c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
-              c->inputs_[0].erase(c->inputs_[0].begin()+max_open_files,
-                                  c->inputs_[0].end());
-          }   // if
-
-      }
-
-      SetupOtherInputs(c);
-
       // set submitted as race defense
       m_CompactionStatus[level].m_Submitted=true;
-      ThreadTask * task=new CompactionTask(db_impl, c);
 
-      if (0==level)
-          submit_flag=gLevel0Threads->Submit(task, !current_->compaction_grooming_);
+      if (!current_->compaction_expire_)
+      {
+          // m_OverlappedFiles==true levels have files that
+          //   may overlap each other, so pick up all overlapping ones
+          if (gLevelTraits[level].m_OverlappedFiles) {
+              InternalKey smallest, largest;
+              GetRange(c->inputs_[0], &smallest, &largest);
+              // Note that the next call will discard the file we placed in
+              // c->inputs_[0] earlier and replace it with an overlapping set
+              // which will include the picked file.
+              current_->GetOverlappingInputs(level, &smallest, &largest, &c->inputs_[0]);
+              assert(!c->inputs_[0].empty());
+
+              // this can get into tens of thousands after a repair
+              //  keep it sane
+              size_t max_open_files=100;  // previously an options_ member variable
+              if (max_open_files < c->inputs_[0].size())
+              {
+                  std::nth_element(c->inputs_[0].begin(),
+                                   c->inputs_[0].begin()+max_open_files-1,
+                                   c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
+                  c->inputs_[0].erase(c->inputs_[0].begin()+max_open_files,
+                                      c->inputs_[0].end());
+              }   // if
+          }   // if
+
+          SetupOtherInputs(c);
+
+          ThreadTask * task=new CompactionTask(db_impl, c);
+
+          if (0==level)
+              submit_flag=gLevel0Threads->Submit(task, !current_->compaction_grooming_);
+          else
+              submit_flag=gCompactionThreads->Submit(task, !current_->compaction_grooming_);
+      }   // if
+
+      // expiry compaction
       else
-          submit_flag=gCompactionThreads->Submit(task, !current_->compaction_grooming_);
+      {
+          ThreadTask * task=new ExpiryTask(db_impl, c);
+          submit_flag=gCompactionThreads->Submit(task, true);
+      }   // else
 
       // set/reset submitted based upon truth of queuing
       //  (ref counting will auto delete task rejected)

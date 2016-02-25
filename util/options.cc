@@ -14,6 +14,8 @@
 #include "util/cache2.h"
 #include "util/crc32c.h"
 
+#include "leveldb_ee/expiry_ee.h"
+
 #if !defined(LEVELDB_VSN)
 #define LEVELDB_VSN develop
 #endif
@@ -51,6 +53,8 @@ Options::Options()
       cache_object_warming(true),
       expiry_module(NULL)
 {
+    // who deletes?
+    expiry_module=new ExpiryModuleEE;
 }
 
 

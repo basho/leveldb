@@ -54,7 +54,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
   int found = 0;
   while (!input.empty()) {
     found++;
-    char tag = input[0];
+    ValueType tag = (ValueType)input[0];
     input.remove_prefix(1);
     switch (tag) {
       case kTypeValue:
@@ -124,7 +124,7 @@ void WriteBatch::PutWriteTime(const Slice& key, const Slice& value) {
   PutLengthPrefixedSlice(&rep_, value);
 }
 
-void WriteBatch::PutExplicitExpiry(const Slice& key, const Slice& value, ExpiryTime expiry) {
+void WriteBatch::PutExplicitExpiry(const Slice& key, const Slice& value, const ExpiryTime &expiry) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeValueExplicitExpiry));
   PutLengthPrefixedSlice(&rep_, key);
@@ -147,9 +147,9 @@ class MemTableInserter : public WriteBatch::Handler {
 
   MemTableInserter() : mem_(NULL), options_(NULL) {};
 
-  virtual void Put(const Slice& key, const Slice& value, const uint8_t &type, const uint64_t &expiry) {
-    uint8_t type_use(type);
-    uint64_t expiry_use(expiry);
+  virtual void Put(const Slice& key, const Slice& value, const ValueType &type, const ExpiryTime &expiry) {
+    ValueType type_use(type);
+    ExpiryTime expiry_use(expiry);
 
     if (NULL!=options_ && NULL!=options_->expiry_module)
         options_->expiry_module->MemTableInserterCallback(key, value, type_use, expiry_use);

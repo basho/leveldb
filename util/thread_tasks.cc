@@ -20,6 +20,8 @@
 //
 // -------------------------------------------------------------------
 
+#include "leveldb/expiry.h"
+
 #include "util/db_list.h"
 #include "util/hot_threads.h"
 #include "util/thread_tasks.h"
@@ -59,5 +61,19 @@ GroomingPollTask::operator()()
         DBList()->ScanDBs(true, &DBImpl::CheckAvailableCompactions);
 
 }   // GroomingPollTask::operator()
+
+
+void
+ExpiryTask::operator()()
+{
+//Compaction to Version to VersionSet to Options to ExpiryModule
+    const Options * opt;
+
+    opt=m_Compaction->version()->GetVersionSet()->GetOptions();
+    opt->expiry_module->ExpiryBackgroundCall(m_Compaction);
+    delete m_Compaction;
+    m_Compaction=NULL;
+
+}   // ExpiryTask::operator()()
 
 }  // namespace leveldb

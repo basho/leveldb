@@ -58,15 +58,6 @@ static const unsigned kMaxMemCompactLevel = kNumOverlapLevels+1;
 
 class InternalKey;
 
-// Value types encoded as the last component of internal keys.
-// DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
-// data structures.
-enum ValueType {
-  kTypeDeletion = 0x0,
-  kTypeValue = 0x1,
-  kTypeValueWriteTime = 0x2,
-  kTypeValueExplicitExpiry = 0x3
-};
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
 // sequence number (since we sort sequence numbers in decreasing order

@@ -23,6 +23,7 @@
 
 #include <string>
 #include "leveldb/status.h"
+#include "leveldb/options.h"
 
 namespace leveldb {
 
@@ -42,7 +43,7 @@ class WriteBatch {
 
   // Store the mapping "key->value" in the database with
   //  explicit expiry date
-  void PutExplicitExpiry(const Slice& key, const Slice& value, uint64_t expiry);
+  void PutExplicitExpiry(const Slice& key, const Slice& value, const ExpiryTime & expiry);
 
   // If the database contains a mapping for "key", erase it.  Else do nothing.
   void Delete(const Slice& key);
@@ -54,7 +55,7 @@ class WriteBatch {
   class Handler {
    public:
     virtual ~Handler();
-    virtual void Put(const Slice& key, const Slice& value, const uint8_t & type, const uint64_t & expiry) = 0;
+    virtual void Put(const Slice& key, const Slice& value, const ValueType & type, const ExpiryTime & expiry) = 0;
     virtual void Delete(const Slice& key) = 0;
   };
   Status Iterate(Handler* handler) const;
