@@ -17,6 +17,7 @@
 
 #include "leveldb/slice.h"
 #include "leveldb/status.h"
+#include "leveldb/options.h"
 
 namespace leveldb {
 
@@ -63,6 +64,14 @@ class Iterator {
   // the iterator.
   // REQUIRES: !AtEnd() && !AtStart()
   virtual Slice value() const = 0;
+
+  // Riak specific:  if a database iterator, returns key type
+  // REQUIRES: Valid()
+  virtual ValueType type() const {return kTypeValue; };
+
+  // Riak specific:  if a database iterator, returns expiry time
+  // REQUIRES: Valid()
+  virtual ExpiryTime expiry() const {return 0; };
 
   // If an error has occurred, return it.  Else return an ok status.
   virtual Status status() const = 0;

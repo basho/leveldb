@@ -1700,7 +1700,13 @@ TEST(DBTest, MultiThreaded) {
 }
 
 namespace {
-typedef std::map<std::string, std::string> KVMap;
+struct KVEntry
+{
+    std::string m_Value;
+    KeyMetaData m_Meta;
+};
+
+typedef std::map<std::string, KVEntry> KVMap;
 }
 
 class ModelDB: public DB {
@@ -1752,8 +1758,12 @@ class ModelDB: public DB {
     class Handler : public WriteBatch::Handler {
      public:
       KVMap* map_;
-      virtual void Put(const Slice& key, const Slice& value, const uint8_t &, const uint64_t &) {
-        (*map_)[key.ToString()] = value.ToString();
+      virtual void Put(const Slice& key, const Slice& value, const ValueType & type, const ExpiryTime & expiry) {
+        KVEntry ent;
+        ent.m_Value=value.ToString();
+        ent.m_Meta.m_Type=type;
+        ent.m_Meta.m_Expiry=expiry;
+        (*map_)[key.ToString()] = ent;
       }
       virtual void Delete(const Slice& key) {
         map_->erase(key.ToString());
@@ -1799,7 +1809,7 @@ class ModelDB: public DB {
     virtual void Next() { ++iter_; }
     virtual void Prev() { --iter_; }
     virtual Slice key() const { return iter_->first; }
-    virtual Slice value() const { return iter_->second; }
+    virtual Slice value() const { return iter_->second.m_Value; }
     virtual Status status() const { return Status::OK(); }
    private:
     const KVMap* const map_;
