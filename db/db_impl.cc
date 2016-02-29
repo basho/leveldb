@@ -2148,6 +2148,9 @@ Status DB::Open(const Options& options, const std::string& dbname,
   VersionEdit edit;
   Status s;
 
+  // WARNING:  only use impl and impl->options_ from this point.
+  //           Things like tiered storage change the meanings
+
   // 4 level0 files at 2Mbytes and 2Mbytes of block cache
   //  (but first level1 file is likely to thrash)
   //  ... this value is AFTER write_buffer and 40M for recovery log and LOG
@@ -2160,8 +2163,8 @@ Status DB::Open(const Options& options, const std::string& dbname,
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
-    s = options.env->NewWriteOnlyFile(LogFileName(dbname, new_log_number),
-                                      &lfile, options.env->RecoveryMmapSize(&options));
+    s = impl->options_.env->NewWriteOnlyFile(LogFileName(impl->dbname_, new_log_number),
+                                      &lfile, impl->options_.env->RecoveryMmapSize(&impl->options_));
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
       impl->logfile_ = lfile;
