@@ -1980,20 +1980,15 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
 
-      WritableFile* lfile = NULL;
       gPerfCounters->Inc(ePerfWriteNewMem);
-      s = env_->NewWriteOnlyFile(LogFileName(dbname_, new_log_number), &lfile,
-                                 options_.env->RecoveryMmapSize(&options_));
+      s = NewRecoveryLog(new_log_number);
+
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
         versions_->ReuseFileNumber(new_log_number);
         break;
       }
-      delete log_;
-      delete logfile_;
-      logfile_ = lfile;
-      logfile_number_ = new_log_number;
-      log_ = new log::Writer(lfile);
+
       imm_ = mem_;
       has_imm_.Release_Store((MemTable*)imm_);
       if (NULL!=imm_)
@@ -2009,6 +2004,34 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   }
   return s;
 }
+
+// the following steps existed in two places, DB::Open() and
+//  DBImpl::MakeRoomForWrite().  This lead to a bug in Basho's
+//  tiered storage feature.  Unifying the code.
+Status DBImpl::NewRecoveryLog(
+    uint64_t NewLogNumber)
+{
+    mutex_.AssertHeld();
+    Status s;
+    WritableFile * lfile(NULL);
+
+    s = env_->NewWriteOnlyFile(LogFileName(dbname_, NewLogNumber), &lfile,
+                               options_.env->RecoveryMmapSize(&options_));
+    if (s.ok())
+    {
+        // close any existing
+        delete log_;
+        delete logfile_;
+
+        logfile_ = lfile;
+        logfile_number_ = NewLogNumber;
+        log_ = new log::Writer(lfile);
+    }   // if
+
+    return(s);
+
+}   // DBImpl::NewRecoveryLog
+
 
 bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   value->clear();
@@ -2162,14 +2185,11 @@ Status DB::Open(const Options& options, const std::string& dbname,
 
   if (s.ok()) {
     uint64_t new_log_number = impl->versions_->NewFileNumber();
-    WritableFile* lfile;
-    s = impl->options_.env->NewWriteOnlyFile(LogFileName(impl->dbname_, new_log_number),
-                                      &lfile, impl->options_.env->RecoveryMmapSize(&impl->options_));
+
+    s = impl->NewRecoveryLog(new_log_number);
+
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
-      impl->logfile_ = lfile;
-      impl->logfile_number_ = new_log_number;
-      impl->log_ = new log::Writer(lfile);
       s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
     }
     if (s.ok()) {
