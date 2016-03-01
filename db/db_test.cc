@@ -1936,6 +1936,44 @@ TEST(DBTest, Randomized) {
   } while (ChangeOptions());
 }
 
+
+class SimpleBugs
+{
+    // need a class for the test harness
+};
+
+
+TEST(SimpleBugs, TieredRecoveryLog)
+{
+    // DB::Open created first recovery log directly
+    //   which lead to it NOT being in tiered storage location.
+    // nope std::string dbname = test::TmpDir() + "/leveldb_nontiered";
+    std::string dbname = "leveldb";
+    std::string fastname = test::TmpDir() + "/leveldb_fast";
+    std::string slowname = test::TmpDir() + "/leveldb_slow";
+    std::string combined;
+
+    DB* db = NULL;
+    Options opts;
+
+    opts.tiered_slow_level = 4;
+    opts.tiered_fast_prefix = fastname;
+    opts.tiered_slow_prefix = slowname;
+    opts.create_if_missing = true;
+
+    Env::Default()->CreateDir(fastname);
+    Env::Default()->CreateDir(slowname);
+
+    Status s = DB::Open(opts, dbname, &db);
+    ASSERT_OK(s);
+    ASSERT_TRUE(db != NULL);
+
+    delete db;
+    DestroyDB(dbname, opts);
+
+}   // TieredRecoveryLog
+
+
 std::string MakeKey(unsigned int num) {
   char buf[30];
   snprintf(buf, sizeof(buf), "%016u", num);
