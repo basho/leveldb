@@ -110,6 +110,8 @@ class DBImpl : public DB {
   Status WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit, Version* base);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
+  Status NewRecoveryLog(uint64_t NewLogNumber);
+
   WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   void MaybeScheduleCompaction();
