@@ -109,26 +109,20 @@ void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq) {
   EncodeFixed64(&b->rep_[0], seq);
 }
 
-void WriteBatch::Put(const Slice& key, const Slice& value) {
+void WriteBatch::Put(const Slice& key, const Slice& value, const KeyMetaData * meta) {
+  KeyMetaData local_meta;
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
-  rep_.push_back(static_cast<char>(kTypeValue));
+  if (NULL!=meta)
+      local_meta=*meta;
+  rep_.push_back(static_cast<char>(local_meta.m_Type));
   PutLengthPrefixedSlice(&rep_, key);
-  PutLengthPrefixedSlice(&rep_, value);
-}
-
-void WriteBatch::PutWriteTime(const Slice& key, const Slice& value) {
-  WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
-  rep_.push_back(static_cast<char>(kTypeValueWriteTime));
-  PutLengthPrefixedSlice(&rep_, key);
-  PutVarint64(&rep_,Env::Default()->NowMicros());
-  PutLengthPrefixedSlice(&rep_, value);
-}
-
-void WriteBatch::PutExplicitExpiry(const Slice& key, const Slice& value, const ExpiryTime &expiry) {
-  WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
-  rep_.push_back(static_cast<char>(kTypeValueExplicitExpiry));
-  PutLengthPrefixedSlice(&rep_, key);
-  PutVarint64(&rep_, expiry);
+  if (kTypeValueExplicitExpiry==local_meta.m_Type
+      || kTypeValueWriteTime==local_meta.m_Type)
+  {
+      if (kTypeValueWriteTime==local_meta.m_Type && 0==local_meta.m_Expiry)
+          local_meta.m_Expiry=port::NowUint64();
+      PutVarint64(&rep_, local_meta.m_Expiry);
+  }   // if
   PutLengthPrefixedSlice(&rep_, value);
 }
 

@@ -1718,19 +1718,21 @@ class ModelDB: public DB {
 
   explicit ModelDB(const Options& options): options_(options) { }
   ~ModelDB() { }
-  virtual Status Put(const WriteOptions& o, const Slice& k, const Slice& v) {
-    return DB::Put(o, k, v);
+  virtual Status Put(const WriteOptions& o, const Slice& k, const Slice& v, const KeyMetaData * meta=NULL) {
+    return DB::Put(o, k, v, meta);
   }
   virtual Status Delete(const WriteOptions& o, const Slice& key) {
     return DB::Delete(o, key);
   }
   virtual Status Get(const ReadOptions& options,
-                     const Slice& key, std::string* value) {
+                     const Slice& key, std::string* value,
+                     KeyMetaData * meta = NULL) {
     assert(false);      // Not implemented
     return Status::NotFound(key);
   }
   virtual Status Get(const ReadOptions& options,
-                     const Slice& key, Value* value) {
+                     const Slice& key, Value* value,
+                     KeyMetaData * meta = NULL) {
     assert(false);      // Not implemented
     return Status::NotFound(key);
   }

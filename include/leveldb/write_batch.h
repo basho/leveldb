@@ -35,15 +35,7 @@ class WriteBatch {
   ~WriteBatch();
 
   // Store the mapping "key->value" in the database.
-  void Put(const Slice& key, const Slice& value);
-
-  // Store the mapping "key->value" in the database with
-  //  write time logging
-  void PutWriteTime(const Slice& key, const Slice& value);
-
-  // Store the mapping "key->value" in the database with
-  //  explicit expiry date
-  void PutExplicitExpiry(const Slice& key, const Slice& value, const ExpiryTime & expiry);
+  void Put(const Slice& key, const Slice& value, const KeyMetaData * meta=NULL);
 
   // If the database contains a mapping for "key", erase it.  Else do nothing.
   void Delete(const Slice& key);

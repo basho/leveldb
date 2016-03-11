@@ -24,6 +24,7 @@
 #define EXPIRY_H
 
 #include <stdint.h>
+#include "leveldb/env.h"
 #include "leveldb/options.h"
 
 namespace leveldb {
@@ -42,7 +43,8 @@ public:
     ~ExpiryModule() {};
 
     // Print expiry options to LOG file
-    virtual void Dump(Logger * log) const = 0;
+    virtual void Dump(Logger * log) const
+    {Log(log,"                        Expiry: (none)");};
 
     // db/write_batch.cc MemTableInserter::Put() calls this.
     // returns false on internal error

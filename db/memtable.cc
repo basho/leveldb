@@ -64,6 +64,8 @@ class MemTableIterator: public Iterator {
     Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
   }
+  virtual KeyMetaData & keymetadata() const
+   {MemTable::DecodeKeyMetaData(iter_.key(), keymetadata_); return(keymetadata_);};
 
   virtual Status status() const { return Status::OK(); }
 
@@ -114,6 +116,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
 
 bool MemTable::Get(const LookupKey& key, Value* value, Status* s,
     const Options * options) {
+  bool ret_flag(false);
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -136,19 +139,22 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s,
             ExtractUserKey(internal_key),
             key.user_key()) == 0) {
       // Correct user key
-      ValueType type=ExtractValueType(internal_key);
-      switch (type) {
+      KeyMetaData meta;
+      DecodeKeyMetaData(entry, meta);
+
+      switch (meta.m_Type) {
         case kTypeValueWriteTime:
         case kTypeValueExplicitExpiry:
         {
             bool expired=false;
             if (NULL!=options && NULL!=options->expiry_module)
-                expired=options->expiry_module->MemTableCallback(type, ExtractExpiry(internal_key));
+                expired=options->expiry_module->MemTableCallback(meta.m_Type, meta.m_Expiry);
             if (expired)
             {
                 // like kTypeDeletion
                 *s = Status::NotFound(Slice());
-                return true;
+                ret_flag=true;
+                break;
             }   // if
             //otherwise fall into kTypeValue code
         }   // case
@@ -157,15 +163,37 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s,
         {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           value->assign(v.data(), v.size());
-          return true;
+          ret_flag=true;
+          break;
         }
         case kTypeDeletion:
           *s = Status::NotFound(Slice());
-          return true;
-      }
+          ret_flag=true;
+          break;
+      } // switch
+
+      // only unpack metadata if requested
+      if (key.WantsKeyMetaData())
+          key.SetKeyMetaData(meta);
     }
   }
-  return false;
+  return ret_flag;
 }
+
+// this is a static function
+void MemTable::DecodeKeyMetaData(
+    const char * key,
+    KeyMetaData & meta)
+{
+    Slice key_slice = GetLengthPrefixedSlice(key);
+
+    meta.m_Type=ExtractValueType(key_slice);
+    meta.m_Sequence=ExtractSequenceNumber(key_slice);
+    if (IsExpiryKey(meta.m_Type))
+        meta.m_Expiry=ExtractExpiry(key_slice);
+    else
+        meta.m_Expiry=0;
+
+} // DecodeKeyMetaData
 
 }  // namespace leveldb

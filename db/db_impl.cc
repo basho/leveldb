@@ -1650,14 +1650,16 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
 
 Status DBImpl::Get(const ReadOptions& options,
                    const Slice& key,
-                   std::string* value) {
+                   std::string* value,
+                   KeyMetaData * meta) {
   StringValue stringvalue(*value);
-  return DBImpl::Get(options, key, &stringvalue);
+  return DBImpl::Get(options, key, &stringvalue, meta);
 }
 
 Status DBImpl::Get(const ReadOptions& options,
                    const Slice& key,
-                   Value* value) {
+                   Value* value,
+                   KeyMetaData * meta) {
   Status s;
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
@@ -1681,7 +1683,7 @@ Status DBImpl::Get(const ReadOptions& options,
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
-    LookupKey lkey(key, snapshot);
+    LookupKey lkey(key, snapshot, meta);
     if (mem->Get(lkey, value, &s, &options_)) {
       // Done
         gPerfCounters->Inc(ePerfGetMem);
@@ -1731,8 +1733,8 @@ void DBImpl::ReleaseSnapshot(const Snapshot* s) {
 }
 
 // Convenience methods
-Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
-  return DB::Put(o, key, val);
+Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val, const KeyMetaData * meta) {
+  return DB::Put(o, key, val, meta);
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
@@ -2120,9 +2122,10 @@ void DBImpl::GetApproximateSizes(
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
-Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
+Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value,
+  const KeyMetaData * meta) {
   WriteBatch batch;
-  batch.Put(key, value);
+  batch.Put(key, value, meta);
   return Write(opt, &batch);
 }
 

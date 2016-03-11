@@ -100,12 +100,18 @@ TEST(WriteBatchTest, Multiple) {
 
 TEST(WriteBatchTest, MultipleExpiry) {
   WriteBatch batch;
+  KeyMetaData meta;
   batch.Put(Slice("Mary"), Slice("Lamb"));
-  batch.PutExplicitExpiry(Slice("Adam"), Slice("Ant"), 2347);
+  meta.m_Type=kTypeValueExplicitExpiry;
+  meta.m_Expiry=2347;
+  batch.Put(Slice("Adam"), Slice("Ant"), &meta);
+  //batch.PutExplicitExpiry(Slice("Adam"), Slice("Ant"), 2347);
   batch.Put(Slice("Frosty"), Slice("Snowman"));
   batch.Put(Slice("Tip"), Slice("ONeal"));
   batch.Delete(Slice("Frosty"));
-  batch.PutExplicitExpiry(Slice("The"), Slice("Fonz"), 987654321);
+  meta.m_Type=kTypeValueExplicitExpiry;
+  meta.m_Expiry=987654321;
+  batch.Put(Slice("The"), Slice("Fonz"), &meta);
   WriteBatchInternal::SetSequence(&batch, 200);
   ASSERT_EQ(200, WriteBatchInternal::Sequence(&batch));
   ASSERT_EQ(6, WriteBatchInternal::Count(&batch));

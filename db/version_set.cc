@@ -298,6 +298,7 @@ struct Saver {
   const Options* options;
   Slice user_key;
   Value* value;
+  const LookupKey * lookup;
 };
 }
 static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
@@ -316,6 +317,8 @@ static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
       if (s->state == kFound) {
         s->value->assign(v.data(), v.size());
       }
+      if (NULL!=s->lookup)
+        s->lookup->SetKeyMetaData(parsed_key);
     }
   }
   return(match);
@@ -405,6 +408,7 @@ Status Version::Get(const ReadOptions& options,
       saver.options = vset_->options_;
       saver.user_key = user_key;
       saver.value = value;
+      saver.lookup = &k;
       s = vset_->table_cache_->Get(options, f->number, f->file_size, level,
                                    ikey, &saver, SaveValue);
       if (!s.ok()) {

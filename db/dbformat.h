@@ -160,7 +160,8 @@ inline bool IsExpiryKey(ValueType val_type) {
 
 // Riak: is this an expiry key and therefore contain extra ExpiryTime field
 inline bool IsExpiryKey(const Slice & internal_key) {
-    return(IsExpiryKey(ExtractValueType(internal_key)));
+    return(internal_key.size()>=KeySuffixSize(kTypeValueWriteTime)
+           && IsExpiryKey(ExtractValueType(internal_key)));
 }
 
 // Riak: extracts expiry value
@@ -262,7 +263,7 @@ class LookupKey {
  public:
   // Initialize *this for looking up user_key at a snapshot with
   // the specified sequence number.
-  LookupKey(const Slice& user_key, SequenceNumber sequence);
+  LookupKey(const Slice& user_key, SequenceNumber sequence, KeyMetaData * meta=NULL);
 
   ~LookupKey();
 
@@ -275,6 +276,30 @@ class LookupKey {
   // Return the user key
   Slice user_key() const
   { return Slice(kstart_, end_ - kstart_ - KeySuffixSize(internal_key())); }
+
+  // did requestor have metadata object?
+  bool WantsKeyMetaData() const {return(NULL!=meta_);};
+
+  void SetKeyMetaData(ValueType type, SequenceNumber seq, ExpiryTime expiry) const
+  {if (NULL!=meta_)
+    {
+      meta_->m_Type=type;
+      meta_->m_Sequence=seq;
+      meta_->m_Expiry=expiry;
+    } // if
+  };
+
+  void SetKeyMetaData(const ParsedInternalKey & pi_key) const
+  {if (NULL!=meta_)
+    {
+      meta_->m_Type=pi_key.type;
+      meta_->m_Sequence=pi_key.sequence;
+      meta_->m_Expiry=pi_key.expiry;
+    } // if
+  };
+
+  void SetKeyMetaData(const KeyMetaData & meta) const
+  {if (NULL!=meta_) *meta_=meta;};
 
  private:
   // We construct a char array of the form:
@@ -289,6 +314,9 @@ class LookupKey {
   const char* kstart_;
   const char* end_;
   char space_[200];      // Avoid allocation for short keys
+
+  // allow code that finds the key to place metadata here, even if 'const'
+  mutable KeyMetaData * meta_;
 
   // No copying allowed
   LookupKey(const LookupKey&);

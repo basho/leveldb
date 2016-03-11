@@ -29,15 +29,17 @@ class DBImpl : public DB {
   virtual ~DBImpl();
 
   // Implementations of the DB interface
-  virtual Status Put(const WriteOptions&, const Slice& key, const Slice& value);
+  virtual Status Put(const WriteOptions&, const Slice& key, const Slice& value, const KeyMetaData * meta=NULL);
   virtual Status Delete(const WriteOptions&, const Slice& key);
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(const ReadOptions& options,
                      const Slice& key,
-                     std::string* value);
+                     std::string* value,
+                     KeyMetaData * meta=NULL);
   virtual Status Get(const ReadOptions& options,
                      const Slice& key,
-                     Value* value);
+                     Value* value,
+                     KeyMetaData * meta=NULL);
   virtual Iterator* NewIterator(const ReadOptions&);
   virtual const Snapshot* GetSnapshot();
   virtual void ReleaseSnapshot(const Snapshot* snapshot);

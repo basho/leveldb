@@ -73,6 +73,23 @@ class DBIter: public Iterator {
     assert(valid_);
     return (direction_ == kForward) ? iter_->value() : saved_value_;
   }
+  // Riak specific:  if a database iterator, returns key meta data
+  // REQUIRES: Valid() and forward iteration
+  //  (reverse iteration is possible, just needs code)
+  virtual KeyMetaData & keymetadata() const
+  {
+    assert(valid_ && kForward==direction_);
+    if (kForward==direction_)
+    {
+      ParsedInternalKey parsed;
+      ParseInternalKey(iter_->key(), &parsed);
+      keymetadata_.m_Type=parsed.type;
+      keymetadata_.m_Sequence=parsed.sequence;
+      keymetadata_.m_Expiry=parsed.expiry;
+    }
+    return(keymetadata_);
+  }
+
   virtual Status status() const {
     if (status_.ok()) {
       return iter_->status();
