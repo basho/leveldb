@@ -85,17 +85,17 @@ class BytewiseComparatorImpl : public Comparator {
 //    $d, %% means handoff filter
 //    Actor/binary, %% The actual actor
 //    >>
-// Element keys are
+// Element keys are removes sort after adds for the same element
 //  <<
 //    SetNameLen:32/little-unsigned-integer, %% the length of the set name
 //    SetName:SetNameLen/binary, %% Set name for bytewise comparison
 //    $e, % indicates an element
 //    ElementLen:32/little-unsigned-integer, %% Length of the element
 //    Element:ElementLen/binary, %% The actual element
+//    $a | $r:1/binary, %% a|r single byte char to determine if the key is an add or a tombstone
 //    ActorLen:32/little-unsigned-integer, %% Length of the actor ID
 //    Actor:ActorLen/binary, %% The actual actor
-//    Counter:64/little-unsigned-integer,
-//    $a | $r:1/binary, %% a|r single byte char to determine if the key is an add or a tombstone
+//    Counter:64/little-unsigned-integer
 //    >>
 //  End Key is:
 //  <<
@@ -177,7 +177,7 @@ class BSComparator : public Comparator {
         return ac.compare(bc);
       }
 
-      // compare element etc
+      // compare element
       Slice aelem = Get32PrefData(ac), belem = Get32PrefData(bc);
       int elem_cmp = aelem.compare(belem);
 
@@ -185,10 +185,16 @@ class BSComparator : public Comparator {
         return elem_cmp;
       }
 
-      //if here, same element (even if element is absent (a clock))
-      // so check the actor
-      //if here, same element (even if element is absent (a clock))
-      // so check the actor
+      // if here, same element adds lower than removes same set,
+      // element Look at the TSB
+      Slice a_tsb = GetTsb(ac), b_tsb = GetTsb(bc);
+
+      int tsb_cmp = a_tsb.compare(b_tsb);
+      if(tsb_cmp) {
+        return tsb_cmp;
+      }
+
+      // same set, element, and same TSB
       Slice a_actor = Get32PrefData(ac), b_actor = Get32PrefData(bc);
 
       int actor_cmp = a_actor.compare(b_actor);
@@ -197,22 +203,11 @@ class BSComparator : public Comparator {
         return actor_cmp;
       }
 
-      // If here, then same actor, which means same key (for a clock)
-      // or check counter (for an element). Since same key is dealt
-      // with by == above, must be an element key
-
+      // If here, then same set,element,TSB, and actor so check
+      // counter
       uint64_t a_cntr = GetCounter(ac), b_cntr = GetCounter(bc);
 
-      uint64_t cntr_cmp = a_cntr - b_cntr;
-      if(cntr_cmp) {
-        return cntr_cmp;
-      }
-
-      // same set, element, actor and counter but not the same key?
-      // Look at the TSB
-      Slice a_tsb = GetTsb(ac), b_tsb = GetTsb(bc);
-
-      return  a_tsb.compare(b_tsb);
+      return a_cntr - b_cntr;
     }
 
     // No need to shorten keys since it's fixed size.
