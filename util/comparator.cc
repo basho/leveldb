@@ -78,6 +78,13 @@ class BytewiseComparatorImpl : public Comparator {
 //    $c, %% means clock
 //    Actor/binary, %% The actual actor
 //    >>
+// Handoff Filter keys are
+//  <<
+//    SetNameLen:32/little-unsigned-integer, %% the lengthof the set name
+//    SetName:SetNameLen/binary, %% Set name for bytewise comparison
+//    $d, %% means handoff filter
+//    Actor/binary, %% The actual actor
+//    >>
 // Element keys are
 //  <<
 //    SetNameLen:32/little-unsigned-integer, %% the length of the set name
@@ -88,7 +95,7 @@ class BytewiseComparatorImpl : public Comparator {
 //    ActorLen:32/little-unsigned-integer, %% Length of the actor ID
 //    Actor:ActorLen/binary, %% The actual actor
 //    Counter:64/little-unsigned-integer,
-//    $a | $r:8/binary, %% a|r single byte char to determine if the key is an add or a tombstone
+//    $a | $r:1/binary, %% a|r single byte char to determine if the key is an add or a tombstone
 //    >>
 //  End Key is:
 //  <<
@@ -127,13 +134,17 @@ class BSComparator : public Comparator {
   }
 
   static Slice GetKeyType(Slice &s) {
-    Slice res = Slice(s.data(), 1); // one byte c, e, or z
+    Slice res = Slice(s.data(), 1); // one byte c, d, e, or z
     s.remove_prefix(1);
     return res;
   }
 
   static bool IsClock(Slice &s) {
     return s[0] == 'c';
+  }
+
+  static bool IsHoff(Slice &s) {
+    return s[0] == 'd';
   }
 
     virtual int Compare(const Slice& a, const Slice& b) const {
@@ -150,7 +161,7 @@ class BSComparator : public Comparator {
         return set_cmp;
       }
       // Same set?
-      // check keytype byte (0=clock, 1=element,2=end_key)
+      // check keytype byte (c=clock, d=hoff, e=element, z=end_key)
       Slice a_keytype = GetKeyType(ac), b_keytype = GetKeyType(bc);
 
       int key_type_cmp = a_keytype.compare(b_keytype);
@@ -160,7 +171,7 @@ class BSComparator : public Comparator {
       }
 
       // same type & same set, but not the same key? can't be an end key!
-      if(IsClock(a_keytype)) {
+      if(IsClock(a_keytype) || IsHoff(a_keytype)) {
         // compare actor, actor is only data left in key, so just
         // compare slices
         return ac.compare(bc);
