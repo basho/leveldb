@@ -159,6 +159,8 @@ class DB {
   // with Options.is_repair=true
   virtual Status VerifyLevels();
 
+  virtual Logger* GetLogger() const { return NULL; }
+
  private:
   // No copying allowed
   DB(const DB&);
