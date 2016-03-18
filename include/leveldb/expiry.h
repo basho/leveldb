@@ -35,6 +35,7 @@ class SstCounters;
 class ParsedInternalKey;
 class Version;
 class Compaction;
+struct FileMetaData;
 
 class ExpiryModule
 {
@@ -72,16 +73,14 @@ public:
     // db/memtable.cc MemTable::Get() calls this.
     // returns true if type/expiry is expired, returns false if not expired
     virtual bool MemTableCallback(
-        ValueType Type,                  // input: ValueType from key
-        const ExpiryTime & Expiry) const // input: Expiry from key, or zero
+        const Slice & Key) const        // input: leveldb internal key
     {return(false);};
 
     // db/version_set.cc VersionSet::Finalize() calls this if no
     //  other compaction selected for a level
     // returns true if there is an expiry compaction eligible
     virtual bool CompactionFinalizeCallback(
-        Version * current,     // input/output: Version considering compaction
-        const int level) const // input: ... at this level
+        const std::vector<FileMetaData*> & Level) const   //input: file objects at target level
     {return(false);};
 
     virtual void ExpiryBackgroundCall(

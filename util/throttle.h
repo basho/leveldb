@@ -33,6 +33,11 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0);
 uint64_t GetThrottleWriteRate();
 uint64_t GetUnadjustedThrottleWriteRate();
 
+// clock_gettime but only updated once every 60 seconds (roughly)
+//  (SetTimeMinutes() intended for unit tests)
+uint64_t GetTimeMinutes();
+void SetTimeMinutes(uint64_t);
+
 // step 1 in two step shutdown
 void ThrottleStopThreads();
 

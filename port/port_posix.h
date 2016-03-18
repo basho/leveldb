@@ -227,7 +227,7 @@ inline void SetCurrentThreadName(const char* threadName) {
 
 // similar to Env::NowMicros except guaranteed to return "time" instead
 //  of potentially only ticks since reboot
-inline uint64_t NowUint64() {
+inline uint64_t TimeUint64() {
 #if _POSIX_TIMERS >= 200801L
     struct timespec ts;
 
@@ -239,7 +239,7 @@ inline uint64_t NowUint64() {
     gettimeofday(&tv, NULL);
     return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
 #endif
-  }
+} // TimeUint64
 
 } // namespace port
 } // namespace leveldb

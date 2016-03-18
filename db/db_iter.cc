@@ -184,7 +184,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
     ParsedInternalKey ikey;
     if (ParseKey(&ikey) && ikey.sequence <= sequence_) {
       if (IsExpiryKey(ikey.type) && NULL!=expiry_
-          && expiry_->MemTableCallback(ikey.type, ikey.expiry))
+          && expiry_->KeyRetirementCallback(ikey))
         ikey.type=kTypeDeletion;
       switch (ikey.type) {
         case kTypeDeletion:
@@ -256,7 +256,7 @@ void DBIter::FindPrevUserEntry() {
           break;
         }
         if (IsExpiryKey(ikey.type) && NULL!=expiry_
-            && expiry_->MemTableCallback(ikey.type, ikey.expiry))
+            && expiry_->KeyRetirementCallback(ikey))
           ikey.type=kTypeDeletion;
 
         value_type = ikey.type;

@@ -29,7 +29,7 @@ struct FileMetaData {
 
   FileMetaData()
   : refs(0), /*allowed_seeks(1 << 30),*/ file_size(0),
-      num_entries(0), level(-1)
+      num_entries(0), level(-1), expiry1(0), expiry2(0), expiry3(0)
   { }
 };
 

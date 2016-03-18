@@ -147,7 +147,7 @@ class Version {
   int compaction_level_;
   bool compaction_grooming_;
   bool compaction_no_move_;
-  bool compaction_expire_;
+  bool compaction_expirefile_;
   volatile int write_penalty_;
 
   explicit Version(VersionSet* vset)
@@ -158,7 +158,7 @@ class Version {
         compaction_level_(-1),
         compaction_grooming_(false),
         compaction_no_move_(false),
-        compaction_expire_(false),
+        compaction_expirefile_(false),
         write_penalty_(0)
   {
   }

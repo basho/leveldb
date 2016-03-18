@@ -81,7 +81,7 @@ main(
             uint64_t first_time;
             int loop;
 
-            first_time=leveldb::port::NowUint64();
+            first_time=leveldb::port::TimeUint64();
 
             if (csv_header)
             {
@@ -97,7 +97,7 @@ main(
                 do
                 {
                     // capture state before reporting
-                    cur_time=leveldb::port::NowUint64();
+                    cur_time=leveldb::port::TimeUint64();
                     for (loop=0; loop<leveldb::ePerfCountEnumSize; ++loop)
                     {
                         cur_counters[loop]=perf_ptr->Value(loop);

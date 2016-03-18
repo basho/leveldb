@@ -138,7 +138,7 @@ static void CheckGet2(
   CheckCondition(type==meta.rep.m_Type);
   if (0==expiry && leveldb::kTypeValueWriteTime==type)
   {
-    leveldb::ExpiryTime now=leveldb::port::NowUint64();
+    leveldb::ExpiryTime now=leveldb::port::TimeUint64();
     CheckCondition(gStartTime<=meta.rep.m_Expiry && meta.rep.m_Expiry<=now);
   }   // if
   else
@@ -164,7 +164,7 @@ static void CheckIter2(leveldb_iterator_t* iter,
   CheckCondition(meta.m_Type==it_meta.rep.m_Type);
   if (0==meta.m_Expiry && leveldb::kTypeValueWriteTime==meta.m_Type)
   {
-    leveldb::ExpiryTime now=leveldb::port::NowUint64();
+    leveldb::ExpiryTime now=leveldb::port::TimeUint64();
     CheckCondition(gStartTime<=it_meta.rep.m_Expiry && it_meta.rep.m_Expiry<=now);
   }   // if
   else
@@ -285,7 +285,7 @@ int main(int argc, char** argv) {
 
   CheckCondition(leveldb_major_version() >= 1);
   CheckCondition(leveldb_minor_version() >= 1);
-  gStartTime=leveldb::port::NowUint64();
+  gStartTime=leveldb::port::TimeUint64();
 
   snprintf(dbname, sizeof(dbname),
            "%s/leveldb_c_test-%d",

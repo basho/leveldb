@@ -1081,13 +1081,13 @@ VersionSet::Finalize(Version* v)
     int best_level = -1;
     double best_score = -1;
     bool compaction_found;
-    bool is_grooming, no_move, expire;
+    bool is_grooming, no_move, expire_file;
     uint64_t micros_now;
 
     compaction_found=false;
     is_grooming=false;
     no_move=false;
-    expire=false;
+    expire_file=false;
     micros_now=env_->NowMicros();
 
     for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level)
@@ -1232,16 +1232,16 @@ VersionSet::Finalize(Version* v)
             }   // if
 
             // finally test for expiry if no compaction candidates
-            if (!compaction_found)
+            if (!compaction_found && !options_->is_internal_db)
             {
-                compaction_found=options_->expiry_module->CompactionFinalizeCallback(v, level);
+                compaction_found=options_->expiry_module->CompactionFinalizeCallback(v->GetFileList(level));
                 if (compaction_found)
                 {
                     best_level=level;
                     best_score=0;
                     is_grooming=false;
                     no_move=true;
-                    expire=true;
+                    expire_file=true;
                 }   // if
             }   // if
         }   // if
@@ -1254,7 +1254,7 @@ VersionSet::Finalize(Version* v)
     v->compaction_score_ = best_score;
     v->compaction_grooming_ = is_grooming;
     v->compaction_no_move_ = no_move;
-    v->compaction_expire_ = expire;
+    v->compaction_expirefile_ = expire_file;
 
     return(compaction_found);
 
@@ -1643,7 +1643,7 @@ VersionSet::PickCompaction(
           level = current_->file_to_compact_level_;
           c = new Compaction(level);
           c->inputs_[0].push_back(current_->file_to_compact_);
-      } else if (current_->compaction_expire_) {
+      } else if (current_->compaction_expirefile_) {
           level = current_->file_to_compact_level_;
           c = new Compaction(level);
           c->inputs_[0]=current_->files_[level];
@@ -1658,7 +1658,7 @@ VersionSet::PickCompaction(
       // set submitted as race defense
       m_CompactionStatus[level].m_Submitted=true;
 
-      if (!current_->compaction_expire_)
+      if (!current_->compaction_expirefile_)
       {
           // m_OverlappedFiles==true levels have files that
           //   may overlap each other, so pick up all overlapping ones

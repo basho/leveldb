@@ -23,6 +23,7 @@
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
 #include "util/coding.h"
+#include "util/throttle.h"
 
 namespace leveldb {
 
@@ -120,7 +121,7 @@ void WriteBatch::Put(const Slice& key, const Slice& value, const KeyMetaData * m
       || kTypeValueWriteTime==local_meta.m_Type)
   {
       if (kTypeValueWriteTime==local_meta.m_Type && 0==local_meta.m_Expiry)
-          local_meta.m_Expiry=port::NowUint64();
+          local_meta.m_Expiry=GetTimeMinutes();
       PutVarint64(&rep_, local_meta.m_Expiry);
   }   // if
   PutLengthPrefixedSlice(&rep_, value);

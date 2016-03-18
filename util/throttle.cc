@@ -39,6 +39,10 @@ namespace leveldb {
 port::Mutex* gThrottleMutex=NULL;
 port::CondVar* gThrottleCond=NULL;
 
+// current time, on roughly a 60 second scale
+//  (used to reduce number of OS calls for expiry)
+uint64_t gCurrentTime=0;
+
 #define THROTTLE_SECONDS 60
 #define THROTTLE_TIME THROTTLE_SECONDS*1000000
 #define THROTTLE_INTERVALS 63
@@ -120,6 +124,10 @@ ThrottleThread(
 
     while(gThrottleRunning)
     {
+        // update our global clock, not intended to be a precise
+        //  60 second interval.
+        gCurrentTime=port::TimeUint64();
+
         //
         // This is code polls for existance of /etc/riak/perf_counters and sets
         //  the global gPerfCountersDisabled accordingly.
@@ -314,6 +322,9 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
 uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
 uint64_t GetUnadjustedThrottleWriteRate() {return(gUnadjustedThrottleRate);};
 
+// clock_gettime but only updated once every 60 seconds (roughly)
+uint64_t GetTimeMinutes() {return(gCurrentTime);};
+void SetTimeMinutes(uint64_t Time) {gCurrentTime=Time;};
 /**
  * ThrottleStopThreads() is the first step in a two step shutdown.
  * This stops the 1 minute throttle calculation loop that also

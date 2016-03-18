@@ -148,7 +148,7 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s,
         {
             bool expired=false;
             if (NULL!=options && NULL!=options->expiry_module)
-                expired=options->expiry_module->MemTableCallback(meta.m_Type, meta.m_Expiry);
+                expired=options->expiry_module->MemTableCallback(internal_key);
             if (expired)
             {
                 // like kTypeDeletion
