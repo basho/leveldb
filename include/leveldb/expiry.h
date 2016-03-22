@@ -29,12 +29,13 @@
 
 namespace leveldb {
 
+class Compaction;
 class Logger;
+class ParsedInternalKey;
 class Slice;
 class SstCounters;
-class ParsedInternalKey;
 class Version;
-class Compaction;
+class VersionEdit;
 struct FileMetaData;
 
 class ExpiryModule
@@ -80,13 +81,11 @@ public:
     //  other compaction selected for a level
     // returns true if there is an expiry compaction eligible
     virtual bool CompactionFinalizeCallback(
-        const std::vector<FileMetaData*> & Level) const   //input: file objects at target level
+        bool WantAll,                 // input: true - examine all expired files
+        const Version & Ver,          // input: database state for examination
+        int Level,                    // input: level to review for expiry
+        VersionEdit * Edit) const     // output: NULL or destination of delete list
     {return(false);};
-
-    virtual void ExpiryBackgroundCall(
-        Compaction * Compact) const  // input: ... data for compaction
-    {};
-
 
 };  // ExpiryModule
 

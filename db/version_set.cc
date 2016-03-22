@@ -462,7 +462,7 @@ void Version::Unref() {
 
 bool Version::OverlapInLevel(int level,
                              const Slice* smallest_user_key,
-                             const Slice* largest_user_key) {
+                             const Slice* largest_user_key) const {
   return SomeFileOverlapsRange(vset_->icmp_,
                                !gLevelTraits[level].m_OverlappedFiles,
                                files_[level],
@@ -1234,7 +1234,11 @@ VersionSet::Finalize(Version* v)
             // finally test for expiry if no compaction candidates
             if (!compaction_found && !options_->is_internal_db)
             {
-                compaction_found=options_->expiry_module->CompactionFinalizeCallback(v->GetFileList(level));
+                compaction_found=options_->expiry_module->CompactionFinalizeCallback(false,
+                                                                                     *v,
+                                                                                     level,
+                                                                                     NULL);
+
                 if (compaction_found)
                 {
                     best_level=level;
@@ -1397,7 +1401,7 @@ size_t VersionSet::NumLevelFiles(int level) const {
   return current_->files_[level].size();
 }
 
-bool VersionSet::IsLevelOverlapped(int level) const {
+bool VersionSet::IsLevelOverlapped(int level) {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return(gLevelTraits[level].m_OverlappedFiles);
@@ -1647,6 +1651,7 @@ VersionSet::PickCompaction(
           level = current_->file_to_compact_level_;
           c = new Compaction(level);
           c->inputs_[0]=current_->files_[level];
+          c->compaction_type_=kExpiryFileCompaction;
       } else {
           return;
       }
@@ -1697,7 +1702,7 @@ VersionSet::PickCompaction(
       // expiry compaction
       else
       {
-          ThreadTask * task=new ExpiryTask(db_impl, c);
+          ThreadTask * task=new CompactionTask(db_impl, c);
           submit_flag=gCompactionThreads->Submit(task, true);
       }   // else
 
@@ -1839,6 +1844,7 @@ Compaction::Compaction(int level)
     : level_(level),
       max_output_file_size_(gLevelTraits[level].m_MaxFileSizeForLevel),
       input_version_(NULL),
+      compaction_type_(kNormalCompaction),
       grandparent_index_(0),
       seen_key_(false),
       overlapped_bytes_(0),

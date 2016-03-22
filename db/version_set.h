@@ -97,7 +97,7 @@ class Version {
   // largest_user_key==NULL represents a key largest than all keys in the DB.
   bool OverlapInLevel(int level,
                       const Slice* smallest_user_key,
-                      const Slice* largest_user_key);
+                      const Slice* largest_user_key) const;
 
   // Return the level at which we should place a new memtable compaction
   // result that covers the range [smallest_user_key,largest_user_key].
@@ -213,7 +213,7 @@ class VersionSet {
   size_t NumLevelFiles(int level) const;
 
   // is the specified level overlapped (or if false->sorted)
-  bool IsLevelOverlapped(int level) const;
+  static bool IsLevelOverlapped(int level);
 
   uint64_t MaxFileSizeForLevel(int level) const;
 
@@ -397,6 +397,18 @@ class VersionSet {
   void operator=(const VersionSet&);
 };
 
+//
+// allows routing of compaction request to
+//  diverse processing routines via common
+//  BackgroundCall2 thread entry
+//
+enum CompactionType
+{
+    kNormalCompaction = 0x0,
+    kExpiryFileCompaction = 0x1
+};  // CompactionType
+
+
 // A Compaction encapsulates information about a compaction.
 class Compaction {
  public:
@@ -454,6 +466,8 @@ class Compaction {
   // Riak specific:  is move operation ok for compaction?
   bool IsMoveOk()            const {return(!no_move_);};
 
+  enum CompactionType GetCompactionType() const {return(compaction_type_);};
+
  private:
   friend class Version;
   friend class VersionSet;
@@ -464,6 +478,7 @@ class Compaction {
   uint64_t max_output_file_size_;
   Version* input_version_;
   VersionEdit edit_;
+  CompactionType compaction_type_;
 
   // Each compaction reads inputs from "level_" and "level_+1"
   std::vector<FileMetaData*> inputs_[2];      // The two sets of inputs

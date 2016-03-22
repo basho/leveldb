@@ -117,6 +117,8 @@ class DBImpl : public DB {
   void MaybeScheduleCompaction();
 
   Status BackgroundCompaction(Compaction * Compact=NULL);
+  Status BackgroundExpiry(Compaction * Compact=NULL);
+
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
   int64_t PrioritizeWork(bool IsLevel0);

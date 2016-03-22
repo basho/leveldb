@@ -142,32 +142,6 @@ private:
 
 
 /**
- * Background expiry compaction
- */
-
-class ExpiryTask : public ThreadTask
-{
-protected:
-    DBImpl * m_DBImpl;
-    Compaction * m_Compaction;
-
-public:
-    ExpiryTask(DBImpl * Db, Compaction * Compact)
-        : m_DBImpl(Db), m_Compaction(Compact) {};
-
-    virtual ~ExpiryTask() {delete m_Compaction;};
-
-    virtual void operator()();
-
-private:
-    ExpiryTask();
-    ExpiryTask(const ExpiryTask &);
-    ExpiryTask & operator=(const ExpiryTask &);
-
-};  // class ExpiryTask
-
-
-/**
  * Original env_posix.cc task
  */
 

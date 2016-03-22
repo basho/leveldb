@@ -913,12 +913,16 @@ void DBImpl::MaybeScheduleCompaction() {
 void DBImpl::BackgroundCall2(
     Compaction * Compact) {
   MutexLock l(&mutex_);
-  int level;
+  int level, type;
   assert(IsCompactionScheduled());
 
+  type=kNormalCompaction;
   ++running_compactions_;
   if (NULL!=Compact)
+  {
       level=Compact->level();
+      type=Compact->GetCompactionType();
+  }   // if
   else if (NULL!=manual_compaction_)
       level=manual_compaction_->level;
   else
@@ -932,7 +936,23 @@ void DBImpl::BackgroundCall2(
   versions_->SetCompactionRunning(level);
 
   if (!shutting_down_.Acquire_Load()) {
-    Status s = BackgroundCompaction(Compact);
+    Status s;
+
+    switch(type)
+    {
+        case kNormalCompaction:
+            s = BackgroundCompaction(Compact);
+            break;
+
+        case kExpiryFileCompaction:
+            s = BackgroundExpiry(Compact);
+            break;
+
+        default:
+            assert(0);
+            break;
+    }   // switch
+
     if (!s.ok() && !shutting_down_.Acquire_Load()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
