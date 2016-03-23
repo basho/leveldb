@@ -3,7 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <stdio.h>
-#include "leveldb/expiry.h"
+//#include "leveldb/expiry.h"
 #include "db/dbformat.h"
 #include "db/version_set.h"
 #include "port/port.h"
@@ -224,7 +224,7 @@ KeyRetirement::operator()(
             {
                 bool expired = false;
 
-                if (NULL!=options && NULL!=options->expiry_module)
+                if (NULL!=options && NULL!=options->expiry_module.get())
                     expired=options->expiry_module->KeyRetirementCallback(ikey);
 
                 if ((ikey.type == kTypeDeletion || expired)

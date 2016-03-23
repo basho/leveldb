@@ -37,6 +37,29 @@ enum CompressionType {
   kNoCompressionAutomated = 0x3
 };
 
+//  Originally located in db/dbformat.h.  Now available publically.
+// Value types encoded as the last component of internal keys.
+// DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
+// data structures.
+enum ValueType {
+  kTypeDeletion = 0x0,
+  kTypeValue = 0x1,
+  kTypeValueWriteTime = 0x2,
+  kTypeValueExplicitExpiry = 0x3
+};
+
+//  Originally located in db/dbformat.h
+typedef uint64_t SequenceNumber;
+typedef uint64_t ExpiryTime;
+
+};  // namespace leveldb
+
+//
+// must follow ValueType declaration
+#include "leveldb/expiry.h"
+
+namespace leveldb {
+
 // Options to control the behavior of a database (passed to DB::Open)
 struct Options {
   // -------------------
@@ -228,7 +251,7 @@ struct Options {
 
   // Riak specific object that defines expiry policy for data
   // written to leveldb.
-  ExpiryModule * expiry_module;
+  ExpiryPtr_t expiry_module;
 
   // Create an Options object with default values for all fields.
   Options();
@@ -330,22 +353,6 @@ struct WriteOptions {
       : sync(false) {
   }
 };
-
-
-//  Originally located in db/dbformat.h.  Now available publically.
-// Value types encoded as the last component of internal keys.
-// DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
-// data structures.
-enum ValueType {
-  kTypeDeletion = 0x0,
-  kTypeValue = 0x1,
-  kTypeValueWriteTime = 0x2,
-  kTypeValueExplicitExpiry = 0x3
-};
-
-//  Originally located in db/dbformat.h
-typedef uint64_t SequenceNumber;
-typedef uint64_t ExpiryTime;
 
 
 // Riak specific object that can return key metadata

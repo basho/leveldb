@@ -78,6 +78,104 @@ class RefObjectBase
     RefObjectBase& operator=(const RefObjectBase&);
 };
 
+
+template<typename Object> class RefPtr
+{
+    /****************************************************************
+    *  Member objects
+    ****************************************************************/
+public:
+
+protected:
+    Object * m_Ptr;            // NULL or object being reference counted
+
+private:
+
+    /****************************************************************
+    *  Member functions
+    ****************************************************************/
+public:
+    RefPtr() : m_Ptr(NULL) {};
+
+    virtual ~RefPtr() {RefDecrement();};
+
+    RefPtr(const RefPtr & rhs) : m_Ptr(NULL) {reset(rhs.m_Ptr);};
+    RefPtr(Object * Ptr) : m_Ptr(NULL) {reset(Ptr);};
+    RefPtr(Object & Obj) : m_Ptr(NULL) {reset(&Obj);};
+
+//    RefPtr & operator=(const Object & rhs) {reset(rhs.m_Ptr); return(*this);};
+    RefPtr & operator=(Object & rhs) {reset(&rhs); return(*this);};
+    RefPtr & operator=(Object * Ptr) {reset(Ptr); return(*this);};
+    RefPtr & operator=(RefPtr & RPtr) {reset(RPtr.m_Ptr); return(*this);};
+    RefPtr & operator=(const RefPtr & RPtr) {reset(RPtr.m_Ptr); return(*this);};
+
+    bool operator==(const Object & Obj) const {return(m_Ptr==&Obj);};
+    bool operator!=(const Object & Obj) const {return(m_Ptr!=&Obj);};
+    operator void*() {return(m_Ptr);};
+
+    // stl like functions
+    void assign(Object * Ptr) {reset(Ptr);};
+
+    void reset(Object * ObjectPtr=NULL)
+    {
+        Object * old_ptr;
+
+        // increment new before decrement old in case
+        //  there are any side effects / contained / circular objects
+        old_ptr=m_Ptr;
+        m_Ptr=ObjectPtr;
+
+        if (NULL!=m_Ptr)
+        {
+            RefIncrement();
+        }   // if
+        // swap back for the moment
+        if (NULL!=old_ptr)
+        {
+            m_Ptr=old_ptr;
+            RefDecrement();
+        }   // if
+
+        // final pointer
+        m_Ptr=ObjectPtr;
+    }
+
+    Object * get() {return(m_Ptr);};
+
+    const Object * get() const {return(m_Ptr);};
+
+    Object * operator->() {return(m_Ptr);};
+    const Object * operator->() const {return(m_Ptr);};
+
+    Object & operator*() {return(*get());};
+    const Object & operator*() const {return(*get());};
+
+    bool operator<(const RefPtr & rhs) const
+    {return(*get()<*rhs.get());};
+
+protected:
+    // reduce reference count, delete if 0
+    void RefDecrement()
+    {
+        if (NULL!=m_Ptr)
+        {
+            m_Ptr->RefDec();
+            m_Ptr=NULL;
+        }   // if
+    };
+
+    void RefIncrement()
+    {
+        if (NULL!=m_Ptr)
+            m_Ptr->RefInc();
+    };
+
+private:
+
+
+};  // template RefPtr
+
+
 } // namespace leveldb
 
 #endif  // LEVELDB_INCLUDE_REFOBJECT_BASE_H_

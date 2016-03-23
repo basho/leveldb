@@ -25,7 +25,7 @@
 
 #include <stdint.h>
 #include "leveldb/env.h"
-#include "leveldb/options.h"
+#include "util/refobject_base.h"
 
 namespace leveldb {
 
@@ -38,7 +38,7 @@ class Version;
 class VersionEdit;
 struct FileMetaData;
 
-class ExpiryModule
+class ExpiryModule : public RefObjectBase
 {
 public:
     ExpiryModule() {};
@@ -89,6 +89,8 @@ public:
 
 };  // ExpiryModule
 
+
+typedef RefPtr<class ExpiryModule> ExpiryPtr_t;
 
 } // namespace leveldb
 

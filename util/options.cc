@@ -50,10 +50,8 @@ Options::Options()
       delete_threshold(1000),
       fadvise_willneed(false),
       tiered_slow_level(0),
-      cache_object_warming(true),
-      expiry_module(NULL)
+      cache_object_warming(true)
 {
-    // who deletes?
     expiry_module=new ExpiryModule;
 }
 
@@ -92,7 +90,7 @@ Options::Dump(
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
     Log(log,"  Options.cache_object_warming: %s", cache_object_warming ? "true" : "false");
 
-    if (NULL!=expiry_module)
+    if (NULL!=expiry_module.get())
         expiry_module->Dump(log);
     else
         Log(log,"         Options.expiry_module: NULL");

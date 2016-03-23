@@ -311,7 +311,7 @@ static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   } else {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
       match=true;
-      if (NULL!=s->options && NULL!=s->options->expiry_module)
+      if (NULL!=s->options && NULL!=s->options->expiry_module.get())
         expired=s->options->expiry_module->KeyRetirementCallback(parsed_key);
       s->state = (parsed_key.type != kTypeDeletion && !expired) ? kFound : kDeleted;
       if (s->state == kFound) {

@@ -20,8 +20,6 @@
 //
 // -------------------------------------------------------------------
 
-#include "leveldb/expiry.h"
-
 #include "util/db_list.h"
 #include "util/hot_threads.h"
 #include "util/thread_tasks.h"

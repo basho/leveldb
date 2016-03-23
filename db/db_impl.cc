@@ -161,6 +161,10 @@ Options SanitizeOptions(const std::string& dbname,
       result.block_cache = block_cache;
   }
 
+  // remove anything expiry if this is an internal database
+  if (result.is_internal_db)
+      result.expiry_module.reset();
+
   return result;
 }
 
