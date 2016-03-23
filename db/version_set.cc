@@ -1232,7 +1232,7 @@ VersionSet::Finalize(Version* v)
             }   // if
 
             // finally test for expiry if no compaction candidates
-            if (!compaction_found && !options_->is_internal_db)
+            if (!compaction_found && NULL!=options_->expiry_module.get())
             {
                 compaction_found=options_->expiry_module->CompactionFinalizeCallback(false,
                                                                                      *v,
