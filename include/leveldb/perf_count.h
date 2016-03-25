@@ -236,6 +236,9 @@ enum PerformanceCountersEnum
     // this one was added to the other ePerfElevelXxx counters above when we backported HotThreadPool to eleveldb
     ePerfElevelWeighted=93,   //!< total microseconds item spent on queue
 
+    ePerfExpiredKeys=94,      //!< key physically removed because it expired
+    ePerfExpiredFiles=95,     //!< entire file removed because all keys expired
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values

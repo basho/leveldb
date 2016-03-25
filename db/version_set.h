@@ -121,7 +121,7 @@ class Version {
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
 
- private:
+ protected:
   friend class Compaction;
   friend class VersionSet;
 
@@ -165,6 +165,7 @@ class Version {
 
   ~Version();
 
+private:
   // No copying allowed
   Version(const Version&);
   void operator=(const Version&);
@@ -329,7 +330,7 @@ class VersionSet {
 
   bool NeighborCompactionsQuiet(int level);
 
- private:
+protected:
   class Builder;
 
   friend class Compaction;
@@ -391,7 +392,7 @@ class VersionSet {
       {};
   } m_CompactionStatus[config::kNumLevels];
 
-
+private:
   // No copying allowed
   VersionSet(const VersionSet&);
   void operator=(const VersionSet&);

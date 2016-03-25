@@ -240,6 +240,9 @@ KeyRetirement::operator()(
                     //     few iterations of this loop (by rule (A) above).
                     // Therefore this deletion marker is obsolete and can be dropped.
                     drop = true;
+
+                    if (expired)
+                        gPerfCounters->Inc(ePerfExpiredKeys);
                 }   // if
             }   // else
 

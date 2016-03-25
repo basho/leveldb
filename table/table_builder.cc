@@ -140,7 +140,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
       r->sst_counters.Inc(eSstCountDeleteKey);
 
   // statistics if an expiry key
-  if (NULL!=r->options.expiry_module && IsExpiryKey(key))
+  if (NULL!=r->options.expiry_module.get())
   {
       r->options.expiry_module->TableBuilderCallback(key, r->sst_counters);
   } // if
