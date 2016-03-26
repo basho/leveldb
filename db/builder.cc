@@ -109,8 +109,8 @@ Status BuildTable(const std::string& dbname,
     // Keep it
       if (0!=keys_retired)
       {
-          Log(options.info_log, "Level-0 table #%" PRIu64 ": %zd keys seen, %zd keys retired",
-              meta->number, keys_seen, keys_retired);
+          Log(options.info_log, "Level-0 table #%" PRIu64 ": %zd keys seen, %zd keys retired, %zd keys expired",
+              meta->number, keys_seen, retire.GetDroppedCount(), retire.GetExpiredCount());
       }   // if
   } else {
     env->DeleteFile(fname);

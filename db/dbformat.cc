@@ -177,13 +177,20 @@ KeyRetirement::KeyRetirement(
     : has_current_user_key(false), last_sequence_for_key(kMaxSequenceNumber),
       user_comparator(Comparator), smallest_snapshot(SmallestSnapshot),
       options(Opts), compaction(Compaction),
-      valid(false)
+      valid(false), dropped(0), expired(0)
 {
     // NULL is ok for compaction
     valid=(NULL!=user_comparator);
 
     return;
 }   // KeyRetirement::KeyRetirement
+
+
+KeyRetirement::~KeyRetirement()
+{
+    if (0!=expired)
+        gPerfCounters->Add(ePerfExpiredKeys, expired);
+}   // KeyRetirement::~KeyRetirement
 
 
 bool
@@ -242,7 +249,9 @@ KeyRetirement::operator()(
                     drop = true;
 
                     if (expired)
-                        gPerfCounters->Inc(ePerfExpiredKeys);
+                        ++expired;
+                    else
+                        ++dropped;
                 }   // if
             }   // else
 

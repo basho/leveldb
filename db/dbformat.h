@@ -346,14 +346,19 @@ protected:
     Compaction * const compaction;
 
     bool valid;
+    size_t dropped;   // tombstone or old version dropped
+    size_t expired;   // expired dropped
 
 public:
     KeyRetirement(const Comparator * UserComparator, SequenceNumber SmallestSnapshot,
                   const Options * Opts, Compaction * const Compaction=NULL);
 
-    virtual ~KeyRetirement() {};
+    virtual ~KeyRetirement();
 
     bool operator()(Slice & key);
+
+    size_t GetDroppedCount() const {return(dropped);};
+    size_t GetExpiredCount() const {return(expired);};
 
 private:
     KeyRetirement();
