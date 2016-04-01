@@ -68,9 +68,16 @@ else
 fi
 echo "  Test end: " \$(date)
 
+# hack to deal with the fact that md5sum may be in a weird place on smartos
+export PATH=$PATH:/opt/local/gnu/bin
 cd priv
 cp -p ../ebin/eleveldb.beam .
-md5sum eleveldb.beam eleveldb.so >md5sum.txt
+if which md5sum
+then
+    md5sum eleveldb.beam eleveldb.so >md5sum.txt
+else
+    md5 -r eleveldb.beam eleveldb.so >md5sum.txt
+fi
 tar -czf ~/$USER/eleveldb_$2_\$1.tgz eleveldb.beam eleveldb.so md5sum.txt
 
 EOF
