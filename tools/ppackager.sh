@@ -32,7 +32,7 @@ rm ~/$USER/eleveldb_$2\*
 . /usr/local/erlang-r16b02/activate
 
 echo "Make start: " \$(date)
-if which gmake
+if hash gmake 2>/dev/null
 then
     if gmake -j 2 -s
     then 
@@ -68,17 +68,36 @@ else
 fi
 echo "  Test end: " \$(date)
 
-# hack to deal with the fact that md5sum may be in a weird place on smartos
-export PATH=$PATH:/opt/local/gnu/bin
 cd priv
 cp -p ../ebin/eleveldb.beam .
-if which md5sum
+
+# hack to deal with the fact that md5sum may be in a weird place on smartos
+export PATH=$PATH:/opt/local/gnu/bin
+
+if hash md5sum 2>/dev/null
 then
+    echo calling md5sum
     md5sum eleveldb.beam eleveldb.so >md5sum.txt
 else
-    md5 -r eleveldb.beam eleveldb.so >md5sum.txt
+    if hash md5 2>/dev/null
+    then
+        echo calling md5
+        md5 -r eleveldb.beam eleveldb.so >md5sum.txt
+    else
+        // solaris does not have the md5sum or md5 commands, so use digest
+        echo calling digest
+        digest -a md5 eleveldb.beam eleveldb.so >md5sum.txt
+    fi
 fi
-tar -czf ~/$USER/eleveldb_$2_\$1.tgz eleveldb.beam eleveldb.so md5sum.txt
+
+if uname -a | grep solaris >/dev/null
+then
+    echo running tar and gzip on solaris
+    tar cf - eleveldb.beam eleveldb.so md5sum.txt | gzip -c > ~/$USER/eleveldb_$2_\$1.tar.gz
+else
+    echo running gnu tar with -z option
+    tar -czf ~/$USER/eleveldb_$2_\$1.tgz eleveldb.beam eleveldb.so md5sum.txt
+fi
 
 EOF
 
