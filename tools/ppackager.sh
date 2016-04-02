@@ -96,7 +96,7 @@ then
     tar cf - eleveldb.beam eleveldb.so md5sum.txt | gzip -c > ~/$USER/eleveldb_$2_\$1.tar.gz
 else
     echo running gnu tar with -z option
-    tar -czf ~/$USER/eleveldb_$2_\$1.tgz eleveldb.beam eleveldb.so md5sum.txt
+    tar -czf ~/$USER/eleveldb_$2_\$1.tar.gz eleveldb.beam eleveldb.so md5sum.txt
 fi
 
 EOF
