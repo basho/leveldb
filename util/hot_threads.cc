@@ -32,6 +32,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+
 #include "leveldb/atomics.h"
 #include "util/hot_threads.h"
 #include "util/thread_tasks.h"
@@ -68,6 +73,16 @@ HotThread::ThreadRoutine()
     submission=NULL;
 
     port::SetCurrentThreadName(m_Pool.m_PoolName.c_str());
+
+    if (0!=m_Nice)
+    {
+        pid_t tid;
+        int ret_val;
+
+        tid = syscall(SYS_gettid);
+        ret_val=getpriority(PRIO_PROCESS, tid);
+        setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+    }   // if
 
     while(!m_Pool.m_Shutdown)
     {
@@ -148,8 +163,8 @@ void *QueueThreadStaticEntry(void *args)
 
 
 QueueThread::QueueThread(
-    class HotThreadPool & Pool)
-    : m_ThreadGood(false), m_Pool(Pool), m_SemaphorePtr(NULL)
+    class HotThreadPool & Pool, int Nice)
+    : m_ThreadGood(false), m_Pool(Pool), m_Nice(Nice), m_SemaphorePtr(NULL)
 {
     int ret_val;
 
@@ -262,6 +277,16 @@ QueueThread::QueueThreadRoutine()
 
     port::SetCurrentThreadName(m_QueueName.c_str());
 
+    if (0!=m_Nice)
+    {
+        pid_t tid;
+        int ret_val;
+
+        tid = syscall(SYS_gettid);
+        ret_val=getpriority(PRIO_PROCESS, tid);
+        setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+    }   // if
+
     while(!m_Pool.m_Shutdown)
     {
         // test non-blocking size for hint (much faster)
@@ -310,10 +335,11 @@ HotThreadPool::HotThreadPool(
     enum PerformanceCountersEnum Direct,
     enum PerformanceCountersEnum Queued,
     enum PerformanceCountersEnum Dequeued,
-    enum PerformanceCountersEnum Weighted)
+    enum PerformanceCountersEnum Weighted,
+    int Nice)
     : m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
       m_Shutdown(false), 
-      m_WorkQueueAtomic(0), m_QueueThread(*this),
+      m_WorkQueueAtomic(0), m_QueueThread(*this, Nice),
       m_DirectCounter(Direct), m_QueuedCounter(Queued),
       m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
 {
@@ -324,7 +350,7 @@ HotThreadPool::HotThreadPool(
     ret_val=0;
     for (loop=0; loop<PoolSize && 0==ret_val; ++loop)
     {
-        hot_ptr=new HotThread(*this);
+        hot_ptr=new HotThread(*this, Nice);
 
         ret_val=pthread_create(&hot_ptr->m_ThreadId, NULL,  &ThreadStaticEntry, hot_ptr);
         if (0==ret_val)
