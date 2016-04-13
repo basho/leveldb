@@ -54,14 +54,15 @@ public:
 
     volatile uint32_t m_Available;       //!< 1 if thread waiting, using standard type for atomic operation
     class HotThreadPool & m_Pool;        //!< parent pool object
-    volatile ThreadTask * m_DirectWork;    //!< work passed direct to thread
+    volatile ThreadTask * m_DirectWork;  //!< work passed direct to thread
+    int m_Nice;                          //!< amount to adjust sched priority
 
     port::Mutex m_Mutex;             //!< mutex for condition variable
     port::CondVar m_Condition;          //!< condition for thread waiting
 
 public:
-    HotThread(class HotThreadPool & Pool)
-    : m_Available(0), m_Pool(Pool), m_DirectWork(NULL),
+    HotThread(class HotThreadPool & Pool, int Nice)
+    : m_Available(0), m_Pool(Pool), m_DirectWork(NULL), m_Nice(Nice),
         m_Condition(&m_Mutex)
     {}   // HotThread
 
@@ -84,6 +85,7 @@ public:
     bool m_ThreadGood;                   //!< true if thread and semaphore good
     pthread_t m_ThreadId;                //!< handle for this thread
     std::string m_QueueName;
+    int m_Nice;                          //!< amount to adjust sched priority
 
     class HotThreadPool & m_Pool;        //!< parent pool object
 
@@ -91,7 +93,7 @@ public:
     sem_t * m_SemaphorePtr;              //!< either &m_Semaphore or sem_open return value
 
 public:
-    QueueThread(class HotThreadPool & Pool);
+    QueueThread(class HotThreadPool & Pool, int Nice);
 
     virtual ~QueueThread();
 
@@ -132,7 +134,8 @@ public:
                   enum PerformanceCountersEnum Direct,
                   enum PerformanceCountersEnum Queued,
                   enum PerformanceCountersEnum Dequeued,
-                  enum PerformanceCountersEnum Weighted);
+                  enum PerformanceCountersEnum Weighted,
+                  int Nice=0);
 
     virtual ~HotThreadPool();
 

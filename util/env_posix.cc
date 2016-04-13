@@ -1076,7 +1076,7 @@ static void InitDefaultEnv()
                                      ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
     gCompactionThreads=new HotThreadPool(3, "GeneralCompact",
                                          ePerfBGCompactDirect, ePerfBGCompactQueued,
-                                         ePerfBGCompactDequeued, ePerfBGCompactWeighted);
+                                         ePerfBGCompactDequeued, ePerfBGCompactWeighted, 2);
 
     started=true;
 }
