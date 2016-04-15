@@ -1125,6 +1125,8 @@ VersionSet::Finalize(Version* v)
                 elapsed_micros=0;
 
             // reevaluating timed grooming ... seems to crush caching
+            //  this disables the code but leaves it in place for future
+            //  reuse after block cache flushing impact addressed
             elapsed_micros=0;
 
             // which grooming trigger point?  based upon how long
