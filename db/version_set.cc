@@ -1124,6 +1124,9 @@ VersionSet::Finalize(Version* v)
             else
                 elapsed_micros=0;
 
+            // reevaluating timed grooming ... seems to crush caching
+            elapsed_micros=0;
+
             // which grooming trigger point?  based upon how long
             //  since last compaction on this level
             //   - less than 10 minutes?
