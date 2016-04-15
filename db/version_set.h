@@ -316,9 +316,12 @@ class VersionSet {
   void SetCompactionDone(int level, uint64_t Now)
   {   m_CompactionStatus[level].m_Running=false;
       m_CompactionStatus[level].m_Submitted=false;
-      m_CompactionStatus[level].m_LastCompaction=Now; 
+      // must set both source and destination.  otherwise
+      //  destination might immediately decide it needs a
+      //  timed grooming too ... defeating idea to spreadout the groomings
+      m_CompactionStatus[level].m_LastCompaction=Now;
       if ((level+1)<config::kNumLevels)
-          m_CompactionStatus[level+1].m_LastCompaction=Now; 
+          m_CompactionStatus[level+1].m_LastCompaction=Now;
   }
 
   bool NeighborCompactionsQuiet(int level);
