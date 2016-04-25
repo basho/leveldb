@@ -95,12 +95,10 @@ Status Table::Open(const Options& options,
 }
 
 void Table::ReadMeta(const Footer& footer) {
-  if (rep_->options.filter_policy == NULL) {
-    return;  // Do not need any metadata
-  }
 
   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
   // it is an empty block.
+  std::string key;
   ReadOptions opt;
   BlockContents contents;
   if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
@@ -111,46 +109,49 @@ void Table::ReadMeta(const Footer& footer) {
 
   Iterator* iter = meta->NewIterator(BytewiseComparator());
 
-  bool found,first;
-  const FilterPolicy * policy, * next;
-  std::string key;
+  // read filter only if policy set
+  if (NULL != rep_->options.filter_policy) {
+      bool found,first;
+      const FilterPolicy * policy, * next;
 
-  first=true;
-  next=NULL;
+      first=true;
+      next=NULL;
 
-  do
-  {
-      found=false;
-
-      if (first)
+      do
       {
-          policy=rep_->options.filter_policy;
-          next=FilterInventory::ListHead;
-          first=false;
-      }   // if
-      else
-      {
-          policy=next;
-          if (NULL!=policy)
-              next=policy->GetNext();
-          else
-              next=NULL;
-      }   // else
+          found=false;
 
-      if (NULL!=policy)
-      {
-          key = "filter.";
-          key.append(policy->Name());
-          iter->Seek(key);
-          if (iter->Valid() && iter->key() == Slice(key))
+          if (first)
           {
-              ReadFilter(iter->value(), policy);
-              gPerfCounters->Inc(ePerfBlockFilterRead);
-              found=true;
+              policy=rep_->options.filter_policy;
+              next=FilterInventory::ListHead;
+              first=false;
           }   // if
-      }   //if
-  } while(!found && NULL!=policy);
+          else
+          {
+              policy=next;
+              if (NULL!=policy)
+                  next=policy->GetNext();
+              else
+                  next=NULL;
+          }   // else
 
+          if (NULL!=policy)
+          {
+              key = "filter.";
+              key.append(policy->Name());
+              iter->Seek(key);
+              if (iter->Valid() && iter->key() == Slice(key))
+              {
+                  ReadFilter(iter->value(), policy);
+                  gPerfCounters->Inc(ePerfBlockFilterRead);
+                  found=true;
+              }   // if
+          }   //if
+      } while(!found && NULL!=policy);
+  }   // if
+
+  // always read counters
   key="stats.sst1";
   iter->Seek(key);
   if (iter->Valid() && iter->key() == Slice(key)) {
@@ -370,7 +371,7 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
 }
 
 
-uint64_t 
+uint64_t
 Table::GetFileSize()
 {
     return(rep_->file_size);

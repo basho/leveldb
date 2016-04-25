@@ -368,4 +368,16 @@ uint64_t TableBuilder::NumDeletes() const {
   return rep_->sst_counters.Value(eSstCountDeleteKey);
 }
 
+uint64_t TableBuilder::GetExpiry1() const {
+  return rep_->sst_counters.Value(eSstCountExpiry1);
+}
+
+uint64_t TableBuilder::GetExpiry2() const {
+  return rep_->sst_counters.Value(eSstCountExpiry2);
+}
+
+uint64_t TableBuilder::GetExpiry3() const {
+  return rep_->sst_counters.Value(eSstCountExpiry3);
+}
+
 }  // namespace leveldb

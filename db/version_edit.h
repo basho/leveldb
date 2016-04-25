@@ -83,6 +83,7 @@ class VersionEdit {
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
+#if 0
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
                const InternalKey& smallest,
@@ -95,6 +96,7 @@ class VersionEdit {
     f.level = level;
     new_files_.push_back(std::make_pair(level, f));
   }
+#endif
 
   void AddFile2(int level, uint64_t file,
                 uint64_t file_size,
@@ -121,7 +123,7 @@ class VersionEdit {
   }
   size_t DeletedFileCount() const {return(deleted_files_.size());};
 
-  void EncodeTo(std::string* dst, bool format2=false) const;
+  void EncodeTo(std::string* dst, bool format2=true) const;
   Status DecodeFrom(const Slice& src);
 
   std::string DebugString() const;

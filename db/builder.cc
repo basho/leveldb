@@ -72,6 +72,9 @@ Status BuildTable(const std::string& dbname,
       s = builder->Finish();
       if (s.ok()) {
         meta->file_size = builder->FileSize();
+        meta->expiry1 = builder->GetExpiry1();
+        meta->expiry2 = builder->GetExpiry2();
+        meta->expiry3 = builder->GetExpiry3();
         assert(meta->file_size > 0);
       }
     } else {

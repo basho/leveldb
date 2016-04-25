@@ -75,7 +75,7 @@ class DBImpl : public DB {
   bool IsCompactionScheduled();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
 
- private:
+ protected:
   friend class DB;
   struct CompactionState;
   struct Writer;

@@ -903,7 +903,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
             // Write new record to MANIFEST log
             if (s.ok()) {
                 std::string record;
-                edit->EncodeTo(&record);
+                edit->EncodeTo(&record, true);
                 s = descriptor_log_->AddRecord(record);
                 if (s.ok()) {
                     s = descriptor_file_->Sync();
@@ -1386,12 +1386,13 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
-      edit.AddFile(level, f->number, f->file_size, f->smallest, f->largest);
+      edit.AddFile2(level, f->number, f->file_size, f->smallest, f->largest,
+                    f->expiry1, f->expiry2, f->expiry3);
     }
   }
 
   std::string record;
-  edit.EncodeTo(&record);
+  edit.EncodeTo(&record, true);
   return log->AddRecord(record);
 }
 

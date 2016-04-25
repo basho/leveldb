@@ -77,6 +77,11 @@ class TableBuilder {
   // Number of delete tombstones so far.
   uint64_t NumDeletes() const;
 
+  // Retrieve expiry control values
+  uint64_t GetExpiry1() const;
+  uint64_t GetExpiry2() const;
+  uint64_t GetExpiry3() const;
+
  private:
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);
