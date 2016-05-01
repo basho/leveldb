@@ -171,9 +171,6 @@ class DBImpl : public DB {
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
-  // Has a background compaction been scheduled or is running?
-  bool bg_compaction_scheduled_;
-
   // Information for a manual compaction
   struct ManualCompaction {
     int level;

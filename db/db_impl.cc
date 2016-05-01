@@ -192,7 +192,6 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       logfile_number_(0),
       log_(NULL),
       tmp_batch_(new WriteBatch),
-      bg_compaction_scheduled_(false),
       manual_compaction_(NULL),
       level0_good(true),
       throttle_end(0),
@@ -979,7 +978,7 @@ void DBImpl::BackgroundCall2(
   {
     delete Compact;
   }   // else
-  bg_compaction_scheduled_ = false;
+
   --running_compactions_;
   versions_->SetCompactionDone(level, env_->NowMicros());
 
