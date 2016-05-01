@@ -139,6 +139,11 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   if (8 < key.size() && kTypeDeletion==ExtractValueType(key))
       r->sst_counters.Inc(eSstCountDeleteKey);
 
+  // again ignore short keys, save high sequence number for abbreviated repair
+  if (8 <= key.size()
+      && r->sst_counters.Value(eSstCountSequence)<ExtractSequenceNumber(key))
+      r->sst_counters.Set(eSstCountSequence,ExtractSequenceNumber(key));
+
   // statistics if an expiry key
   if (NULL!=r->options.expiry_module.get())
   {

@@ -52,6 +52,7 @@ enum SstCountEnum
     eSstCountExpiry1=15,       //!< undocumented expiry counter 1
     eSstCountExpiry2=16,       //!< undocumented expiry counter 2
     eSstCountExpiry3=17,       //!< undocumented expiry counter 3
+    eSstCountSequence=18,      //!< highest sequence number in file
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values
