@@ -1062,15 +1062,19 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
 bool
 VersionSet::NeighborCompactionsQuiet(int level)
 {
-    const uint64_t parent_level_bytes = TotalFileSize(current_->files_[level+1]);
+    uint64_t parent_level_bytes(0);
+
+    if (level < config::kNumLevels-1)
+        parent_level_bytes = TotalFileSize(current_->files_[level+1]);
 
     // not an overlapped level and must not have compactions
     //   scheduled on either level below or level above
     return((0==level || !m_CompactionStatus[level-1].m_Submitted)
            && !gLevelTraits[level].m_OverlappedFiles
-           && !m_CompactionStatus[level+1].m_Submitted
-           && parent_level_bytes<=((gLevelTraits[level+1].m_MaxBytesForLevel
-                                    +gLevelTraits[level+1].m_DesiredBytesForLevel)/2));
+           && (level==config::kNumLevels-1
+               || (!m_CompactionStatus[level+1].m_Submitted
+                   && parent_level_bytes<=((gLevelTraits[level+1].m_MaxBytesForLevel
+                                            +gLevelTraits[level+1].m_DesiredBytesForLevel)/2))));
 }   // VersionSet::NeighborCompactionsQuiet
 
 
@@ -1090,11 +1094,12 @@ VersionSet::Finalize(Version* v)
     expire_file=false;
     micros_now=env_->NowMicros();
 
-    for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level)
+    // Note: level kNumLevels-1 only examined for whole file expiry
+    for (int level = v->compaction_level_+1; level < config::kNumLevels && !compaction_found; ++level)
     {
         bool compact_ok;
         double score;
-        const uint64_t parent_level_bytes = TotalFileSize(v->files_[level+1]);
+        uint64_t parent_level_bytes(0);
 
         is_grooming=false;
         // is this level eligible for compaction consideration?
@@ -1103,6 +1108,9 @@ VersionSet::Finalize(Version* v)
         // not already scheduled for compaction
         if (compact_ok)
         {
+            if (level < (config::kNumLevels-1))
+                parent_level_bytes = TotalFileSize(v->files_[level+1]);
+
             // is overlapped and so is next level
             if (gLevelTraits[level].m_OverlappedFiles && gLevelTraits[level+1].m_OverlappedFiles)
             {
@@ -1186,7 +1194,10 @@ VersionSet::Finalize(Version* v)
                     score=1;
                     is_grooming=true;
                 }   // if
-            } else {
+            }   // if
+
+            // highest level, kNumLevels-1, only considered for expiry not compaction
+            else if (level < config::kNumLevels-1) {
                 // Compute the ratio of current size to size limit.
                 const uint64_t level_bytes = TotalFileSize(v->files_[level]);
                 score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
@@ -1246,6 +1257,7 @@ VersionSet::Finalize(Version* v)
                     is_grooming=false;
                     no_move=true;
                     expire_file=true;
+                    v->file_to_compact_level_=level;
                 }   // if
             }   // if
         }   // if
@@ -1651,7 +1663,6 @@ VersionSet::PickCompaction(
       } else if (current_->compaction_expirefile_) {
           level = current_->file_to_compact_level_;
           c = new Compaction(level);
-          c->inputs_[0]=current_->files_[level];
           c->compaction_type_=kExpiryFileCompaction;
       } else {
           return;
