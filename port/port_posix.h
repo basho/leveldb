@@ -227,6 +227,8 @@ inline void SetCurrentThreadName(const char* threadName) {
 
 // similar to Env::NowMicros except guaranteed to return "time" instead
 //  of potentially only ticks since reboot
+const uint64_t UINT64_ONE_SECOND=1000000;
+
 inline uint64_t TimeUint64() {
 #if _POSIX_TIMERS >= 200801L
     struct timespec ts;
