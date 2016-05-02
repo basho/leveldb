@@ -198,7 +198,7 @@ KeyRetirement::operator()(
     Slice & key)
 {
     ParsedInternalKey ikey;
-    bool drop = false;
+    bool drop = false, expire_flag;
 
     if (valid)
     {
@@ -229,12 +229,10 @@ KeyRetirement::operator()(
 
             else
             {
-                bool expired = false;
-
                 if (NULL!=options && NULL!=options->expiry_module.get())
-                    expired=options->expiry_module->KeyRetirementCallback(ikey);
+                    expire_flag=options->expiry_module->KeyRetirementCallback(ikey);
 
-                if ((ikey.type == kTypeDeletion || expired)
+                if ((ikey.type == kTypeDeletion || expire_flag)
                     && ikey.sequence <= smallest_snapshot
                     && NULL!=compaction  // mem to level0 ignores this test
                     && compaction->IsBaseLevelForKey(ikey.user_key))
@@ -248,7 +246,7 @@ KeyRetirement::operator()(
                     // Therefore this deletion marker is obsolete and can be dropped.
                     drop = true;
 
-                    if (expired)
+                    if (expire_flag)
                         ++expired;
                     else
                         ++dropped;
