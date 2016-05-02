@@ -1098,7 +1098,7 @@ VersionSet::Finalize(Version* v)
     for (int level = v->compaction_level_+1; level < config::kNumLevels && !compaction_found; ++level)
     {
         bool compact_ok;
-        double score;
+        double score(0);
         uint64_t parent_level_bytes(0);
 
         is_grooming=false;
