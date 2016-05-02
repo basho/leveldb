@@ -138,7 +138,7 @@ class MemTableInserter : public WriteBatch::Handler {
  public:
   SequenceNumber sequence_;
   MemTable* mem_;
-  Options * options_;
+  const Options * options_;
 
   MemTableInserter() : mem_(NULL), options_(NULL) {};
 
@@ -146,7 +146,7 @@ class MemTableInserter : public WriteBatch::Handler {
     ValueType type_use(type);
     ExpiryTime expiry_use(expiry);
 
-    if (NULL!=options_ && NULL!=options_->expiry_module)
+    if (NULL!=options_ && NULL!=options_->expiry_module.get())
         options_->expiry_module->MemTableInserterCallback(key, value, type_use, expiry_use);
     mem_->Add(sequence_, (ValueType)type_use, key, value, expiry_use);
     sequence_++;
@@ -160,7 +160,7 @@ class MemTableInserter : public WriteBatch::Handler {
 
 Status WriteBatchInternal::InsertInto(const WriteBatch* b,
                                       MemTable* memtable,
-                                      Options * options) {
+                                      const Options * options) {
   MemTableInserter inserter;
   inserter.sequence_ = WriteBatchInternal::Sequence(b);
   inserter.mem_ = memtable;
