@@ -625,7 +625,9 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         {"BGMove", true},
         {"BGMoveFail", false},
         {"ThrottleUnadjusted", true},
-        {"eleveldbWeighted", true}
+        {"eleveldbWeighted", true},
+        {"ExpiredKeys", true},
+        {"ExpiredFiles", true}
     };
 
 
