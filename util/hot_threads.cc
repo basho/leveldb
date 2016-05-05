@@ -73,7 +73,7 @@ HotThread::ThreadRoutine()
     submission=NULL;
 
     port::SetCurrentThreadName(m_Pool.m_PoolName.c_str());
-
+#ifdef OS_LINUX
     if (0!=m_Nice)
     {
         pid_t tid;
@@ -83,7 +83,7 @@ HotThread::ThreadRoutine()
         ret_val=getpriority(PRIO_PROCESS, tid);
         setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
     }   // if
-
+#endif
     while(!m_Pool.m_Shutdown)
     {
         // is work assigned yet?
@@ -276,7 +276,7 @@ QueueThread::QueueThreadRoutine()
     submission=NULL;
 
     port::SetCurrentThreadName(m_QueueName.c_str());
-
+#ifdef OS_LINUX
     if (0!=m_Nice)
     {
         pid_t tid;
@@ -286,7 +286,7 @@ QueueThread::QueueThreadRoutine()
         ret_val=getpriority(PRIO_PROCESS, tid);
         setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
     }   // if
-
+#endif
     while(!m_Pool.m_Shutdown)
     {
         // test non-blocking size for hint (much faster)
