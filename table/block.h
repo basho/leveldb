@@ -18,6 +18,7 @@ class Block {
  public:
   // Initialize the block with the specified contents.
   explicit Block(const BlockContents& contents);
+  explicit Block(const Slice & raw);
 
   ~Block();
 
