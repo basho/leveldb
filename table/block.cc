@@ -36,6 +36,21 @@ Block::Block(const BlockContents& contents)
   }
 }
 
+Block::Block(const Slice & raw)
+    : data_(raw.data()), size_(raw.size()), owned_(true)
+{
+  if (size_ < sizeof(uint32_t)) {
+    size_ = 0;  // Error marker
+  } else {
+    restart_offset_ = size_ - (1 + NumRestarts()) * sizeof(uint32_t);
+    if (restart_offset_ > size_ - sizeof(uint32_t)) {
+      // The size is too small for NumRestarts() and therefore
+      // restart_offset_ wrapped around.
+      size_ = 0;
+    }
+  }
+}
+
 Block::~Block() {
   if (owned_) {
     delete[] data_;
