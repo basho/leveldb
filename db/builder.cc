@@ -51,6 +51,13 @@ Status BuildTable(const std::string& dbname,
     //  (compaction of unsorted files causes severe cache misses)
     file->SetMetadataOffset(1);
 
+    uint64_t cache_id;
+
+    if (0 == meta->level)
+        cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
+    else
+        cache_id = 0;
+
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
