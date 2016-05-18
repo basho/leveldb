@@ -46,14 +46,16 @@ static struct
                                                  //!<   and do not overlap
 } gLevelTraits[config::kNumLevels]=
 
-// level-0 file size of 420,000,000 applies to output files of this level
-//   being written to level-1.  The value is 7 times the default maximum
-//   write buffer size of 60,000,000.  Why seven times:  6 level-0 files typically compact
-//   to one level-1 file and are each slightly larger than 60,000,000.
-// level-1 file size of 1,500,000,000 applies to output file of this level
-//   being written to level-2.  The value is five times the 300,000,000 of level-1.
-// level-3 is the "landing zone" / first sorted level.  Try to keep it clear.
-//   hence the low m_DesiredBytes for level
+// level-0 and level-1 create .sst table files that have overlapping key spaces.
+//   The compaction selection logic within VersionSet::Finalize() selects based
+//   upon file count, not accumulated file size.  Write throttle is harsh if too
+//   many files accumulate.  Timed grooming (if activated) adjusts the file
+//   count threshold by time since last compaction.
+// level-2 is the "landing zone" / first sorted level.  Try to keep it clear,
+//   hence the low m_DesiredBytes for level.
+// level-2+:  VersionSet::Finalize() selects compaction files when the
+//   total bytes for level exceeds m_DesiredBytesForLevel.  Write throttle
+//   starts when total bytes exceeds m_MaxFileSizeForLevel.
 
 // WARNING: m_OverlappedFiles flags need to match config::kNumOverlapFiles ... until unified
 {

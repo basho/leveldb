@@ -192,8 +192,8 @@ else
 .c.o:
 	$(CC) $(CFLAGS) $(PLATFORM_SHARED_CFLAGS) -c $< -o $@
 
+## 	@echo -- Creating dependency file for $<
 %.d: %.cc
-	@echo -- Creating dependency file for $<
 	$(CC) $(CFLAGS) $(PLATFORM_SHARED_CFLAGS) -MM -E -MT $(basename $@).d -MT $(basename $@).o -MF $@ $<
 	@echo $(basename $@).o: $(basename $@).d >>$@
 

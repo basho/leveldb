@@ -37,7 +37,17 @@ static Status DoWriteStringToFile(Env* env, const Slice& data,
                                   const std::string& fname,
                                   bool should_sync) {
   WritableFile* file;
-  Status s = env->NewWritableFile(fname, &file, 4*1024L);
+  size_t map_size;
+
+  // adjust file map size to speed up corruption test's
+  //  writing of 40M files, but keep small for normal
+  //  case of writing CURRENT file (code will round up to page_size)
+  if (gMapSize<data.size())
+      map_size=gMapSize;
+  else
+      map_size=data.size();
+
+  Status s = env->NewWritableFile(fname, &file, map_size);
   if (!s.ok()) {
     return s;
   }
