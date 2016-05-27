@@ -130,6 +130,11 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
 
+  // to support precaching of level-0 files, adjust block cache reserved size
+  uint64_t cache_min(src.write_buffer_size * 6);
+  if (src.block_cache_threshold < cache_min)
+      results.block_cache_threshold = cache_min;
+
   // alternate means to change gMapSize ... more generic
   if (0!=src.mmap_size)
       gMapSize=src.mmap_size;
