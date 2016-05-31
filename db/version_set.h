@@ -121,7 +121,7 @@ class Version {
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
 
- protected:
+ private:
   friend class Compaction;
   friend class VersionSet;
 
@@ -150,6 +150,8 @@ class Version {
   bool compaction_expirefile_;
   volatile int write_penalty_;
 
+ protected:
+  // make the ctor/dtor protected, so that a unit test can subclass
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),
         file_to_compact_(NULL),
