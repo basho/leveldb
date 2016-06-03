@@ -80,8 +80,14 @@ HotThread::ThreadRoutine()
         int ret_val;
 
         tid = syscall(SYS_gettid);
-        ret_val=getpriority(PRIO_PROCESS, tid);
-        setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+        if (-1!=(int)tid)
+        {
+            errno=0;
+            ret_val=getpriority(PRIO_PROCESS, tid);
+            // ret_val could be -1 legally, so double test
+            if (-1!=ret_val || 0==errno)
+                setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+        }   // if
     }   // if
 #endif
     while(!m_Pool.m_Shutdown)
@@ -283,8 +289,14 @@ QueueThread::QueueThreadRoutine()
         int ret_val;
 
         tid = syscall(SYS_gettid);
-        ret_val=getpriority(PRIO_PROCESS, tid);
-        setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+        if (-1!=(int)tid)
+        {
+            errno=0;
+            ret_val=getpriority(PRIO_PROCESS, tid);
+            // ret_val could be -1 legally, so double test
+            if (-1!=ret_val || 0==errno)
+                setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+        }   // if
     }   // if
 #endif
     while(!m_Pool.m_Shutdown)
@@ -338,7 +350,7 @@ HotThreadPool::HotThreadPool(
     enum PerformanceCountersEnum Weighted,
     int Nice)
     : m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
-      m_Shutdown(false), 
+      m_Shutdown(false),
       m_WorkQueueAtomic(0), m_QueueThread(*this, Nice),
       m_DirectCounter(Direct), m_QueuedCounter(Queued),
       m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
