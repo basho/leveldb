@@ -156,11 +156,11 @@ if [ "$CROSS_COMPILE" = "true" ]; then
 else
     # If -std=c++0x works, use <cstdatomic>.  Otherwise use port_posix.h.
     $CXX $CFLAGS -std=c++0x -x c++ - -o /dev/null 2>/dev/null  <<EOF
-      #include <cstdatomic>
+      #include <atomic>
       int main() {}
 EOF
     if [ "$?" = 0 ]; then
-        COMMON_FLAGS="$COMMON_FLAGS -DLEVELDB_PLATFORM_POSIX -DLEVELDB_CSTDATOMIC_PRESENT"
+        COMMON_FLAGS="$COMMON_FLAGS -DLEVELDB_PLATFORM_POSIX -DLEVELDB_ATOMIC_PRESENT"
         PLATFORM_CXXFLAGS="-std=c++0x"
     else
         COMMON_FLAGS="$COMMON_FLAGS -DLEVELDB_PLATFORM_POSIX"
