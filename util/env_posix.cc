@@ -1074,9 +1074,11 @@ static void InitDefaultEnv()
     gLevel0Threads=new HotThreadPool(3, "Level0Compact",
                                      ePerfBGLevel0Direct, ePerfBGLevel0Queued,
                                      ePerfBGLevel0Dequeued, ePerfBGLevel0Weighted);
+    // "2" is for Linux OS "nice", assumption is "1" nice might be
+    //   used by AAE hash trees in the future
     gCompactionThreads=new HotThreadPool(3, "GeneralCompact",
                                          ePerfBGCompactDirect, ePerfBGCompactQueued,
-                                         ePerfBGCompactDequeued, ePerfBGCompactWeighted);
+                                         ePerfBGCompactDequeued, ePerfBGCompactWeighted, 2);
 
     started=true;
 }
