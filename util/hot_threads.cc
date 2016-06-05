@@ -26,6 +26,7 @@
 //  the Erlang VM than other traditional designs.
 // -------------------------------------------------------------------
 
+#include <assert.h>
 #include <errno.h>
 #include <syslog.h>
 #include <sys/fcntl.h>
@@ -87,6 +88,8 @@ HotThread::ThreadRoutine()
             // ret_val could be -1 legally, so double test
             if (-1!=ret_val || 0==errno)
                 setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+
+            assert((ret_val+m_Nice)==getpriority(PRIO_PROCESS, tid));
         }   // if
     }   // if
 #endif
@@ -296,6 +299,8 @@ QueueThread::QueueThreadRoutine()
             // ret_val could be -1 legally, so double test
             if (-1!=ret_val || 0==errno)
                 setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
+
+            assert((ret_val+m_Nice)==getpriority(PRIO_PROCESS, tid));
         }   // if
     }   // if
 #endif

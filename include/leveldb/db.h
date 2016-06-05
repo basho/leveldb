@@ -164,6 +164,10 @@ class DB {
   // grooming that might have been offered and rejected previously
   virtual void CheckAvailableCompactions();
 
+  // Riak specific function:  Give external code, namely
+  // eleveldb, access to leveldb's logging routines.
+  virtual Logger* GetLogger() const { return NULL; }
+
  private:
   // No copying allowed
   DB(const DB&);
