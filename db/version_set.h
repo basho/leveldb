@@ -121,7 +121,7 @@ class Version {
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
 
- private:
+protected:
   friend class Compaction;
   friend class VersionSet;
 
@@ -134,7 +134,7 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  USED_BY_NESTED_FRIEND(std::vector<FileMetaData*> files_[config::kNumLevels])
+  std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats (or Riak delete test)
   FileMetaData* file_to_compact_;
