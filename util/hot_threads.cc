@@ -330,6 +330,11 @@ QueueThread::QueueThreadRoutine()
         {
             // execute the job
             (*submission)();
+            if (submission->resubmit())
+            {
+                submission->recycle();
+                m_Pool.Submit(submission);
+            }
 
             submission->RefDec();
 

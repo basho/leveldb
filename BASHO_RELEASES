@@ -1,0 +1,5 @@
+github.com tag 2.0.21 - June 16, 2016
+-------------------------------------
+branch mv-iterator-hot-threads:  correct condition where eleveldb MoveTask
+ could hang an iterator. (https://github.com/basho/leveldb/wiki/mv-iterator-hot-threads)
+
