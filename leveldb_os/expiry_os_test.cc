@@ -315,8 +315,8 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     file_ptr=new FileMetaData;
     file_ptr->smallest.SetFrom(ParsedInternalKey("GG1", 0, 5, kTypeValue));
     file_ptr->largest.SetFrom(ParsedInternalKey("HH1", 0, 6, kTypeValue));
-    file_ptr->expiry1=ULONG_MAX;  // sign of no aged expiry, or plain keys
-    file_ptr->expiry3=now + 60*port::UINT64_ONE_SECOND;
+    file_ptr->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    file_ptr->exp_explicit_high=now + 60*port::UINT64_ONE_SECOND;
     files.push_back(file_ptr);
 
     // disable
@@ -366,8 +366,8 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     file_ptr=new FileMetaData;
     file_ptr->smallest.SetFrom(ParsedInternalKey("II1", 0, 7, kTypeValue));
     file_ptr->largest.SetFrom(ParsedInternalKey("JJ1", 0, 8, kTypeValue));
-    file_ptr->expiry1=now - 60*port::UINT64_ONE_SECOND;
-    file_ptr->expiry2=now + 60*port::UINT64_ONE_SECOND;
+    file_ptr->exp_write_low=now - 60*port::UINT64_ONE_SECOND;
+    file_ptr->exp_write_high=now + 60*port::UINT64_ONE_SECOND;
     files.push_back(file_ptr);
 
     // disable
@@ -440,7 +440,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
 
     // same settings, but show an explicit expiry too that has not
     //  expired
-    file_ptr->expiry3=now +240*port::UINT64_ONE_SECOND;
+    file_ptr->exp_explicit_high=now +240*port::UINT64_ONE_SECOND;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, false);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -448,7 +448,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
 
     // same settings, but show an explicit expiry has expired
     //  expired
-    file_ptr->expiry3=now +90*port::UINT64_ONE_SECOND;
+    file_ptr->exp_explicit_high=now +90*port::UINT64_ONE_SECOND;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, true);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -467,7 +467,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
 
     // same settings, explicit has expired, but not the aged
     //  expired
-    file_ptr->expiry2=now +240*port::UINT64_ONE_SECOND;
+    file_ptr->exp_write_high=now +240*port::UINT64_ONE_SECOND;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, false);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -475,27 +475,27 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
 
     // variations on Bug 1 test.  Put singleton expired file in
     //  first, second, then third position.  Other two no expiry
-    files[0]->expiry1=ULONG_MAX;  // sign of no aged expiry, or plain keys
-    files[0]->expiry2=0;
-    files[0]->expiry3=now +90*port::UINT64_ONE_SECOND;
-    files[1]->expiry1=ULONG_MAX;  // sign of no aged expiry, or plain keys
-    files[1]->expiry2=0;
-    files[1]->expiry3=0;
-    files[2]->expiry1=ULONG_MAX;  // sign of no aged expiry, or plain keys
-    files[2]->expiry2=0;
-    files[2]->expiry3=0;
+    files[0]->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    files[0]->exp_write_high=0;
+    files[0]->exp_explicit_high=now +90*port::UINT64_ONE_SECOND;
+    files[1]->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    files[1]->exp_write_high=0;
+    files[1]->exp_explicit_high=0;
+    files[2]->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    files[2]->exp_write_high=0;
+    files[2]->exp_explicit_high=0;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, true);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
     ASSERT_EQ(flag, true);
-    files[0]->expiry3=0;
-    files[1]->expiry3=now +90*port::UINT64_ONE_SECOND;
+    files[0]->exp_explicit_high=0;
+    files[1]->exp_explicit_high=now +90*port::UINT64_ONE_SECOND;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, true);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
     ASSERT_EQ(flag, true);
-    files[1]->expiry3=0;
-    files[2]->expiry3=now +90*port::UINT64_ONE_SECOND;
+    files[1]->exp_explicit_high=0;
+    files[2]->exp_explicit_high=now +90*port::UINT64_ONE_SECOND;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, true);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -559,16 +559,16 @@ CreateMetaArray(
         if (0!=cursor->m_Expiry1)
         {
             if (ULONG_MAX!=cursor->m_Expiry1)
-                file_ptr->expiry1=now + cursor->m_Expiry1*60000000;
+                file_ptr->exp_write_low=now + cursor->m_Expiry1*60000000;
             else
-                file_ptr->expiry1=cursor->m_Expiry1;
+                file_ptr->exp_write_low=cursor->m_Expiry1;
         }   // if
 
         if (0!=cursor->m_Expiry2)
-            file_ptr->expiry2=now + cursor->m_Expiry2*60000000;
+            file_ptr->exp_write_high=now + cursor->m_Expiry2*60000000;
 
         if (0!=cursor->m_Expiry3)
-            file_ptr->expiry3=now + cursor->m_Expiry3*60000000;
+            file_ptr->exp_explicit_high=now + cursor->m_Expiry3*60000000;
 
         Output.push_back(file_ptr);
     }   // for
@@ -879,9 +879,9 @@ public:
         s = builder->Finish();
         ASSERT_OK(s);
 
-        count1=builder->GetExpiry1();
-        count2=builder->GetExpiry2();
-        count3=builder->GetExpiry3();
+        count1=builder->GetExpiryWriteLow();
+        count2=builder->GetExpiryWriteHigh();
+        count3=builder->GetExpiryExplicitHigh();
 
         s = outfile->Sync();
         ASSERT_OK(s);
@@ -928,7 +928,7 @@ public:
         int current_level, loop, loop1;
         const sExpiryTestFile * cursor;
         InternalKey low_key, mid_key, high_key;
-        uint64_t expiry1, expiry2, expiry3, expires;
+        uint64_t exp_write_low, exp_write_high, exp_explicit_high, expires;
 
         // setup
         current_level=config::kNumLevels;
@@ -959,38 +959,38 @@ public:
                                                          (*it)->largest.internal_key()));
 
             // create our idea of the expiry settings
-            expiry1=ULONG_MAX;
-            expiry2=0;
-            expiry3=0;
+            exp_write_low=ULONG_MAX;
+            exp_write_high=0;
+            exp_explicit_high=0;
 
             for (loop1=0; loop1<3; ++loop1)
             {
                 switch(cursor->m_Keys[loop1].m_Type)
                 {
                     case eEXPIRY_NONE:
-                        expiry1=0;
+                        exp_write_low=0;
                         break;
 
                     case eEXPIRY_AGED:
                         expires=m_BaseTime - cursor->m_Keys[loop1].m_NowMinus * 60 * port::UINT64_ONE_SECOND;
-                        if (expires<expiry1)
-                            expiry1=expires;
-                        if (expiry2<expires)
-                            expiry2=expires;
+                        if (expires<exp_write_low)
+                            exp_write_low=expires;
+                        if (exp_write_high<expires)
+                            exp_write_high=expires;
                         break;
 
                     case eEXPIRY_EXPLICIT:
                         expires=m_BaseTime + cursor->m_Keys[loop1].m_NowMinus * 60 * port::UINT64_ONE_SECOND;
-                        if (expiry3<expires)
-                            expiry3=expires;
+                        if (exp_explicit_high<expires)
+                            exp_explicit_high=expires;
                         break;
                 }   // switch
             }   // for
 
             // test our idea against manifest's idea
-            ASSERT_EQ(expiry1, (*it)->expiry1);
-            ASSERT_EQ(expiry2, (*it)->expiry2);
-            ASSERT_EQ(expiry3, (*it)->expiry3);
+            ASSERT_EQ(exp_write_low, (*it)->exp_write_low);
+            ASSERT_EQ(exp_write_high, (*it)->exp_write_high);
+            ASSERT_EQ(exp_explicit_high, (*it)->exp_explicit_high);
 
             // inc here since not initialized upon for loop entry
             ++it;

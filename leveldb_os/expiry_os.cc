@@ -141,8 +141,8 @@ bool ExpiryModuleOS::TableBuilderCallback(
     //  expiry disabled
     switch(ExtractValueType(Key))
     {
-        // expiry1 set to smallest (earliest) write time
-        // expiry2 set to largest (most recent) write time
+        // exp_write_low set to smallest (earliest) write time
+        // exp_write_high set to largest (most recent) write time
         case kTypeValueWriteTime:
             temp=Counters.Value(eSstCountExpiry1);
             if (expires<temp)
@@ -164,7 +164,7 @@ bool ExpiryModuleOS::TableBuilderCallback(
                 Counters.Inc(eSstCountDeleteKey);
             break;
 
-        // at least one non-expiry, expiry1 gets zero
+        // at least one non-expiry, exp_write_low gets zero
         case kTypeValue:
             Counters.Set(eSstCountExpiry1, 0);
             break;
@@ -222,18 +222,18 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
         for (it=files.begin(); (!expired_file || WantAll) && files.end()!=it; ++it)
         {
             // First, find an eligible file:
-            //  - if expiry1 is zero, game over -  contains non-expiry records
-            //  - if expiry2 is below current aged time and aging enabled,
-            //       or no expiry2 keys (is zero)
-            //  - highest explicit expiry (expiry3) is non-zero and below now
+            //  - if exp_write_low is zero, game over -  contains non-expiry records
+            //  - if exp_write_high is below current aged time and aging enabled,
+            //       or no exp_write_high keys (is zero)
+            //  - highest explicit expiry (exp_explicit_high) is non-zero and below now
             //  Note:  say file only contained deleted records:  ... still delete file
-            //      expiry1 would be ULONG_MAX, expiry2 would be 0, expiry3 would be zero
-            expired_file = (0!=(*it)->expiry1) && (0!=(*it)->expiry2 || 0!=(*it)->expiry3);
-            expired_file = expired_file && (((*it)->expiry2<=aged && 0!=expiry_minutes)
-                                            || 0==(*it)->expiry2);
+            //      exp_write_low would be ULONG_MAX, exp_write_high would be 0, exp_explicit_high would be zero
+            expired_file = (0!=(*it)->exp_write_low) && (0!=(*it)->exp_write_high || 0!=(*it)->exp_explicit_high);
+            expired_file = expired_file && (((*it)->exp_write_high<=aged && 0!=expiry_minutes)
+                                            || 0==(*it)->exp_write_high);
 
-            expired_file = expired_file && (0==(*it)->expiry3
-                                            || (0!=(*it)->expiry3 && (*it)->expiry3<=now));
+            expired_file = expired_file && (0==(*it)->exp_explicit_high
+                                            || (0!=(*it)->exp_explicit_high && (*it)->exp_explicit_high<=now));
 
             // identified an expired file, do any higher levels overlap
             //  its key range?

@@ -74,9 +74,9 @@ struct DBImpl::CompactionState {
     uint64_t number;
     uint64_t file_size;
     InternalKey smallest, largest;
-    uint64_t expiry1, expiry2, expiry3;
+    uint64_t exp_write_low, exp_write_high, exp_explicit_high;
 
-    Output() : number(0), file_size(0), expiry1(ULONG_MAX), expiry2(0), expiry3(0) {}
+    Output() : number(0), file_size(0), exp_write_low(ULONG_MAX), exp_write_high(0), exp_explicit_high(0) {}
   };
   std::vector<Output> outputs;
 
@@ -778,7 +778,7 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     if (s.ok())
         edit->AddFile2(level, meta.number, meta.file_size,
                        meta.smallest, meta.largest,
-                       meta.expiry1, meta.expiry2, meta.expiry3);
+                       meta.exp_write_low, meta.exp_write_high, meta.exp_explicit_high);
   }
 
   CompactionStats stats;
@@ -1095,7 +1095,7 @@ Status DBImpl::BackgroundCompaction(
         c->edit()->DeleteFile(c->level(), f->number);
         c->edit()->AddFile2(c->level() + 1, f->number, f->file_size,
                             f->smallest, f->largest,
-                            f->expiry1, f->expiry2, f->expiry3);
+                            f->exp_write_low, f->exp_write_high, f->exp_explicit_high);
         status = versions_->LogAndApply(c->edit(), &mutex_);
         DeleteObsoleteFiles();
 
@@ -1436,9 +1436,9 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->current_output()->file_size = current_bytes;
   compact->total_bytes += current_bytes;
   compact->num_entries += compact->builder->NumEntries();
-  compact->current_output()->expiry1 = compact->builder->GetExpiry1();
-  compact->current_output()->expiry2 = compact->builder->GetExpiry2();
-  compact->current_output()->expiry3 = compact->builder->GetExpiry3();
+  compact->current_output()->exp_write_low = compact->builder->GetExpiryWriteLow();
+  compact->current_output()->exp_write_high = compact->builder->GetExpiryWriteHigh();
+  compact->current_output()->exp_explicit_high = compact->builder->GetExpiryExplicitHigh();
   delete compact->builder;
   compact->builder = NULL;
 
@@ -1493,7 +1493,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
     compact->compaction->edit()->AddFile2(
         level + 1,
         out.number, out.file_size, out.smallest, out.largest,
-        out.expiry1, out.expiry2, out.expiry3);
+        out.exp_write_low, out.exp_write_high, out.exp_explicit_high);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }

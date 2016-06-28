@@ -78,9 +78,9 @@ class TableBuilder {
   uint64_t NumDeletes() const;
 
   // Retrieve expiry control values
-  uint64_t GetExpiry1() const;
-  uint64_t GetExpiry2() const;
-  uint64_t GetExpiry3() const;
+  uint64_t GetExpiryWriteLow() const;
+  uint64_t GetExpiryWriteHigh() const;
+  uint64_t GetExpiryExplicitHigh() const;
 
  private:
   bool ok() const { return status().ok(); }

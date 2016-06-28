@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------
 //
-// expiry_os.h
+// expiry_ee.h
 //
 // Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
 //
@@ -20,8 +20,8 @@
 //
 // -------------------------------------------------------------------
 
-#ifndef EXPIRY_OS_H
-#define EXPIRY_OS_H
+#ifndef EXPIRY_EE_H
+#define EXPIRY_EE_H
 
 #include <vector>
 

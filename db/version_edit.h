@@ -23,13 +23,15 @@ struct FileMetaData {
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
   int level;
-  ExpiryTime expiry1;
-  ExpiryTime expiry2;
-  ExpiryTime expiry3;
+  ExpiryTime exp_write_low;     // oldest write time in file:
+                                //  0 - non-expiry keys exist too
+                                //  ULONG_MAX - no write time expiry & no plain keys
+  ExpiryTime exp_write_high;    // most recent write time in file
+  ExpiryTime exp_explicit_high; // most recent/furthest into future explicit expiry
 
   FileMetaData()
   : refs(0), /*allowed_seeks(1 << 30),*/ file_size(0),
-      num_entries(0), level(-1), expiry1(0), expiry2(0), expiry3(0)
+      num_entries(0), level(-1), exp_write_low(0), exp_write_high(0), exp_explicit_high(0)
   { }
 };
 
@@ -102,18 +104,18 @@ class VersionEdit {
                 uint64_t file_size,
                 const InternalKey& smallest,
                 const InternalKey& largest,
-                uint64_t expiry1,
-                uint64_t expiry2,
-                uint64_t expiry3) {
+                uint64_t exp_write_low,
+                uint64_t exp_write_high,
+                uint64_t exp_explicit_high) {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;
     f.smallest = smallest;
     f.largest = largest;
     f.level = level;
-    f.expiry1 = expiry1;
-    f.expiry2 = expiry2;
-    f.expiry3 = expiry3;
+    f.exp_write_low = exp_write_low;
+    f.exp_write_high = exp_write_high;
+    f.exp_explicit_high = exp_explicit_high;
     new_files_.push_back(std::make_pair(level, f));
   }
 

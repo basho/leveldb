@@ -1399,7 +1399,7 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
       edit.AddFile2(level, f->number, f->file_size, f->smallest, f->largest,
-                    f->expiry1, f->expiry2, f->expiry3);
+                    f->exp_write_low, f->exp_write_high, f->exp_explicit_high);
     }
   }
 

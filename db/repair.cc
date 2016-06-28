@@ -395,9 +395,9 @@ class Repairer {
       }
       else {
         counters=table_ptr->GetSstCounters();
-        t->meta.expiry1=counters.Value(eSstCountExpiry1);
-        t->meta.expiry2=counters.Value(eSstCountExpiry2);
-        t->meta.expiry3=counters.Value(eSstCountExpiry3);
+        t->meta.exp_write_low=counters.Value(eSstCountExpiry1);
+        t->meta.exp_write_high=counters.Value(eSstCountExpiry2);
+        t->meta.exp_explicit_high=counters.Value(eSstCountExpiry3);
       }
       delete iter;
     }
@@ -446,7 +446,7 @@ class Repairer {
       for ( i = table_ptr->begin(); table_ptr->end()!= i; i++) {
           edit_.AddFile2(level, i->meta.number, i->meta.file_size,
                          i->meta.smallest, i->meta.largest,
-                         i->meta.expiry1, i->meta.expiry2, i->meta.expiry3);
+                         i->meta.exp_write_low, i->meta.exp_write_high, i->meta.exp_explicit_high);
 
       } // for
     } // for
