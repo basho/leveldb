@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------
 //
-// expiry_ee_tests.cc
+// expiry_os_tests.cc
 //
 // Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
 //
@@ -31,7 +31,7 @@
 #include "leveldb/options.h"
 #include "leveldb/slice.h"
 #include "leveldb/write_batch.h"
-#include "leveldb_ee/expiry_ee.h"
+#include "leveldb_os/expiry_os.h"
 
 #include "db/db_impl.h"
 #include "db/dbformat.h"
@@ -78,7 +78,7 @@ public:
  */
 TEST(ExpiryTester, Defaults)
 {
-    ExpiryModuleEE expiry;
+    ExpiryModuleOS expiry;
 
     ASSERT_EQ(expiry.expiry_enabled, false);
     ASSERT_EQ(expiry.expiry_minutes, 0);
@@ -94,7 +94,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
 {
     bool flag;
     uint64_t before, after;
-    ExpiryModuleEE module;
+    ExpiryModuleOS module;
     ValueType type;
     ExpiryTime expiry;
     Slice key, value;
@@ -178,7 +178,7 @@ TEST(ExpiryTester, MemTableCallback)
 {
     bool flag;
     uint64_t before, after;
-    ExpiryModuleEE module;
+    ExpiryModuleOS module;
     ValueType type;
     ExpiryTime expiry;
     Slice key, value;
@@ -266,7 +266,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     uint64_t now, aged, temp_time;
     std::vector<FileMetaData*> files;
     FileMetaData * file_ptr;
-    ExpiryModuleEE module;
+    ExpiryModuleOS module;
     VersionTester ver;
     int level;
 
@@ -609,7 +609,7 @@ TEST(ExpiryTester, OverlapTests)
     bool flag;
     Version::FileMetaDataVector_t level1, level2, level_clear, expired_files;
     uint64_t now;
-    ExpiryModuleEE module;
+    ExpiryModuleOS module;
     VersionTester ver;
     const int overlap0(0), overlap1(1), sorted0(3), sorted1(4);
     VersionEdit edit;
@@ -736,7 +736,7 @@ public:
 };  // class ExpDB
 
 
-class ExpTestModule : public ExpiryModuleEE
+class ExpTestModule : public ExpiryModuleOS
 {
 public:
     ExpTestModule() : m_ExpiryAllow(0), m_AllowLevel(-1) {};
@@ -752,7 +752,7 @@ public:
 
         if (0!=m_ExpiryAllow && NULL==Edit)
         {
-            flag=ExpiryModuleEE::CompactionFinalizeCallback(WantAll, Ver, Level, Edit);
+            flag=ExpiryModuleOS::CompactionFinalizeCallback(WantAll, Ver, Level, Edit);
 
             if (flag)
             {
@@ -762,7 +762,7 @@ public:
         }   // if
         else if (-1!=m_AllowLevel && NULL!=Edit)
         {
-            flag=ExpiryModuleEE::CompactionFinalizeCallback(WantAll, Ver, Level, Edit);
+            flag=ExpiryModuleOS::CompactionFinalizeCallback(WantAll, Ver, Level, Edit);
 
             if (flag)
             {

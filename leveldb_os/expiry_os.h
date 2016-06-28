@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------
 //
-// expiry_ee.h
+// expiry_os.h
 //
 // Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
 //
@@ -20,8 +20,8 @@
 //
 // -------------------------------------------------------------------
 
-#ifndef EXPIRY_EE_H
-#define EXPIRY_EE_H
+#ifndef EXPIRY_OS_H
+#define EXPIRY_OS_H
 
 #include <vector>
 
@@ -34,14 +34,14 @@
 namespace leveldb
 {
 
-class ExpiryModuleEE : public ExpiryModule
+class ExpiryModuleOS : public ExpiryModule
 {
 public:
-    ExpiryModuleEE()
+    ExpiryModuleOS()
         : expiry_enabled(false), expiry_minutes(0), whole_file_expiry(false)
     {};
 
-    ~ExpiryModuleEE() {};
+    ~ExpiryModuleOS() {};
 
     // Print expiry options to LOG file
     virtual void Dump(Logger * log) const;

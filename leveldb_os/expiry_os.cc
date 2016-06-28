@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------
 //
-// expiry_ee.cc
+// expiry_os.cc
 //
 // Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
 //
@@ -29,24 +29,24 @@
 #include "db/dbformat.h"
 #include "db/db_impl.h"
 #include "db/version_set.h"
-#include "leveldb_ee/expiry_ee.h"
+#include "leveldb_os/expiry_os.h"
 #include "util/logging.h"
 #include "util/throttle.h"
 
 namespace leveldb {
 void
-ExpiryModuleEE::Dump(
+ExpiryModuleOS::Dump(
     Logger * log) const
 {
-    Log(log," ExpiryModuleEE.expiry_enabled: %s", expiry_enabled ? "true" : "false");
-    Log(log," ExpiryModuleEE.expiry_minutes: %" PRIu64, expiry_minutes);
-    Log(log,"    ExpiryModuleEE.whole_files: %s", whole_file_expiry ? "true" : "false");
+    Log(log," ExpiryModuleOS.expiry_enabled: %s", expiry_enabled ? "true" : "false");
+    Log(log," ExpiryModuleOS.expiry_minutes: %" PRIu64, expiry_minutes);
+    Log(log,"    ExpiryModuleOS.whole_files: %s", whole_file_expiry ? "true" : "false");
 
     return;
 
-}   // ExpiryModuleEE::Dump
+}   // ExpiryModuleOS::Dump
 
-bool ExpiryModuleEE::MemTableInserterCallback(
+bool ExpiryModuleOS::MemTableInserterCallback(
     const Slice & Key,   // input: user's key about to be written
     const Slice & Value, // input: user's value object
     ValueType & ValType,   // input/output: key type. call might change
@@ -66,14 +66,14 @@ bool ExpiryModuleEE::MemTableInserterCallback(
 
     return(good);
 
-}   // ExpiryModuleEE::MemTableInserterCallback
+}   // ExpiryModuleOS::MemTableInserterCallback
 
 
 /**
  * Returns true if key is expired.  False if key is NOT expired
  *  (used by MemtableCallback() too)
  */
-bool ExpiryModuleEE::KeyRetirementCallback(
+bool ExpiryModuleOS::KeyRetirementCallback(
     const ParsedInternalKey & Ikey) const
 {
     bool is_expired(false);
@@ -110,7 +110,7 @@ bool ExpiryModuleEE::KeyRetirementCallback(
 
     return(is_expired);
 
-}   // ExpiryModuleEE::KeyRetirementCallback
+}   // ExpiryModuleOS::KeyRetirementCallback
 
 
 /**
@@ -121,7 +121,7 @@ bool ExpiryModuleEE::KeyRetirementCallback(
  *     expired (to aid in starting compaction for
  *     keys tombstoning for higher levels).
  */
-bool ExpiryModuleEE::TableBuilderCallback(
+bool ExpiryModuleOS::TableBuilderCallback(
     const Slice & Key,
     SstCounters & Counters) const
 {
@@ -175,13 +175,13 @@ bool ExpiryModuleEE::TableBuilderCallback(
 
     return(good);
 
-}   // ExpiryModuleEE::TableBuilderCallback
+}   // ExpiryModuleOS::TableBuilderCallback
 
 
 /**
  * Returns true if key is expired.  False if key is NOT expired
  */
-bool ExpiryModuleEE::MemTableCallback(
+bool ExpiryModuleOS::MemTableCallback(
     const Slice & InternalKey) const
 {
     bool is_expired(false), good;
@@ -194,14 +194,14 @@ bool ExpiryModuleEE::MemTableCallback(
 
     return(is_expired);
 
-}   // ExpiryModuleEE::MemTableCallback
+}   // ExpiryModuleOS::MemTableCallback
 
 
 /**
  * Returns true if at least one file on this level
  *  is eligible for full file expiry
  */
-bool ExpiryModuleEE::CompactionFinalizeCallback(
+bool ExpiryModuleOS::CompactionFinalizeCallback(
     bool WantAll,                  // input: true - examine all expired files
     const Version & Ver,           // input: database state for examination
     int Level,                     // input: level to review for expiry
@@ -264,7 +264,7 @@ bool ExpiryModuleEE::CompactionFinalizeCallback(
 
     return(ret_flag);
 
-}   // ExpiryModuleEE::CompactionFinalizeCallback
+}   // ExpiryModuleOS::CompactionFinalizeCallback
 
 
 /**

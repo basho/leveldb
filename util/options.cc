@@ -52,7 +52,7 @@ Options::Options()
       tiered_slow_level(0),
       cache_object_warming(true)
 {
-    expiry_module=new ExpiryModule;
+
 }
 
 
