@@ -229,6 +229,7 @@ KeyRetirement::operator()(
 
             else
             {
+                expire_flag=false;
                 if (NULL!=options && NULL!=options->expiry_module.get())
                     expire_flag=options->expiry_module->KeyRetirementCallback(ikey);
 
