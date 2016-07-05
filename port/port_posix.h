@@ -11,6 +11,12 @@
 #include <unistd.h>
 #include <assert.h>
 
+#if _POSIX_TIMERS >= 200801L
+   #include <time.h> // declares clock_gettime()
+#else
+   #include <sys/time.h> // declares gettimeofday()
+#endif
+
 #undef PLATFORM_IS_LITTLE_ENDIAN
 #if defined(OS_MACOSX)
   #include <machine/endian.h>
@@ -228,6 +234,24 @@ inline void SetCurrentThreadName(const char* threadName) {
   // NOTE: do not fail here since this functionality is optional
 #endif
 }
+
+// similar to Env::NowMicros except guaranteed to return "time" instead
+//  of potentially only ticks since reboot
+const uint64_t UINT64_ONE_SECOND=1000000;
+
+inline uint64_t TimeUint64() {
+#if _POSIX_TIMERS >= 200801L
+    struct timespec ts;
+
+    // this is rumored to be faster than gettimeofday(),
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000 + ts.tv_nsec/1000;
+#else
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+#endif
+} // TimeUint64
 
 } // namespace port
 } // namespace leveldb

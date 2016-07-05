@@ -34,7 +34,7 @@ Status BuildTable(const std::string& dbname,
   meta->file_size = 0;
   iter->SeekToFirst();
 
-  KeyRetirement retire(user_comparator, smallest_snapshot);
+  KeyRetirement retire(user_comparator, smallest_snapshot, &options);
 
   std::string fname = TableFileName(options, meta->number, meta->level);
   if (iter->Valid()) {
@@ -72,6 +72,9 @@ Status BuildTable(const std::string& dbname,
       s = builder->Finish();
       if (s.ok()) {
         meta->file_size = builder->FileSize();
+        meta->exp_write_low = builder->GetExpiryWriteLow();
+        meta->exp_write_high = builder->GetExpiryWriteHigh();
+        meta->exp_explicit_high = builder->GetExpiryExplicitHigh();
         assert(meta->file_size > 0);
       }
     } else {
@@ -109,8 +112,8 @@ Status BuildTable(const std::string& dbname,
     // Keep it
       if (0!=keys_retired)
       {
-          Log(options.info_log, "Level-0 table #%" PRIu64 ": %zd keys seen, %zd keys retired",
-              meta->number, keys_seen, keys_retired);
+          Log(options.info_log, "Level-0 table #%" PRIu64 ": %zd keys seen, %zd keys retired, %zd keys expired",
+              meta->number, keys_seen, retire.GetDroppedCount(), retire.GetExpiredCount());
       }   // if
   } else {
     env->DeleteFile(fname);

@@ -15,6 +15,7 @@ namespace leveldb {
 class Cache;
 class Comparator;
 class Env;
+class ExpiryModule;
 class FilterPolicy;
 class Logger;
 class Snapshot;
@@ -35,6 +36,29 @@ enum CompressionType {
   kLZ4Compression    = 0x2,
   kNoCompressionAutomated = 0x3
 };
+
+//  Originally located in db/dbformat.h.  Now available publically.
+// Value types encoded as the last component of internal keys.
+// DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
+// data structures.
+enum ValueType {
+  kTypeDeletion = 0x0,
+  kTypeValue = 0x1,
+  kTypeValueWriteTime = 0x2,
+  kTypeValueExplicitExpiry = 0x3
+};
+
+//  Originally located in db/dbformat.h
+typedef uint64_t SequenceNumber;
+typedef uint64_t ExpiryTime;
+
+};  // namespace leveldb
+
+//
+// must follow ValueType declaration
+#include "leveldb/expiry.h"
+
+namespace leveldb {
 
 // Options to control the behavior of a database (passed to DB::Open)
 struct Options {
@@ -225,6 +249,10 @@ struct Options {
   // upon restart.
   bool cache_object_warming;
 
+  // Riak specific object that defines expiry policy for data
+  // written to leveldb.
+  ExpiryPtr_t expiry_module;
+
   // Create an Options object with default values for all fields.
   Options();
 
@@ -325,6 +353,20 @@ struct WriteOptions {
       : sync(false) {
   }
 };
+
+
+// Riak specific object that can return key metadata
+//  during get or iterate operation
+struct KeyMetaData
+{
+    ValueType m_Type;          // see above
+    SequenceNumber m_Sequence; // output only, leveldb internal
+    ExpiryTime m_Expiry;       // microseconds since Epoch, UTC
+
+    KeyMetaData()
+    : m_Type(kTypeValue), m_Sequence(0), m_Expiry(0)
+    {};
+};  // struct KeyMetaData
 
 }  // namespace leveldb
 

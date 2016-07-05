@@ -27,9 +27,10 @@ TEST(VersionEditTest, EncodeDecode) {
   VersionEdit edit;
   for (int i = 0; i < 4; i++) {
     TestEncodeDecode(edit);
-    edit.AddFile(3, kBig + 300 + i, kBig + 400 + i,
-                 InternalKey("foo", 0, kBig + 500 + i, kTypeValue),
-                 InternalKey("zoo", 0, kBig + 600 + i, kTypeDeletion));
+    edit.AddFile2(3, kBig + 300 + i, kBig + 400 + i,
+                  InternalKey("foo", 0, kBig + 500 + i, kTypeValue),
+                  InternalKey("zoo", 0, kBig + 600 + i, kTypeDeletion),
+                  0,0,0);
     edit.DeleteFile(4, kBig + 700 + i);
     edit.SetCompactPointer(i, InternalKey("x", 0, kBig + 900 + i, kTypeValue));
   }

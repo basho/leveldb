@@ -135,7 +135,7 @@ esac
 if [ -f leveldb_ee/README.md ]; then
 DIRS="util db table leveldb_ee"
 else
-DIRS="util db table stubs"
+DIRS="util db table leveldb_os"
 fi
 set -f # temporarily disable globbing so that our patterns aren't expanded
 PRUNE_TEST="-name *test*.cc -prune"

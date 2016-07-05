@@ -73,9 +73,9 @@ void VersionEdit::EncodeTo(std::string* dst, bool format2) const {
     PutLengthPrefixedSlice(dst, f.largest.Encode());
     if (format2)
     {
-      PutVarint64(dst, f.expiry1);
-      PutVarint64(dst, f.expiry2);
-      PutVarint64(dst, f.expiry3);
+      PutVarint64(dst, f.exp_write_low);
+      PutVarint64(dst, f.exp_write_high);
+      PutVarint64(dst, f.exp_explicit_high);
     }
   }
 }
@@ -195,9 +195,9 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             GetVarint64(&input, &f.file_size) &&
             GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest) &&
-            GetVarint64(&input, &f.expiry1) &&
-            GetVarint64(&input, &f.expiry2) &&
-            GetVarint64(&input, &f.expiry3))
+            GetVarint64(&input, &f.exp_write_low) &&
+            GetVarint64(&input, &f.exp_write_high) &&
+            GetVarint64(&input, &f.exp_explicit_high))
         {
           f.level=level;
           new_files_.push_back(std::make_pair(level, f));

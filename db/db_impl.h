@@ -29,15 +29,17 @@ class DBImpl : public DB {
   virtual ~DBImpl();
 
   // Implementations of the DB interface
-  virtual Status Put(const WriteOptions&, const Slice& key, const Slice& value);
+  virtual Status Put(const WriteOptions&, const Slice& key, const Slice& value, const KeyMetaData * meta=NULL);
   virtual Status Delete(const WriteOptions&, const Slice& key);
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(const ReadOptions& options,
                      const Slice& key,
-                     std::string* value);
+                     std::string* value,
+                     KeyMetaData * meta=NULL);
   virtual Status Get(const ReadOptions& options,
                      const Slice& key,
-                     Value* value);
+                     Value* value,
+                     KeyMetaData * meta=NULL);
   virtual Iterator* NewIterator(const ReadOptions&);
   virtual const Snapshot* GetSnapshot();
   virtual void ReleaseSnapshot(const Snapshot* snapshot);
@@ -74,7 +76,7 @@ class DBImpl : public DB {
   bool IsCompactionScheduled();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
 
- private:
+ protected:
   friend class DB;
   struct CompactionState;
   struct Writer;
@@ -118,6 +120,8 @@ class DBImpl : public DB {
   void MaybeScheduleCompaction();
 
   Status BackgroundCompaction(Compaction * Compact=NULL);
+  Status BackgroundExpiry(Compaction * Compact=NULL);
+
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
   int64_t PrioritizeWork(bool IsLevel0);
@@ -169,9 +173,6 @@ class DBImpl : public DB {
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
-
-  // Has a background compaction been scheduled or is running?
-  bool bg_compaction_scheduled_;
 
   // Information for a manual compaction
   struct ManualCompaction {

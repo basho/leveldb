@@ -17,6 +17,7 @@
 
 #include "leveldb/slice.h"
 #include "leveldb/status.h"
+#include "leveldb/options.h"
 
 namespace leveldb {
 
@@ -64,6 +65,10 @@ class Iterator {
   // REQUIRES: !AtEnd() && !AtStart()
   virtual Slice value() const = 0;
 
+  // Riak specific:  if a database iterator, returns key meta data
+  // REQUIRES: Valid()
+  virtual KeyMetaData & keymetadata() const {return(keymetadata_); };
+
   // If an error has occurred, return it.  Else return an ok status.
   virtual Status status() const = 0;
 
@@ -74,6 +79,10 @@ class Iterator {
   // not abstract and therefore clients should not override it.
   typedef void (*CleanupFunction)(void* arg1, void* arg2);
   void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
+
+ protected:
+  // mutable so reusable by derived classes
+  mutable KeyMetaData keymetadata_;
 
  private:
   struct Cleanup {

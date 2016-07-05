@@ -23,13 +23,15 @@ struct FileMetaData {
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
   int level;
-  ExpiryTime expiry1;
-  ExpiryTime expiry2;
-  ExpiryTime expiry3;
+  ExpiryTime exp_write_low;     // oldest write time in file:
+                                //  0 - non-expiry keys exist too
+                                //  ULONG_MAX - no write time expiry & no plain keys
+  ExpiryTime exp_write_high;    // most recent write time in file
+  ExpiryTime exp_explicit_high; // most recent/furthest into future explicit expiry
 
   FileMetaData()
   : refs(0), /*allowed_seeks(1 << 30),*/ file_size(0),
-      num_entries(0), level(-1)
+      num_entries(0), level(-1), exp_write_low(0), exp_write_high(0), exp_explicit_high(0)
   { }
 };
 
@@ -83,6 +85,7 @@ class VersionEdit {
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
+#if 0
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
                const InternalKey& smallest,
@@ -95,23 +98,24 @@ class VersionEdit {
     f.level = level;
     new_files_.push_back(std::make_pair(level, f));
   }
+#endif
 
   void AddFile2(int level, uint64_t file,
                 uint64_t file_size,
                 const InternalKey& smallest,
                 const InternalKey& largest,
-                uint64_t expiry1,
-                uint64_t expiry2,
-                uint64_t expiry3) {
+                uint64_t exp_write_low,
+                uint64_t exp_write_high,
+                uint64_t exp_explicit_high) {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;
     f.smallest = smallest;
     f.largest = largest;
     f.level = level;
-    f.expiry1 = expiry1;
-    f.expiry2 = expiry2;
-    f.expiry3 = expiry3;
+    f.exp_write_low = exp_write_low;
+    f.exp_write_high = exp_write_high;
+    f.exp_explicit_high = exp_explicit_high;
     new_files_.push_back(std::make_pair(level, f));
   }
 
@@ -119,8 +123,9 @@ class VersionEdit {
   void DeleteFile(int level, uint64_t file) {
     deleted_files_.insert(std::make_pair(level, file));
   }
+  size_t DeletedFileCount() const {return(deleted_files_.size());};
 
-  void EncodeTo(std::string* dst, bool format2=false) const;
+  void EncodeTo(std::string* dst, bool format2=true) const;
   Status DecodeFrom(const Slice& src);
 
   std::string DebugString() const;

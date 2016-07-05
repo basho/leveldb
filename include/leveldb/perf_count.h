@@ -49,6 +49,10 @@ enum SstCountEnum
     eSstCountDeleteKey=12,     //!< tombstone count
     eSstCountBlockSizeUsed=13, //!< Options::block_size used with this file
     eSstCountUserDataSize=14,  //!< post-compression size of non-metadata (user keys/values/block overhead)
+    eSstCountExpiry1=15,       //!< undocumented expiry counter 1
+    eSstCountExpiry2=16,       //!< undocumented expiry counter 2
+    eSstCountExpiry3=17,       //!< undocumented expiry counter 3
+    eSstCountSequence=18,      //!< highest sequence number in file
 
     // must follow last index name to represent size of array
     eSstCountEnumSize,          //!< size of the array described by the enum values
@@ -232,6 +236,9 @@ enum PerformanceCountersEnum
 
     // this one was added to the other ePerfElevelXxx counters above when we backported HotThreadPool to eleveldb
     ePerfElevelWeighted=93,   //!< total microseconds item spent on queue
+
+    ePerfExpiredKeys=94,      //!< key physically removed because it expired
+    ePerfExpiredFiles=95,     //!< entire file removed because all keys expired
 
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)

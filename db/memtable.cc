@@ -6,6 +6,7 @@
 #include "db/dbformat.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/iterator.h"
 #include "util/coding.h"
 
@@ -63,6 +64,8 @@ class MemTableIterator: public Iterator {
     Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
   }
+  virtual KeyMetaData & keymetadata() const
+   {MemTable::DecodeKeyMetaData(iter_.key(), keymetadata_); return(keymetadata_);};
 
   virtual Status status() const { return Status::OK(); }
 
@@ -81,7 +84,8 @@ Iterator* MemTable::NewIterator() {
 
 void MemTable::Add(SequenceNumber s, ValueType type,
                    const Slice& key,
-                   const Slice& value) {
+                   const Slice& value,
+                   const ExpiryTime & expiry) {
   // Format of an entry is concatenation of:
   //  key_size     : varint32 of internal_key.size()
   //  key bytes    : char[internal_key.size()]
@@ -97,6 +101,11 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   char* p = EncodeVarint32(buf, internal_key_size);
   memcpy(p, key.data(), key_size);
   p += key_size;
+  if (IsExpiryKey(type))
+  {
+      EncodeFixed64(p, expiry);
+      p+=8;
+  }
   EncodeFixed64(p, (s << 8) | type);
   p += 8;
   p = EncodeVarint32(p, val_size);
@@ -105,7 +114,9 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   table_.Insert(buf);
 }
 
-bool MemTable::Get(const LookupKey& key, Value* value, Status* s) {
+bool MemTable::Get(const LookupKey& key, Value* value, Status* s,
+    const Options * options) {
+  bool ret_flag(false);
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -128,22 +139,61 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s) {
             ExtractUserKey(internal_key),
             key.user_key()) == 0) {
       // Correct user key
-      switch (ExtractValueType(internal_key)) {
-        case kTypeValue:
+      KeyMetaData meta;
+      DecodeKeyMetaData(entry, meta);
+
+      switch (meta.m_Type) {
         case kTypeValueWriteTime:
         case kTypeValueExplicitExpiry:
         {
+            bool expired=false;
+            if (NULL!=options && NULL!=options->expiry_module.get())
+                expired=options->expiry_module->MemTableCallback(internal_key);
+            if (expired)
+            {
+                // like kTypeDeletion
+                *s = Status::NotFound(Slice());
+                ret_flag=true;
+                break;
+            }   // if
+            //otherwise fall into kTypeValue code
+        }   // case
+
+        case kTypeValue:
+        {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           value->assign(v.data(), v.size());
-          return true;
+          ret_flag=true;
+          break;
         }
         case kTypeDeletion:
           *s = Status::NotFound(Slice());
-          return true;
-      }
+          ret_flag=true;
+          break;
+      } // switch
+
+      // only unpack metadata if requested
+      if (key.WantsKeyMetaData())
+          key.SetKeyMetaData(meta);
     }
   }
-  return false;
+  return ret_flag;
 }
+
+// this is a static function
+void MemTable::DecodeKeyMetaData(
+    const char * key,
+    KeyMetaData & meta)
+{
+    Slice key_slice = GetLengthPrefixedSlice(key);
+
+    meta.m_Type=ExtractValueType(key_slice);
+    meta.m_Sequence=ExtractSequenceNumber(key_slice);
+    if (IsExpiryKey(meta.m_Type))
+        meta.m_Expiry=ExtractExpiry(key_slice);
+    else
+        meta.m_Expiry=0;
+
+} // DecodeKeyMetaData
 
 }  // namespace leveldb
