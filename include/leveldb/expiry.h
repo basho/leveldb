@@ -31,7 +31,7 @@ namespace leveldb {
 
 class Compaction;
 class Logger;
-class ParsedInternalKey;
+struct ParsedInternalKey;
 class Slice;
 class SstCounters;
 class Version;
