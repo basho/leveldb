@@ -134,8 +134,9 @@ protected:
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  std::vector<FileMetaData*> files_[config::kNumLevels];
+  USED_BY_NESTED_FRIEND(std::vector<FileMetaData*> files_[config::kNumLevels];)
 
+ protected:
   // Next file to compact based on seek stats (or Riak delete test)
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;

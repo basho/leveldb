@@ -1251,7 +1251,8 @@ TEST(ExpiryManifestTester, Overlap2)
     m_DB->OneCompaction();
 
     // let multiple threads complete
-//    sleep(1);
+    /// sleep(1) required for Smart OS 1.8 buildbot
+    sleep(1);
     VerifyFiles(Overlap1, manifest_count, 5);
 
     return;
