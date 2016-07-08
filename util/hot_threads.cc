@@ -500,18 +500,26 @@ HotThreadPool::Submit(
 
         else if (OkToQueue)
         {
-            item->m_QueueStart=Env::Default()->NowMicros();
-
-            // no waiting threads, put on backlog queue
+            // hold mutex of only thread 0, this synchronizes this
+            //  thread and the first worker thread to ensure at least
+            //  one thread will eventually see the work item on the queue
+            //  before m_Condition.Wait()
             {
-                SpinLock lock(&m_QueueLock);
-                inc_and_fetch(&m_WorkQueueAtomic);
-                m_WorkQueue.push_back(item);
-            }
+                item->m_QueueStart=Env::Default()->NowMicros();
+
+                MutexLock lock(&m_Threads[0]->m_Mutex);
+
+                // no waiting threads, put on backlog queue
+                {
+                    SpinLock lock(&m_QueueLock);
+                    inc_and_fetch(&m_WorkQueueAtomic);
+                    m_WorkQueue.push_back(item);
+                }
+            }   // mutex released
 
             // to address race condition, thread might be waiting now
             FindWaitingThread(NULL, true);
-
+#if 0
             // to address second race condition, send in QueueThread
             //   (thread not likely good on OSX)
             if (m_QueueThread.m_ThreadGood)
@@ -524,7 +532,7 @@ HotThreadPool::Submit(
                     gPerfCounters->Inc(ePerfThreadError);
                 }   // if
             }   // if
-
+#endif
             IncWorkQueued();
             ret_flag=true;
         }   // else if
