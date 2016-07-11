@@ -58,9 +58,9 @@ class Comparator {
 // must not be deleted.
 extern const Comparator* BytewiseComparator();
 
-extern const Comparator* GetBSComparator();
+extern const Comparator* GetAltComparator( Comparator* (*pAllocator)() ); // the pAllocator method is called once (in protected code) to create the singleton alternate comparator
 
-// Riak specific: cleans up the default comparitor to make
+// Riak specific: cleans up the default comparator to make
 //  valgrind results clean
 extern void ComparatorShutdown();
 
