@@ -162,193 +162,6 @@ HotThread::ThreadRoutine()
 }   // HotThread::ThreadRoutine
 
 
-void *QueueThreadStaticEntry(void *args)
-{
-    QueueThread &tdata = *(QueueThread *)args;
-
-    return(tdata.QueueThreadRoutine());
-
-}   // QueueThreadStaticEntry
-
-
-QueueThread::QueueThread(
-    class HotThreadPool & Pool, int Nice)
-    : m_ThreadGood(false), m_Pool(Pool), m_Nice(Nice), m_SemaphorePtr(NULL)
-{
-    int ret_val;
-
-    m_QueueName=m_Pool.m_PoolName;
-    m_QueueName.append("Semaphore");
-
-    memset(&m_Semaphore, 0, sizeof(m_Semaphore));
-    ret_val=sem_init(&m_Semaphore, 0, 0);
-
-    if (0==ret_val)
-    {
-        m_SemaphorePtr=&m_Semaphore;
-    }   // if
-
-    // retry with named semaphore
-    else if (0!=ret_val && ENOSYS==errno)
-    {
-        char pid_str[32];
-        snprintf(pid_str, sizeof(pid_str), "%d", (int)getpid());
-        m_QueueName.append(pid_str);
-
-        m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL,
-                                S_IRUSR | S_IWUSR, 0);
-        // attempt delete and retry blindly
-        if (SEM_FAILED==m_SemaphorePtr)
-        {
-            sem_unlink(m_QueueName.c_str());
-            m_SemaphorePtr=sem_open(m_QueueName.c_str(), O_CREAT | O_EXCL,
-                                    S_IRUSR | S_IWUSR, 0);
-        }   // if
-
-        // so ret_val will be zero on success
-        ret_val=(SEM_FAILED==m_SemaphorePtr);
-    }   // else if
-
-    // only start this if we have a working semaphore
-    if (0==ret_val)
-    {
-        ret_val=pthread_create(&m_ThreadId, NULL,  &QueueThreadStaticEntry, this);
-        if (0==ret_val)
-        {
-            m_ThreadGood=true;
-        }   // if
-        else
-        {
-            syslog(LOG_ERR, "thread_create failed in QueueThread::QueueThread [%d, %m]",
-                   errno);
-            gPerfCounters->Inc(ePerfThreadError);
-
-            if (&m_Semaphore==m_SemaphorePtr)
-            {
-                sem_destroy(&m_Semaphore);
-            }   // if
-            else
-            {
-                sem_close(m_SemaphorePtr);
-                sem_unlink(m_QueueName.c_str());
-            }   // else
-
-            m_SemaphorePtr=NULL;
-        }   // else
-    }   // if
-    else
-    {
-        m_SemaphorePtr=NULL;
-        syslog(LOG_ERR, "sem_init failed in QueueThread::QueueThread [%d, %m]",
-               errno);
-        gPerfCounters->Inc(ePerfThreadError);
-    }   // else
-
-    return;
-
-}   // QueueThread::QueueThread
-
-
-QueueThread::~QueueThread()
-{
-    // only clean up resources if they were started
-    if (m_ThreadGood)
-    {
-        // release the m_QueueThread to exit
-        sem_post(m_SemaphorePtr);
-        pthread_join(m_ThreadId, NULL);
-
-        if (&m_Semaphore==m_SemaphorePtr)
-        {
-            sem_destroy(&m_Semaphore);
-        }   // if
-        else
-        {
-            sem_close(m_SemaphorePtr);
-            sem_unlink(m_QueueName.c_str());
-        }   // else
-    }   // if
-
-    return;
-}   // QueueThread::~QueueThread
-
-
-/**
- * Cover highly inprobable race condition with adding a queue
- *  and no hot thread sees it.
- */
-void *
-QueueThread::QueueThreadRoutine()
-{
-    ThreadTask * submission;
-
-    submission=NULL;
-
-    port::SetCurrentThreadName(m_QueueName.c_str());
-#ifdef OS_LINUX
-    if (0!=m_Nice)
-    {
-        pid_t tid;
-        int ret_val;
-
-        tid = syscall(SYS_gettid);
-        if (-1!=(int)tid)
-        {
-            errno=0;
-            ret_val=getpriority(PRIO_PROCESS, tid);
-            // ret_val could be -1 legally, so double test
-            if (-1!=ret_val || 0==errno)
-                setpriority(PRIO_PROCESS, tid, ret_val+m_Nice);
-
-            assert((ret_val+m_Nice)==getpriority(PRIO_PROCESS, tid));
-        }   // if
-    }   // if
-#endif
-    while(!m_Pool.m_Shutdown)
-    {
-        // test non-blocking size for hint (much faster)
-        if (0!=m_Pool.m_WorkQueueAtomic)
-        {
-            // retest with locking
-            SpinLock lock(&m_Pool.m_QueueLock);
-
-            if (!m_Pool.m_WorkQueue.empty())
-            {
-                submission=m_Pool.m_WorkQueue.front();
-                m_Pool.m_WorkQueue.pop_front();
-                dec_and_fetch(&m_Pool.m_WorkQueueAtomic);
-                m_Pool.IncWorkDequeued();
-                m_Pool.IncWorkWeighted(Env::Default()->NowMicros()
-                                       - submission->m_QueueStart);
-            }   // if
-        }   // if
-
-
-        // a work item identified (direct or queue), work it!
-        //  then loop to test queue again
-        if (NULL!=submission)
-        {
-            // execute the job
-            (*submission)();
-            if (submission->resubmit())
-            {
-                submission->recycle();
-                m_Pool.Submit(submission);
-            }
-
-            submission->RefDec();
-
-            submission=NULL;
-        }   // if
-
-        // loop until semaphore hits zero
-        sem_wait(m_SemaphorePtr);
-
-    }   // while
-
-    return 0;
-
-}   // QueueThread::QueueThreadRoutine
 
 
 HotThreadPool::HotThreadPool(
@@ -361,7 +174,7 @@ HotThreadPool::HotThreadPool(
     int Nice)
     : m_PoolName((Name?Name:"")),    // this crashes if Name is NULL ...but need it set now
       m_Shutdown(false),
-      m_WorkQueueAtomic(0), m_QueueThread(*this, Nice),
+      m_WorkQueueAtomic(0),
       m_DirectCounter(Direct), m_QueuedCounter(Queued),
       m_DequeuedCounter(Dequeued), m_WeightedCounter(Weighted)
 {
@@ -519,20 +332,7 @@ HotThreadPool::Submit(
 
             // to address race condition, thread might be waiting now
             FindWaitingThread(NULL, true);
-#if 0
-            // to address second race condition, send in QueueThread
-            //   (thread not likely good on OSX)
-            if (m_QueueThread.m_ThreadGood)
-            {
-                ret_val=sem_post(m_QueueThread.m_SemaphorePtr);
-                if (0!=ret_val)
-                {
-                    syslog(LOG_ERR, "sem_post failed in HotThreadPool::Submit [%d, %m]",
-                           errno);
-                    gPerfCounters->Inc(ePerfThreadError);
-                }   // if
-            }   // if
-#endif
+
             IncWorkQueued();
             ret_flag=true;
         }   // else if
