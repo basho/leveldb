@@ -26,6 +26,7 @@ echo " Git start:: " \$(date)
 git clone git@github.com:basho/$REPO
 cd $REPO
 git checkout $2
+sed -i -e 's/% #!sed//' rebar.config test/eleveldb_schema_tests.erl
 export LD_LIBRARY_PATH=.
 rm ~/$USER/eleveldb_$2\*
 
@@ -35,7 +36,7 @@ echo "Make start: " \$(date)
 if hash gmake 2>/dev/null
 then
     if gmake -j 2 -s
-    then 
+    then
        echo "Build successful."
     else
        echo "Build failed."
@@ -51,7 +52,7 @@ then
     fi
 else
     if make -j 2 -s
-    then 
+    then
        echo "Build successful."
     else
        echo "Build failed."
