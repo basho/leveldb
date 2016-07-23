@@ -196,7 +196,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       level0_good(true),
       throttle_end(0),
       running_compactions_(0),
-      block_size_changed_(0), last_low_mem_(0)
+      block_size_changed_(0), last_low_mem_(0),
+      hotbackup_pending_(false)
 {
   current_block_size_=options_.block_size;
 
@@ -2389,7 +2390,7 @@ DBImpl::IsCompactionScheduled()
     bool flag(false);
     for (int level=0; level< config::kNumLevels && !flag; ++level)
         flag=versions_->IsCompactionSubmitted(level);
-    return(flag || NULL!=imm_);
+    return(flag || NULL!=imm_ || hotbackup_pending_);
 }   // DBImpl::IsCompactionScheduled
 
 }  // namespace leveldb

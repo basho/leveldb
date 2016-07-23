@@ -2,7 +2,7 @@
 //
 // throttle.cc
 //
-// Copyright (c) 2011-2015 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2011-2016 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -30,6 +30,7 @@
 #include "util/cache2.h"
 #include "util/db_list.h"
 #include "util/flexcache.h"
+#include "util/hot_backup.h"
 #include "util/hot_threads.h"
 #include "util/throttle.h"
 
@@ -263,15 +264,21 @@ ThrottleThread(
         if (cache_expire < now_seconds)
         {
             cache_expire = now_seconds + 60*60;  // hard coded to one hour for now
-            DBList()->ScanDBs(true,&DBImpl::PurgeExpiredFileCache);
+            DBList()->ScanDBs(true,  &DBImpl::PurgeExpiredFileCache);
             DBList()->ScanDBs(false, &DBImpl::PurgeExpiredFileCache);
         }   // if
+
+        //
+        // This is a second non-throttle task added to this one minute loop.  Pattern forming.
+        //  See if hot backup wants to initiate.
+        //
+        CheckHotBackupTrigger();
 
         // nudge compaction logic of potential grooming
         if (0==gCompactionThreads->m_WorkQueueAtomic)  // user databases
             DBList()->ScanDBs(false, &DBImpl::CheckAvailableCompactions);
         if (0==gCompactionThreads->m_WorkQueueAtomic)  // internal databases
-            DBList()->ScanDBs(true, &DBImpl::CheckAvailableCompactions);
+            DBList()->ScanDBs(true,  &DBImpl::CheckAvailableCompactions);
 
     }   // while
 

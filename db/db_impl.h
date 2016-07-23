@@ -67,9 +67,11 @@ class DBImpl : public DB {
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
 
+  // These are routines that DBListImpl calls across all open databases
   void ResizeCaches() {double_cache.ResizeCaches();};
   size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
   void PurgeExpiredFileCache() {double_cache.PurgeExpiredFiles();};
+  void HotBackup();  // in util/hot_backup.cc
 
   void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
@@ -218,6 +220,8 @@ class DBImpl : public DB {
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};
   Cache * file_cache() {return(double_cache.GetFileCache());};
+
+  volatile bool hotbackup_pending_;
 
   // No copying allowed
   DBImpl(const DBImpl&);
