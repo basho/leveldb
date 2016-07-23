@@ -240,6 +240,9 @@ enum PerformanceCountersEnum
     ePerfExpiredKeys=94,      //!< key physically removed because it expired
     ePerfExpiredFiles=95,     //!< entire file removed because all keys expired
 
+    ePerfSyslogWrite=96,      //!< logged message to syslog
+    ePerfBackupStarted=97,    //!< hot backup initiated
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values
