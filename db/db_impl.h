@@ -115,6 +115,7 @@ class DBImpl : public DB {
   Status WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit, Version* base);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
+  Status NewMemTable(bool ProcessInline);
   Status NewRecoveryLog(uint64_t NewLogNumber);
 
   WriteBatch* BuildBatchGroup(Writer** last_writer);
@@ -207,9 +208,6 @@ class DBImpl : public DB {
     }
   };
   CompactionStats stats_[config::kNumLevels];
-
-  // hint to background thread when level0 is backing up
-  volatile bool level0_good;
 
   volatile uint64_t throttle_end;
   volatile uint32_t running_compactions_;
