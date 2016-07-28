@@ -23,14 +23,55 @@
 #ifndef STORAGE_LEVELDB_INCLUDE_HOT_BACKUP_H_
 #define STORAGE_LEVELDB_INCLUDE_HOT_BACKUP_H_
 
+#include "util/thread_tasks.h"
+
 namespace leveldb
 {
+
+namespace config {
+
+// how many hot backup directories:  backup, backup.1, ... backup.(kNumBackups-1)
+static const int kNumBackups = 5;
+
+static const char * kTriggerFileName="/etc/riak/hot_backup";
+
+}   // namespace config
 
 // Called every 60 seconds to test for external hot backup trigger
 //   (initiates backup if trigger seen)
 void CheckHotBackupTrigger();
 
-} // namespace leveldb
 
+/**
+ * Background task to perform backup steps on compaction thread
+ */
+class HotBackupTask : public ThreadTask
+{
+protected:
+
+    DBImpl & m_DBImpl;
+    const Options & m_Options;     // to get around class protection
+
+public:
+    HotBackupTask(DBImpl * DB_ptr, const Options & Options)
+    : m_DBImpl(*DB_ptr), m_Options(Options)
+    {};
+
+    virtual ~HotBackupTask() {};
+
+    virtual void operator()();
+
+protected:
+    bool PrepareDirectories();
+
+private:
+    HotBackupTask();
+    HotBackupTask(const HotBackupTask &);
+    HotBackupTask & operator=(const HotBackupTask &);
+
+};  // class HotBackupTask
+
+
+} // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_HOT_BACKUP_H_
