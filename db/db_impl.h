@@ -71,7 +71,14 @@ class DBImpl : public DB {
   void ResizeCaches() {double_cache.ResizeCaches();};
   size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
   void PurgeExpiredFileCache() {double_cache.PurgeExpiredFiles();};
-  void HotBackup();  // in util/hot_backup.cc
+
+  // in util/hot_backup.cc
+  void HotBackup();
+  bool PrepareDirectories();
+  bool PurgeWriteBuffer();
+  bool WriteBackupManifest();
+  bool CreateBackupLinks(Version * Version, Options & BackupOptions);
+  bool CopyLOGSegment(long FileEnd);
 
   void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
