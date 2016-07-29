@@ -374,7 +374,6 @@ protected:
   uint64_t last_sequence_;
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
-  uint64_t write_rate_usec_;   // most recent average rate per key
 
   // Opened lazily
   WritableFile* descriptor_file_;
