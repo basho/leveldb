@@ -8,7 +8,6 @@
 #ifndef STORAGE_LEVELDB_UTIL_POSIX_LOGGER_H_
 #define STORAGE_LEVELDB_UTIL_POSIX_LOGGER_H_
 
-#include <algorithm>
 #include <stdio.h>
 #include <sys/time.h>
 #include <time.h>
@@ -27,6 +26,7 @@ class PosixLogger : public Logger {
   virtual ~PosixLogger() {
     fclose(file_);
   }
+  virtual long LogSize() {return(ftell(file_));};
   virtual void Logv(const char* format, va_list ap) {
     const uint64_t thread_id = (*gettid_)();
 

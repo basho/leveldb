@@ -284,6 +284,9 @@ class Logger {
   Logger() { }
   virtual ~Logger();
 
+  // Riak specific function for hot backup
+  virtual long LogSize() {return(0);};
+
   // Write an entry to the log file with the specified format.
   virtual void Logv(const char* format, va_list ap) = 0;
 
