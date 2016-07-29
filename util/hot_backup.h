@@ -50,11 +50,10 @@ class HotBackupTask : public ThreadTask
 protected:
 
     DBImpl & m_DBImpl;
-    const Options & m_Options;     // to get around class protection
 
 public:
-    HotBackupTask(DBImpl * DB_ptr, const Options & Options)
-    : m_DBImpl(*DB_ptr), m_Options(Options)
+    HotBackupTask(DBImpl * DB_ptr)
+    : m_DBImpl(*DB_ptr)
     {};
 
     virtual ~HotBackupTask() {};
