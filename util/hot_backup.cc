@@ -262,7 +262,9 @@ HotBackupTask::operator()()
 
         // last step is to replicate as much of LOG file from time of
         //  backup (close, but not exact)
-        if (good)
+        //  Assumes that 0 for log_position implies user has a custom
+        //  Logger class that this routine will fail to copy.
+        if (good && 0!=log_position)
             good=m_DBImpl.CopyLOGSegment(log_position);
     }   // if
 
@@ -592,4 +594,80 @@ DBImpl::CreateBackupLinks(
 }   // DBImpl::CreateBackupLinks
 
 
+/**
+ * Copy portion of LOG file that most likely applies to this backup.
+ */
+bool
+DBImpl::CopyLOGSegment(long EndPos)
+{
+    assert(0<EndPos);
+
+    bool good(true);
+    long remaining;
+    Options local_options;
+    SequentialFile * src(NULL);
+    WritableFile * dst(NULL);
+    Status s;
+    std::string src_name, dst_name, buffer;
+    Slice data_read;
+
+    remaining=EndPos;
+
+    // open source and destination LOG files
+    local_options=options_;
+    SetBackupPaths(local_options, 0);
+
+    src_name=InfoLogFileName(options_.tiered_fast_prefix);
+    dst_name=InfoLogFileName(local_options.tiered_fast_prefix);
+
+    s=options_.env->NewSequentialFile(src_name, &src);
+    if (s.ok())
+    {
+        s=options_.env->NewWritableFile(dst_name, &dst, 4096);
+
+        if (!s.ok())
+            Log(GetLogger(), "HotBackup failed to create destination LOG file (%s, %s)",
+                s.ToString().c_str(), dst_name.c_str());
+    }   // if
+    else
+    {
+        Log(GetLogger(), "HotBackup failed to open source LOG file (%s, %s)",
+            s.ToString().c_str(), src_name.c_str());
+    }   // else
+
+    // copy data between files
+    buffer.reserve(4096);
+
+    while(0<remaining && s.ok())
+    {
+        long count;
+
+        count=(4096<remaining ? 4096 : remaining);
+        s=src->Read(count, &data_read, (char *)buffer.data());
+
+        if (s.ok())
+        {
+            s=dst->Append(data_read);
+
+            if (!s.ok())
+                Log(GetLogger(), "HotBackup LOG write failed at %ld (%s)",
+                    remaining, s.ToString().c_str());
+        }   // if
+        else
+        {
+                Log(GetLogger(), "HotBackup LOG read failed at %ld (%s)",
+                    remaining, s.ToString().c_str());
+        }   // else
+
+        remaining-=count;
+    }   // while
+
+    // close files and go home
+    good=s.ok();
+    delete src;
+    delete dst;
+
+    return(good);
+
+}   // DBImpl::CopyLOGSegment
 };  // namespace leveldb
