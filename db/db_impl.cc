@@ -7,6 +7,7 @@
 #include <time.h>
 #include <algorithm>
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <set>
 #include <string>
@@ -73,6 +74,9 @@ struct DBImpl::CompactionState {
     uint64_t number;
     uint64_t file_size;
     InternalKey smallest, largest;
+    uint64_t exp_write_low, exp_write_high, exp_explicit_high;
+
+    Output() : number(0), file_size(0), exp_write_low(ULONG_MAX), exp_write_high(0), exp_explicit_high(0) {}
   };
   std::vector<Output> outputs;
 
@@ -161,6 +165,10 @@ Options SanitizeOptions(const std::string& dbname,
       result.block_cache = block_cache;
   }
 
+  // remove anything expiry if this is an internal database
+  if (result.is_internal_db)
+      result.expiry_module.reset();
+
   return result;
 }
 
@@ -184,7 +192,6 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       logfile_number_(0),
       log_(NULL),
       tmp_batch_(new WriteBatch),
-      bg_compaction_scheduled_(false),
       manual_compaction_(NULL),
       level0_good(true),
       throttle_end(0),
@@ -634,7 +641,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number,
       mem = new MemTable(internal_comparator_);
       mem->Ref();
     }
-    status = WriteBatchInternal::InsertInto(&batch, mem);
+    status = WriteBatchInternal::InsertInto(&batch, mem, &options_);
     MaybeIgnoreError(&status);
     if (!status.ok()) {
       break;
@@ -769,8 +776,9 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     }
 
     if (s.ok())
-        edit->AddFile(level, meta.number, meta.file_size,
-                      meta.smallest, meta.largest);
+        edit->AddFile2(level, meta.number, meta.file_size,
+                       meta.smallest, meta.largest,
+                       meta.exp_write_low, meta.exp_write_high, meta.exp_explicit_high);
   }
 
   CompactionStats stats;
@@ -913,12 +921,16 @@ void DBImpl::MaybeScheduleCompaction() {
 void DBImpl::BackgroundCall2(
     Compaction * Compact) {
   MutexLock l(&mutex_);
-  int level;
+  int level, type;
   assert(IsCompactionScheduled());
 
+  type=kNormalCompaction;
   ++running_compactions_;
   if (NULL!=Compact)
+  {
       level=Compact->level();
+      type=Compact->GetCompactionType();
+  }   // if
   else if (NULL!=manual_compaction_)
       level=manual_compaction_->level;
   else
@@ -932,7 +944,23 @@ void DBImpl::BackgroundCall2(
   versions_->SetCompactionRunning(level);
 
   if (!shutting_down_.Acquire_Load()) {
-    Status s = BackgroundCompaction(Compact);
+    Status s;
+
+    switch(type)
+    {
+        case kNormalCompaction:
+            s = BackgroundCompaction(Compact);
+            break;
+
+        case kExpiryFileCompaction:
+            s = BackgroundExpiry(Compact);
+            break;
+
+        default:
+            assert(0);
+            break;
+    }   // switch
+
     if (!s.ok() && !shutting_down_.Acquire_Load()) {
       // Wait a little bit before retrying background compaction in
       // case this is an environmental problem and we do not want to
@@ -950,7 +978,7 @@ void DBImpl::BackgroundCall2(
   {
     delete Compact;
   }   // else
-  bg_compaction_scheduled_ = false;
+
   --running_compactions_;
   versions_->SetCompactionDone(level, env_->NowMicros());
 
@@ -1065,8 +1093,9 @@ Status DBImpl::BackgroundCompaction(
         gPerfCounters->Inc(ePerfBGMove);
         do_compact=false;
         c->edit()->DeleteFile(c->level(), f->number);
-        c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
-                           f->smallest, f->largest);
+        c->edit()->AddFile2(c->level() + 1, f->number, f->file_size,
+                            f->smallest, f->largest,
+                            f->exp_write_low, f->exp_write_high, f->exp_explicit_high);
         status = versions_->LogAndApply(c->edit(), &mutex_);
         DeleteObsoleteFiles();
 
@@ -1407,6 +1436,9 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->current_output()->file_size = current_bytes;
   compact->total_bytes += current_bytes;
   compact->num_entries += compact->builder->NumEntries();
+  compact->current_output()->exp_write_low = compact->builder->GetExpiryWriteLow();
+  compact->current_output()->exp_write_high = compact->builder->GetExpiryWriteHigh();
+  compact->current_output()->exp_explicit_high = compact->builder->GetExpiryExplicitHigh();
   delete compact->builder;
   compact->builder = NULL;
 
@@ -1458,9 +1490,10 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   const int level = compact->compaction->level();
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     const CompactionState::Output& out = compact->outputs[i];
-    compact->compaction->edit()->AddFile(
+    compact->compaction->edit()->AddFile2(
         level + 1,
-        out.number, out.file_size, out.smallest, out.largest);
+        out.number, out.file_size, out.smallest, out.largest,
+        out.exp_write_low, out.exp_write_high, out.exp_explicit_high);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
@@ -1493,7 +1526,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input->SeekToFirst();
   Status status;
 
-  KeyRetirement retire(user_comparator(), compact->smallest_snapshot, compact->compaction);
+  KeyRetirement retire(user_comparator(), compact->smallest_snapshot, &options_, compact->compaction);
 
   for (; input->Valid() && !shutting_down_.Acquire_Load(); )
   {
@@ -1650,14 +1683,16 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
 
 Status DBImpl::Get(const ReadOptions& options,
                    const Slice& key,
-                   std::string* value) {
+                   std::string* value,
+                   KeyMetaData * meta) {
   StringValue stringvalue(*value);
-  return DBImpl::Get(options, key, &stringvalue);
+  return DBImpl::Get(options, key, &stringvalue, meta);
 }
 
 Status DBImpl::Get(const ReadOptions& options,
                    const Slice& key,
-                   Value* value) {
+                   Value* value,
+                   KeyMetaData * meta) {
   Status s;
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
@@ -1681,11 +1716,11 @@ Status DBImpl::Get(const ReadOptions& options,
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
-    LookupKey lkey(key, snapshot);
-    if (mem->Get(lkey, value, &s)) {
+    LookupKey lkey(key, snapshot, meta);
+    if (mem->Get(lkey, value, &s, &options_)) {
       // Done
         gPerfCounters->Inc(ePerfGetMem);
-    } else if (imm != NULL && ((MemTable *)imm)->Get(lkey, value, &s)) {
+    } else if (imm != NULL && ((MemTable *)imm)->Get(lkey, value, &s, &options_)) {
       // Done
         gPerfCounters->Inc(ePerfGetImm);
     } else {
@@ -1731,8 +1766,8 @@ void DBImpl::ReleaseSnapshot(const Snapshot* s) {
 }
 
 // Convenience methods
-Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
-  return DB::Put(o, key, val);
+Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val, const KeyMetaData * meta) {
+  return DB::Put(o, key, val, meta);
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
@@ -1779,7 +1814,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         status = logfile_->Sync();
       }
       if (status.ok()) {
-        status = WriteBatchInternal::InsertInto(updates, mem_);
+        status = WriteBatchInternal::InsertInto(updates, mem_, &options_);
       }
       mutex_.Lock();
     }
@@ -2143,9 +2178,10 @@ void DBImpl::GetApproximateSizes(
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
-Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
+Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value,
+  const KeyMetaData * meta) {
   WriteBatch batch;
-  batch.Put(key, value);
+  batch.Put(key, value, meta);
   return Write(opt, &batch);
 }
 

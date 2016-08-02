@@ -66,7 +66,7 @@ typedef struct leveldb_snapshot_t      leveldb_snapshot_t;
 typedef struct leveldb_writablefile_t  leveldb_writablefile_t;
 typedef struct leveldb_writebatch_t    leveldb_writebatch_t;
 typedef struct leveldb_writeoptions_t  leveldb_writeoptions_t;
-
+typedef struct leveldb_keymetadata_t   leveldb_keymetadata_t;
 /* DB operations */
 
 extern leveldb_t* leveldb_open(
@@ -82,6 +82,14 @@ extern void leveldb_put(
     const char* key, size_t keylen,
     const char* val, size_t vallen,
     char** errptr);
+
+extern void leveldb_put2(
+    leveldb_t* db,
+    const leveldb_writeoptions_t* options,
+    const char* key, size_t keylen,
+    const char* val, size_t vallen,
+    char** errptr,
+    const leveldb_keymetadata_t * metadata);
 
 extern void leveldb_delete(
     leveldb_t* db,
@@ -103,6 +111,14 @@ extern char* leveldb_get(
     const char* key, size_t keylen,
     size_t* vallen,
     char** errptr);
+
+extern char* leveldb_get2(
+    leveldb_t* db,
+    const leveldb_readoptions_t* options,
+    const char* key, size_t keylen,
+    size_t* vallen,
+    char** errptr,
+    leveldb_keymetadata_t * metadata);
 
 extern leveldb_iterator_t* leveldb_create_iterator(
     leveldb_t* db,
@@ -156,6 +172,7 @@ extern void leveldb_iter_next(leveldb_iterator_t*);
 extern void leveldb_iter_prev(leveldb_iterator_t*);
 extern const char* leveldb_iter_key(const leveldb_iterator_t*, size_t* klen);
 extern const char* leveldb_iter_value(const leveldb_iterator_t*, size_t* vlen);
+extern const void leveldb_iter_keymetadata(const leveldb_iterator_t *, leveldb_keymetadata_t *);
 extern void leveldb_iter_get_error(const leveldb_iterator_t*, char** errptr);
 
 /* Write batch */
@@ -167,13 +184,19 @@ extern void leveldb_writebatch_put(
     leveldb_writebatch_t*,
     const char* key, size_t klen,
     const char* val, size_t vlen);
+extern void leveldb_writebatch_put2(
+    leveldb_writebatch_t*,
+    const char* key, size_t klen,
+    const char* val, size_t vlen,
+    const leveldb_keymetadata_t * meta);
 extern void leveldb_writebatch_delete(
     leveldb_writebatch_t*,
     const char* key, size_t klen);
 extern void leveldb_writebatch_iterate(
     leveldb_writebatch_t*,
     void* state,
-    void (*put)(void*, const char* k, size_t klen, const char* v, size_t vlen),
+    void (*put)(void*, const char* k, size_t klen, const char* v, size_t vlen,
+                const int & type, const uint64_t & expiry),
     void (*deleted)(void*, const char* k, size_t klen));
 
 /* Options */

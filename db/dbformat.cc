@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <stdio.h>
+//#include "leveldb/expiry.h"
 #include "db/dbformat.h"
 #include "db/version_set.h"
 #include "port/port.h"
@@ -147,7 +148,8 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
   return user_policy_->KeyMayMatch(ExtractUserKey(key), f);
 }
 
-LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
+  LookupKey::LookupKey(const Slice& user_key, SequenceNumber s, KeyMetaData * meta) {
+  meta_=meta;
   size_t usize = user_key.size();
   size_t needed = usize + 13;  // A conservative estimate
   char* dst;
@@ -170,11 +172,12 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
 KeyRetirement::KeyRetirement(
     const Comparator * Comparator,
     SequenceNumber SmallestSnapshot,
+    const Options * Opts,
     Compaction * const Compaction)
     : has_current_user_key(false), last_sequence_for_key(kMaxSequenceNumber),
       user_comparator(Comparator), smallest_snapshot(SmallestSnapshot),
-      compaction(Compaction),
-      valid(false)
+      options(Opts), compaction(Compaction),
+      valid(false), dropped(0), expired(0)
 {
     // NULL is ok for compaction
     valid=(NULL!=user_comparator);
@@ -183,12 +186,19 @@ KeyRetirement::KeyRetirement(
 }   // KeyRetirement::KeyRetirement
 
 
+KeyRetirement::~KeyRetirement()
+{
+    if (0!=expired)
+        gPerfCounters->Add(ePerfExpiredKeys, expired);
+}   // KeyRetirement::~KeyRetirement
+
+
 bool
 KeyRetirement::operator()(
     Slice & key)
 {
     ParsedInternalKey ikey;
-    bool drop = false;
+    bool drop = false, expire_flag;
 
     if (valid)
     {
@@ -217,20 +227,32 @@ KeyRetirement::operator()(
                 drop = true;    // (A)
             }   // if
 
-            else if (ikey.type == kTypeDeletion
-                     && ikey.sequence <= smallest_snapshot
-                     && NULL!=compaction  // mem to level0 ignores this test
-                     && compaction->IsBaseLevelForKey(ikey.user_key))
+            else
             {
-                // For this user key:
-                // (1) there is no data in higher levels
-                // (2) data in lower levels will have larger sequence numbers
-                // (3) data in layers that are being compacted here and have
-                //     smaller sequence numbers will be dropped in the next
-                //     few iterations of this loop (by rule (A) above).
-                // Therefore this deletion marker is obsolete and can be dropped.
-                drop = true;
-            }   // else if
+                expire_flag=false;
+                if (NULL!=options && NULL!=options->expiry_module.get())
+                    expire_flag=options->expiry_module->KeyRetirementCallback(ikey);
+
+                if ((ikey.type == kTypeDeletion || expire_flag)
+                    && ikey.sequence <= smallest_snapshot
+                    && NULL!=compaction  // mem to level0 ignores this test
+                    && compaction->IsBaseLevelForKey(ikey.user_key))
+                {
+                    // For this user key:
+                    // (1) there is no data in higher levels
+                    // (2) data in lower levels will have larger sequence numbers
+                    // (3) data in layers that are being compacted here and have
+                    //     smaller sequence numbers will be dropped in the next
+                    //     few iterations of this loop (by rule (A) above).
+                    // Therefore this deletion marker is obsolete and can be dropped.
+                    drop = true;
+
+                    if (expire_flag)
+                        ++expired;
+                    else
+                        ++dropped;
+                }   // if
+            }   // else
 
             last_sequence_for_key = ikey.sequence;
         }   // else

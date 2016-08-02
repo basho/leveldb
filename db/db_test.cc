@@ -1700,7 +1700,13 @@ TEST(DBTest, MultiThreaded) {
 }
 
 namespace {
-typedef std::map<std::string, std::string> KVMap;
+struct KVEntry
+{
+    std::string m_Value;
+    KeyMetaData m_Meta;
+};
+
+typedef std::map<std::string, KVEntry> KVMap;
 }
 
 class ModelDB: public DB {
@@ -1712,19 +1718,21 @@ class ModelDB: public DB {
 
   explicit ModelDB(const Options& options): options_(options) { }
   ~ModelDB() { }
-  virtual Status Put(const WriteOptions& o, const Slice& k, const Slice& v) {
-    return DB::Put(o, k, v);
+  virtual Status Put(const WriteOptions& o, const Slice& k, const Slice& v, const KeyMetaData * meta=NULL) {
+    return DB::Put(o, k, v, meta);
   }
   virtual Status Delete(const WriteOptions& o, const Slice& key) {
     return DB::Delete(o, key);
   }
   virtual Status Get(const ReadOptions& options,
-                     const Slice& key, std::string* value) {
+                     const Slice& key, std::string* value,
+                     KeyMetaData * meta = NULL) {
     assert(false);      // Not implemented
     return Status::NotFound(key);
   }
   virtual Status Get(const ReadOptions& options,
-                     const Slice& key, Value* value) {
+                     const Slice& key, Value* value,
+                     KeyMetaData * meta = NULL) {
     assert(false);      // Not implemented
     return Status::NotFound(key);
   }
@@ -1752,8 +1760,12 @@ class ModelDB: public DB {
     class Handler : public WriteBatch::Handler {
      public:
       KVMap* map_;
-      virtual void Put(const Slice& key, const Slice& value) {
-        (*map_)[key.ToString()] = value.ToString();
+      virtual void Put(const Slice& key, const Slice& value, const ValueType & type, const ExpiryTime & expiry) {
+        KVEntry ent;
+        ent.m_Value=value.ToString();
+        ent.m_Meta.m_Type=type;
+        ent.m_Meta.m_Expiry=expiry;
+        (*map_)[key.ToString()] = ent;
       }
       virtual void Delete(const Slice& key) {
         map_->erase(key.ToString());
@@ -1799,7 +1811,7 @@ class ModelDB: public DB {
     virtual void Next() { ++iter_; }
     virtual void Prev() { --iter_; }
     virtual Slice key() const { return iter_->first; }
-    virtual Slice value() const { return iter_->second; }
+    virtual Slice value() const { return iter_->second.m_Value; }
     virtual Status status() const { return Status::OK(); }
    private:
     const KVMap* const map_;
@@ -2008,7 +2020,7 @@ void BM_LogAndApply(int iters, int num_base_files) {
   for (int i = 0; i < num_base_files; i++) {
     InternalKey start(MakeKey(2*fnum), 0, 1, kTypeValue);
     InternalKey limit(MakeKey(2*fnum+1), 0, 1, kTypeDeletion);
-    vbase.AddFile(2, fnum++, 1 /* file size */, start, limit);
+    vbase.AddFile2(2, fnum++, 1 /* file size */, start, limit, 0,0,0);
   }
   ASSERT_OK(vset.LogAndApply(&vbase, &mu));
 
@@ -2019,7 +2031,7 @@ void BM_LogAndApply(int iters, int num_base_files) {
     vedit.DeleteFile(2, fnum);
     InternalKey start(MakeKey(2*fnum), 0, 1, kTypeValue);
     InternalKey limit(MakeKey(2*fnum+1), 0, 1, kTypeDeletion);
-    vedit.AddFile(2, fnum++, 1 /* file size */, start, limit);
+    vedit.AddFile2(2, fnum++, 1 /* file size */, start, limit, 0,0,0);
     vset.LogAndApply(&vedit, &mu);
   }
   uint64_t stop_micros = env->NowMicros();

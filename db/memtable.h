@@ -55,13 +55,17 @@ class MemTable {
   // Typically value will be empty if type==kTypeDeletion.
   void Add(SequenceNumber seq, ValueType type,
            const Slice& key,
-           const Slice& value);
+           const Slice& value,
+           const ExpiryTime& expiry=0);
 
   // If memtable contains a value for key, store it in *value and return true.
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
   // Else, return false.
-  bool Get(const LookupKey& key, Value* value, Status* s);
+  bool Get(const LookupKey& key, Value* value, Status* s, const Options * options);
+
+  // parse keymetadata from skiplist key string
+  static void DecodeKeyMetaData(const char * key, KeyMetaData & meta);
 
  private:
   ~MemTable();  // Private since only Unref() should be used to delete it
@@ -72,7 +76,7 @@ class MemTable {
     int operator()(const char* a, const char* b) const;
   };
   friend class MemTableIterator;
-  friend class MemTableBackwardIterator;
+  friend class MemTableBackwardIterator; // does not exist
 
   typedef SkipList<const char*, KeyComparator> Table;
 

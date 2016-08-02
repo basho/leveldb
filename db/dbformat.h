@@ -9,6 +9,7 @@
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
 #include "leveldb/filter_policy.h"
+#include "leveldb/options.h"
 #include "leveldb/slice.h"
 #include "leveldb/table_builder.h"
 #include "util/coding.h"
@@ -57,15 +58,6 @@ static const unsigned kMaxMemCompactLevel = kNumOverlapLevels+1;
 
 class InternalKey;
 
-// Value types encoded as the last component of internal keys.
-// DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
-// data structures.
-enum ValueType {
-  kTypeDeletion = 0x0,
-  kTypeValue = 0x1,
-  kTypeValueWriteTime = 0x2,
-  kTypeValueExplicitExpiry = 0x3
-};
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
 // sequence number (since we sort sequence numbers in decreasing order
@@ -166,6 +158,19 @@ inline bool IsExpiryKey(ValueType val_type) {
   return(kTypeValueWriteTime==val_type || kTypeValueExplicitExpiry==val_type);
 }
 
+// Riak: is this an expiry key and therefore contain extra ExpiryTime field
+inline bool IsExpiryKey(const Slice & internal_key) {
+    return(internal_key.size()>=KeySuffixSize(kTypeValueWriteTime)
+           && IsExpiryKey(ExtractValueType(internal_key)));
+}
+
+// Riak: extracts expiry value
+inline ExpiryTime ExtractExpiry(const Slice& internal_key) {
+  assert(internal_key.size() >= KeySuffixSize(kTypeValueWriteTime));
+  assert(IsExpiryKey(internal_key));
+  return(DecodeFixed64(internal_key.data() + internal_key.size() - KeySuffixSize(kTypeValueWriteTime)));
+}
+
 // A comparator for internal keys that uses a specified comparator for
 // the user key portion and breaks ties by decreasing sequence number.
 class InternalKeyComparator : public Comparator {
@@ -221,6 +226,7 @@ class InternalKey {
   }
 
   Slice user_key() const { return ExtractUserKey(rep_); }
+  Slice internal_key() const { return Slice(rep_); }
 
   void SetFrom(const ParsedInternalKey& p) {
     rep_.clear();
@@ -258,7 +264,7 @@ class LookupKey {
  public:
   // Initialize *this for looking up user_key at a snapshot with
   // the specified sequence number.
-  LookupKey(const Slice& user_key, SequenceNumber sequence);
+  LookupKey(const Slice& user_key, SequenceNumber sequence, KeyMetaData * meta=NULL);
 
   ~LookupKey();
 
@@ -271,6 +277,30 @@ class LookupKey {
   // Return the user key
   Slice user_key() const
   { return Slice(kstart_, end_ - kstart_ - KeySuffixSize(internal_key())); }
+
+  // did requestor have metadata object?
+  bool WantsKeyMetaData() const {return(NULL!=meta_);};
+
+  void SetKeyMetaData(ValueType type, SequenceNumber seq, ExpiryTime expiry) const
+  {if (NULL!=meta_)
+    {
+      meta_->m_Type=type;
+      meta_->m_Sequence=seq;
+      meta_->m_Expiry=expiry;
+    } // if
+  };
+
+  void SetKeyMetaData(const ParsedInternalKey & pi_key) const
+  {if (NULL!=meta_)
+    {
+      meta_->m_Type=pi_key.type;
+      meta_->m_Sequence=pi_key.sequence;
+      meta_->m_Expiry=pi_key.expiry;
+    } // if
+  };
+
+  void SetKeyMetaData(const KeyMetaData & meta) const
+  {if (NULL!=meta_) *meta_=meta;};
 
  private:
   // We construct a char array of the form:
@@ -285,6 +315,9 @@ class LookupKey {
   const char* kstart_;
   const char* end_;
   char space_[200];      // Avoid allocation for short keys
+
+  // allow code that finds the key to place metadata here, even if 'const'
+  mutable KeyMetaData * meta_;
 
   // No copying allowed
   LookupKey(const LookupKey&);
@@ -309,17 +342,23 @@ protected:
     // database values needed for processing
     const Comparator * user_comparator;
     SequenceNumber smallest_snapshot;
+    const Options * options;
     Compaction * const compaction;
 
     bool valid;
+    size_t dropped;   // tombstone or old version dropped
+    size_t expired;   // expired dropped
 
 public:
     KeyRetirement(const Comparator * UserComparator, SequenceNumber SmallestSnapshot,
-                  Compaction * const Compaction=NULL);
+                  const Options * Opts, Compaction * const Compaction=NULL);
 
-    virtual ~KeyRetirement() {};
+    virtual ~KeyRetirement();
 
     bool operator()(Slice & key);
+
+    size_t GetDroppedCount() const {return(dropped);};
+    size_t GetExpiredCount() const {return(expired);};
 
 private:
     KeyRetirement();

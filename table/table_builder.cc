@@ -8,6 +8,7 @@
 #include "db/dbformat.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
 #include "leveldb/perf_count.h"
@@ -137,6 +138,17 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   // unit tests use non-standard keys ... must ignore the short ones
   if (8 < key.size() && kTypeDeletion==ExtractValueType(key))
       r->sst_counters.Inc(eSstCountDeleteKey);
+
+  // again ignore short keys, save high sequence number for abbreviated repair
+  if (8 <= key.size()
+      && r->sst_counters.Value(eSstCountSequence)<ExtractSequenceNumber(key))
+      r->sst_counters.Set(eSstCountSequence,ExtractSequenceNumber(key));
+
+  // statistics if an expiry key
+  if (NULL!=r->options.expiry_module.get())
+  {
+      r->options.expiry_module->TableBuilderCallback(key, r->sst_counters);
+  } // if
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
   if (estimated_block_size >= r->options.block_size) {
@@ -359,6 +371,18 @@ uint64_t TableBuilder::FileSize() const {
 
 uint64_t TableBuilder::NumDeletes() const {
   return rep_->sst_counters.Value(eSstCountDeleteKey);
+}
+
+uint64_t TableBuilder::GetExpiryWriteLow() const {
+  return rep_->sst_counters.Value(eSstCountExpiry1);
+}
+
+uint64_t TableBuilder::GetExpiryWriteHigh() const {
+  return rep_->sst_counters.Value(eSstCountExpiry2);
+}
+
+uint64_t TableBuilder::GetExpiryExplicitHigh() const {
+  return rep_->sst_counters.Value(eSstCountExpiry3);
 }
 
 }  // namespace leveldb

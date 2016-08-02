@@ -12,6 +12,7 @@
 #include "db/memtable.h"
 #include "db/table_cache.h"
 #include "leveldb/env.h"
+#include "leveldb/expiry.h"
 #include "leveldb/table_builder.h"
 #include "table/block.h"
 #include "table/merger.h"
@@ -296,12 +297,15 @@ enum SaverState {
 struct Saver {
   SaverState state;
   const Comparator* ucmp;
+  const Options* options;
   Slice user_key;
   Value* value;
+  const LookupKey * lookup;
 };
 }
 static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   bool match=false;
+  bool expired=false;
   Saver* s = reinterpret_cast<Saver*>(arg);
   ParsedInternalKey parsed_key;
   if (!ParseInternalKey(ikey, &parsed_key)) {
@@ -309,10 +313,14 @@ static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   } else {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
       match=true;
-      s->state = (parsed_key.type != kTypeDeletion) ? kFound : kDeleted;
+      if (NULL!=s->options && NULL!=s->options->expiry_module.get())
+        expired=s->options->expiry_module->KeyRetirementCallback(parsed_key);
+      s->state = (parsed_key.type != kTypeDeletion && !expired) ? kFound : kDeleted;
       if (s->state == kFound) {
         s->value->assign(v.data(), v.size());
       }
+      if (NULL!=s->lookup)
+        s->lookup->SetKeyMetaData(parsed_key);
     }
   }
   return(match);
@@ -399,8 +407,10 @@ Status Version::Get(const ReadOptions& options,
       Saver saver;
       saver.state = kNotFound;
       saver.ucmp = ucmp;
+      saver.options = vset_->options_;
       saver.user_key = user_key;
       saver.value = value;
+      saver.lookup = &k;
       s = vset_->table_cache_->Get(options, f->number, f->file_size, level,
                                    ikey, &saver, SaveValue);
       if (!s.ok()) {
@@ -454,7 +464,7 @@ void Version::Unref() {
 
 bool Version::OverlapInLevel(int level,
                              const Slice* smallest_user_key,
-                             const Slice* largest_user_key) {
+                             const Slice* largest_user_key) const {
   return SomeFileOverlapsRange(vset_->icmp_,
                                !gLevelTraits[level].m_OverlappedFiles,
                                files_[level],
@@ -895,7 +905,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
             // Write new record to MANIFEST log
             if (s.ok()) {
                 std::string record;
-                edit->EncodeTo(&record);
+                edit->EncodeTo(&record, true);
                 s = descriptor_log_->AddRecord(record);
                 if (s.ok()) {
                     s = descriptor_file_->Sync();
@@ -1054,15 +1064,19 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
 bool
 VersionSet::NeighborCompactionsQuiet(int level)
 {
-    const uint64_t parent_level_bytes = TotalFileSize(current_->files_[level+1]);
+    uint64_t parent_level_bytes(0);
+
+    if (level < config::kNumLevels-1)
+        parent_level_bytes = TotalFileSize(current_->files_[level+1]);
 
     // not an overlapped level and must not have compactions
     //   scheduled on either level below or level above
     return((0==level || !m_CompactionStatus[level-1].m_Submitted)
            && !gLevelTraits[level].m_OverlappedFiles
-           && !m_CompactionStatus[level+1].m_Submitted
-           && parent_level_bytes<=((gLevelTraits[level+1].m_MaxBytesForLevel
-                                    +gLevelTraits[level+1].m_DesiredBytesForLevel)/2));
+           && (level==config::kNumLevels-1
+               || (!m_CompactionStatus[level+1].m_Submitted
+                   && parent_level_bytes<=((gLevelTraits[level+1].m_MaxBytesForLevel
+                                            +gLevelTraits[level+1].m_DesiredBytesForLevel)/2))));
 }   // VersionSet::NeighborCompactionsQuiet
 
 
@@ -1073,18 +1087,21 @@ VersionSet::Finalize(Version* v)
     int best_level = -1;
     double best_score = -1;
     bool compaction_found;
-    bool is_grooming;
+    bool is_grooming, no_move, expire_file;
     uint64_t micros_now;
 
     compaction_found=false;
     is_grooming=false;
+    no_move=false;
+    expire_file=false;
     micros_now=env_->NowMicros();
 
-    for (int level = v->compaction_level_+1; level < config::kNumLevels-1 && !compaction_found; ++level)
+    // Note: level kNumLevels-1 only examined for whole file expiry
+    for (int level = v->compaction_level_+1; level < config::kNumLevels && !compaction_found; ++level)
     {
         bool compact_ok;
-        double score;
-        const uint64_t parent_level_bytes = TotalFileSize(v->files_[level+1]);
+        double score(0);
+        uint64_t parent_level_bytes(0);
 
         is_grooming=false;
         // is this level eligible for compaction consideration?
@@ -1093,6 +1110,9 @@ VersionSet::Finalize(Version* v)
         // not already scheduled for compaction
         if (compact_ok)
         {
+            if (level < (config::kNumLevels-1))
+                parent_level_bytes = TotalFileSize(v->files_[level+1]);
+
             // is overlapped and so is next level
             if (gLevelTraits[level].m_OverlappedFiles && gLevelTraits[level+1].m_OverlappedFiles)
             {
@@ -1181,7 +1201,10 @@ VersionSet::Finalize(Version* v)
                     score=1;
                     is_grooming=true;
                 }   // if
-            } else {
+            }   // if
+
+            // highest level, kNumLevels-1, only considered for expiry not compaction
+            else if (level < config::kNumLevels-1) {
                 // Compute the ratio of current size to size limit.
                 const uint64_t level_bytes = TotalFileSize(v->files_[level]);
                 score = static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
@@ -1212,24 +1235,49 @@ VersionSet::Finalize(Version* v)
                             v->file_to_compact_=*it;
                             v->file_to_compact_level_=level;
                             is_grooming=true;
+                            no_move=true;
                         }
                     }   // for
                 }   // if
             }   // else
 
-
+            // this code block is old, should be rewritten
             if (1<=score)
             {
                 best_level = level;
                 best_score = score;
                 compaction_found=true;
             }   // if
+
+            // finally test for expiry if no compaction candidates
+            if (!compaction_found && NULL!=options_->expiry_module.get())
+            {
+                compaction_found=options_->expiry_module->CompactionFinalizeCallback(false,
+                                                                                     *v,
+                                                                                     level,
+                                                                                     NULL);
+
+                if (compaction_found)
+                {
+                    best_level=level;
+                    best_score=0;
+                    is_grooming=false;
+                    no_move=true;
+                    expire_file=true;
+                    v->file_to_compact_level_=level;
+                }   // if
+            }   // if
         }   // if
     }   // for
 
+    // set (almost) all at once to ensure
+    //  no hold over from prior Finalize() call on this version.
+    //  (could rewrite cleaner by doing reset of these at top of function)
     v->compaction_level_ = best_level;
     v->compaction_score_ = best_score;
     v->compaction_grooming_ = is_grooming;
+    v->compaction_no_move_ = no_move;
+    v->compaction_expirefile_ = expire_file;
 
     return(compaction_found);
 
@@ -1357,12 +1405,13 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
-      edit.AddFile(level, f->number, f->file_size, f->smallest, f->largest);
+      edit.AddFile2(level, f->number, f->file_size, f->smallest, f->largest,
+                    f->exp_write_low, f->exp_write_high, f->exp_explicit_high);
     }
   }
 
   std::string record;
-  edit.EncodeTo(&record);
+  edit.EncodeTo(&record, true);
   return log->AddRecord(record);
 }
 
@@ -1372,7 +1421,7 @@ size_t VersionSet::NumLevelFiles(int level) const {
   return current_->files_[level].size();
 }
 
-bool VersionSet::IsLevelOverlapped(int level) const {
+bool VersionSet::IsLevelOverlapped(int level) {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return(gLevelTraits[level].m_OverlappedFiles);
@@ -1618,48 +1667,63 @@ VersionSet::PickCompaction(
           level = current_->file_to_compact_level_;
           c = new Compaction(level);
           c->inputs_[0].push_back(current_->file_to_compact_);
+      } else if (current_->compaction_expirefile_) {
+          level = current_->file_to_compact_level_;
+          c = new Compaction(level);
+          c->compaction_type_=kExpiryFileCompaction;
       } else {
           return;
       }
 
       c->input_version_ = current_;
       c->input_version_->Ref();
-
-      // m_OverlappedFiles==true levels have files that
-      //   may overlap each other, so pick up all overlapping ones
-      if (gLevelTraits[level].m_OverlappedFiles) {
-          InternalKey smallest, largest;
-          GetRange(c->inputs_[0], &smallest, &largest);
-          // Note that the next call will discard the file we placed in
-          // c->inputs_[0] earlier and replace it with an overlapping set
-          // which will include the picked file.
-          current_->GetOverlappingInputs(level, &smallest, &largest, &c->inputs_[0]);
-          assert(!c->inputs_[0].empty());
-
-          // this can get into tens of thousands after a repair
-          //  keep it sane
-          size_t max_open_files=100;  // previously an options_ member variable
-          if (max_open_files < c->inputs_[0].size())
-          {
-              std::nth_element(c->inputs_[0].begin(),
-                               c->inputs_[0].begin()+max_open_files-1,
-                               c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
-              c->inputs_[0].erase(c->inputs_[0].begin()+max_open_files,
-                                  c->inputs_[0].end());
-          }   // if
-
-      }
-
-      SetupOtherInputs(c);
+      c->no_move_ = current_->compaction_no_move_;
 
       // set submitted as race defense
       m_CompactionStatus[level].m_Submitted=true;
-      ThreadTask * task=new CompactionTask(db_impl, c);
 
-      if (0==level)
-          submit_flag=gLevel0Threads->Submit(task, !current_->compaction_grooming_);
+      if (!current_->compaction_expirefile_)
+      {
+          // m_OverlappedFiles==true levels have files that
+          //   may overlap each other, so pick up all overlapping ones
+          if (gLevelTraits[level].m_OverlappedFiles) {
+              InternalKey smallest, largest;
+              GetRange(c->inputs_[0], &smallest, &largest);
+              // Note that the next call will discard the file we placed in
+              // c->inputs_[0] earlier and replace it with an overlapping set
+              // which will include the picked file.
+              current_->GetOverlappingInputs(level, &smallest, &largest, &c->inputs_[0]);
+              assert(!c->inputs_[0].empty());
+
+              // this can get into tens of thousands after a repair
+              //  keep it sane
+              size_t max_open_files=100;  // previously an options_ member variable
+              if (max_open_files < c->inputs_[0].size())
+              {
+                  std::nth_element(c->inputs_[0].begin(),
+                                   c->inputs_[0].begin()+max_open_files-1,
+                                   c->inputs_[0].end(),FileMetaDataPtrCompare(options_->comparator));
+                  c->inputs_[0].erase(c->inputs_[0].begin()+max_open_files,
+                                      c->inputs_[0].end());
+              }   // if
+          }   // if
+
+          SetupOtherInputs(c);
+
+          ThreadTask * task=new CompactionTask(db_impl, c);
+
+          if (0==level)
+              submit_flag=gLevel0Threads->Submit(task, !current_->compaction_grooming_);
+          else
+              submit_flag=gCompactionThreads->Submit(task, !current_->compaction_grooming_);
+      }   // if
+
+      // expiry compaction
       else
-          submit_flag=gCompactionThreads->Submit(task, !current_->compaction_grooming_);
+      {
+          ThreadTask * task=new CompactionTask(db_impl, c);
+          submit_flag=gCompactionThreads->Submit(task, true);
+      }   // else
 
       // set/reset submitted based upon truth of queuing
       //  (ref counting will auto delete task rejected)
@@ -1799,13 +1863,15 @@ Compaction::Compaction(int level)
     : level_(level),
       max_output_file_size_(gLevelTraits[level].m_MaxFileSizeForLevel),
       input_version_(NULL),
+      compaction_type_(kNormalCompaction),
       grandparent_index_(0),
       seen_key_(false),
       overlapped_bytes_(0),
       tot_user_data_(0), tot_index_keys_(0),
       avg_value_size_(0), avg_key_size_(0), avg_block_size_(0),
       compressible_(true),
-      stats_done_(false)
+      stats_done_(false),
+      no_move_(false)
   {
   for (int i = 0; i < config::kNumLevels; i++) {
     level_ptrs_[i] = 0;
@@ -1824,6 +1890,7 @@ bool Compaction::IsTrivialMove() const {
   // a very expensive merge later on.
 #if 1
   return (!gLevelTraits[level_].m_OverlappedFiles &&
+          IsMoveOk() &&
           num_input_files(0) == 1 &&
           num_input_files(1) == 0 &&
           (uint64_t)TotalFileSize(grandparents_) <= gLevelTraits[level_].m_MaxGrandParentOverlapBytes);

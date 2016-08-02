@@ -298,7 +298,7 @@ class Repairer {
         continue;
       }
       WriteBatchInternal::SetContents(&batch, record);
-      status = WriteBatchInternal::InsertInto(&batch, mem);
+      status = WriteBatchInternal::InsertInto(&batch, mem, &options_);
       if (status.ok()) {
         counter += WriteBatchInternal::Count(&batch);
       } else {
@@ -360,12 +360,14 @@ class Repairer {
   }
 
   Status ScanTable(TableInfo* t) {
+    Table * table_ptr;
+    SstCounters counters;
     std::string fname = TableFileName(options_, t->meta.number, t->meta.level);
     int counter = 0;
     Status status = env_->GetFileSize(fname, &t->meta.file_size);
     if (status.ok()) {
       Iterator* iter = table_cache_->NewIterator(
-          ReadOptions(), t->meta.number, t->meta.file_size, t->meta.level);
+          ReadOptions(), t->meta.number, t->meta.file_size, t->meta.level, &table_ptr);
       bool empty = true;
       ParsedInternalKey parsed;
       t->max_sequence = 0;
@@ -390,6 +392,12 @@ class Repairer {
       }
       if (!iter->status().ok()) {
         status = iter->status();
+      }
+      else {
+        counters=table_ptr->GetSstCounters();
+        t->meta.exp_write_low=counters.Value(eSstCountExpiry1);
+        t->meta.exp_write_high=counters.Value(eSstCountExpiry2);
+        t->meta.exp_explicit_high=counters.Value(eSstCountExpiry3);
       }
       delete iter;
     }
@@ -436,8 +444,9 @@ class Repairer {
       table_ptr=&tables_[level];
 
       for ( i = table_ptr->begin(); table_ptr->end()!= i; i++) {
-          edit_.AddFile(level, i->meta.number, i->meta.file_size,
-                    i->meta.smallest, i->meta.largest);
+          edit_.AddFile2(level, i->meta.number, i->meta.file_size,
+                         i->meta.smallest, i->meta.largest,
+                         i->meta.exp_write_low, i->meta.exp_write_high, i->meta.exp_explicit_high);
 
       } // for
     } // for
