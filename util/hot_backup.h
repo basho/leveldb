@@ -41,6 +41,25 @@ static const char * kTriggerFileName="/etc/riak/hot_backup";
 //   (initiates backup if trigger seen)
 void CheckHotBackupTrigger();
 
+/**
+ * Next 4 functions exposed here to allow easy unit test
+ */
+
+// Called by each database that is initiating a hot backup.  Blocks
+//  future hot backups until finished.
+void HotBackupScheduled();
+
+// Call by each database upon hot backup completion.
+void HotBackupFinished();
+
+// Test for external trigger to start backup
+bool IsHotBackupTriggerSet();
+
+// Clear external trigger once every backup completes
+//  (this is flag to external process that data is ready)
+void ResetHotBackupTrigger();
+
+
 
 /**
  * Background task to perform backup steps on compaction thread

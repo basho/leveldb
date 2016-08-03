@@ -34,20 +34,6 @@
 namespace leveldb {
 
 
-// Called by each database that is initiating a hot backup.  Blocks
-//  future hot backups until finished.
-void HotBackupScheduled();
-
-// Call by each database upon hot backup completion.
-void HotBackupFinished();
-
-// Test for external trigger to start backup
-static bool IsHotBackupTriggerSet();
-
-// Clear external trigger once every backup completes
-//  (this is flag to external process that data is ready)
-static void ResetHotBackupTrigger();
-
 // tracks how many databases are still processing a hot backup request
 static volatile uint64_t lHotBackupJobsPending(0);
 
@@ -92,7 +78,7 @@ CheckHotBackupTrigger()
 /**
  * Look for external trigger
  */
-static bool
+bool
 IsHotBackupTriggerSet()
 {
     bool ret_flag;
@@ -113,7 +99,7 @@ IsHotBackupTriggerSet()
  * Let external trigger know that hot backup is complete.  Put
  *  message to syslog if unable to delete trigger file
  */
-static void
+void
 ResetHotBackupTrigger()
 {
     bool ret_flag;
