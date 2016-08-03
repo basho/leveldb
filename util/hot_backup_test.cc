@@ -40,7 +40,22 @@
  */
 int main(int argc, char** argv)
 {
-  return leveldb::test::RunAllTests();
+    char * dup_path, *path;
+    int ret_val(0);
+
+    // does parent path exist?
+    //  bypass test if it does not ... Travis CI and
+    //  other users might not be able to access /etc/riak
+    dup_path=strdup(leveldb::config::kTriggerFileName);
+    path=dirname(dup_path);
+
+    if (0==access(path, R_OK | W_OK))
+        ret_val=leveldb::test::RunAllTests();
+
+    free(dup_path);
+    dup_path=NULL;
+
+    return(ret_val);
 }
 
 
@@ -84,15 +99,12 @@ TEST(HotBackupTester, FileTriggerTest)
     unlink(config::kTriggerFileName);
 
     // does parent path exist?
+    //  bypass test if it does not ... Travis CI and
+    //  other users might not be able to access /etc/riak
     dup_path=strdup(config::kTriggerFileName);
     path=dirname(dup_path);
-    if (0!=access(path, F_OK))
-    {
-        // assumes only one path level needed
-        //  (and that we are allowed to create it, unlikely in /etc)
-        ret_val=mkdir(path, 0666);
-        ASSERT_EQ(0, ret_val);
-    }   // if
+    ret_val=access(path, R_OK | W_OK);
+    ASSERT_TRUE(-1!=ret_val);
     free(dup_path);
     dup_path=NULL;
 
@@ -128,8 +140,9 @@ TEST(HotBackupTester, FileTriggerTest)
     perf_after=gPerfCounters->Value(ePerfSyslogWrite) - perf_before;
     ASSERT_TRUE( 1==perf_after );
 
-    // clean up
+    // clean up second count.
     HotBackupFinished();
+
 
 }   // FileTriggerTest
 
