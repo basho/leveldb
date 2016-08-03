@@ -142,6 +142,42 @@ TEST(FileNameTest, Construction) {
   ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
   ASSERT_EQ(999, number);
   ASSERT_EQ(kTempFile, type);
+
+  fname = CowFileName("/what/goes/moo");
+  ASSERT_EQ("/what/goes/moo/COW", fname);
+
+  fname = BackupPath("/var/db/riak/data/leveldb/0",0);
+  ASSERT_EQ("/var/db/riak/data/leveldb/0/backup", fname);
+
+  fname = BackupPath("/var/db/riak/data/leveldb/0",1);
+  ASSERT_EQ("/var/db/riak/data/leveldb/0/backup.1", fname);
+
+  fname = BackupPath("/var/db/riak/data/leveldb/0",5);
+  ASSERT_EQ("/var/db/riak/data/leveldb/0/backup.5", fname);
+
+  options.tiered_slow_level=4;
+  options.tiered_fast_prefix="fast";
+  options.tiered_slow_prefix="slow";
+  fname = SetBackupPaths(options,0);
+  ASSERT_EQ("fast/backup", options.tiered_fast_prefix);
+  ASSERT_EQ("slow/backup", options.tiered_slow_prefix);
+
+  options.tiered_slow_level=4;
+  options.tiered_fast_prefix="fast";
+  options.tiered_slow_prefix="slow";
+  fname = SetBackupPaths(options,3);
+  ASSERT_EQ("fast/backup.3", options.tiered_fast_prefix);
+  ASSERT_EQ("slow/backup.3", options.tiered_slow_prefix);
+
+
+  options.tiered_slow_level=4;
+  options.tiered_fast_prefix="//mnt/fast";
+  options.tiered_slow_prefix="//mnt/slow";
+  fname=MakeTieredDbname("riak/data/leveldb", options);
+  ASSERT_EQ("//mnt/fast/riak/data/leveldb", fname);
+  ASSERT_EQ("//mnt/fast/riak/data/leveldb", options.tiered_fast_prefix);
+  ASSERT_EQ("//mnt/slow/riak/data/leveldb", options.tiered_slow_prefix);
+
 }
 
 }  // namespace leveldb
