@@ -40,43 +40,39 @@
  */
 int main(int argc, char** argv)
 {
-    char * dup_path, *path;
-    int ret_val(0);
+    int ret_val;
 
-    // does parent path exist?
-    //  bypass test if it does not ... Travis CI and
-    //  other users might not be able to access /etc/riak
-    dup_path=strdup(leveldb::config::kTriggerFileName);
-    path=dirname(dup_path);
-
-    if (0==access(path, R_OK | W_OK))
-        ret_val=leveldb::test::RunAllTests();
-
-    free(dup_path);
-    dup_path=NULL;
+    ret_val=leveldb::test::RunAllTests();
 
     return(ret_val);
-}
+}   // main
 
 
 namespace leveldb {
-
 
 
 /**
  * Wrapper class for tests.  Holds working variables
  * and helper functions.
  */
-class HotBackupTester
+class HotBackupTester : public HotBackup
 {
 public:
+    std::string m_DBName;
+    std::string m_Trigger;
+
     HotBackupTester()
     {
+        m_DBName = test::TmpDir() + "/hot_backup";
+        m_Trigger = test::TmpDir() + "/trigger";
     };
 
     ~HotBackupTester()
     {
     };
+
+    virtual const char * GetTriggerPath() {return(m_Trigger.c_str());};
+
 };  // class HotBackupTester
 
 
@@ -96,43 +92,41 @@ TEST(HotBackupTester, FileTriggerTest)
     // cleanup anything existing, likely fails
     ///  hmm, should there be a way to move this trigger
     ///  to a "safe" area like /tmp?
-    unlink(config::kTriggerFileName);
+    unlink(GetTriggerPath());
 
     // does parent path exist?
     //  bypass test if it does not ... Travis CI and
     //  other users might not be able to access /etc/riak
-    dup_path=strdup(config::kTriggerFileName);
+    dup_path=strdup(GetTriggerPath());
     path=dirname(dup_path);
     ret_val=access(path, R_OK | W_OK);
     ASSERT_TRUE(-1!=ret_val);
-    free(dup_path);
-    dup_path=NULL;
 
     // is a trigger seen (hope not)
-    ret_flag=IsHotBackupTriggerSet();
+    ret_flag=HotBackup::IsTriggerSet();
     ASSERT_TRUE(!ret_flag);
 
     // make a trigger
-    ret_val=open(config::kTriggerFileName, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    ret_val=open(GetTriggerPath(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     ASSERT_TRUE(-1!=ret_val);
     close(ret_val);
 
     // test the trigger
-    ret_flag=IsHotBackupTriggerSet();
+    ret_flag=HotBackup::IsTriggerSet();
     ASSERT_TRUE(ret_flag);
 
     // pretend to be back process
     /// schedule twice
-    HotBackupScheduled();
-    HotBackupScheduled();
+    HotBackup::HotBackupScheduled();
+    HotBackup::HotBackupScheduled();
 
     // trigger still there?
-    ret_flag=IsHotBackupTriggerSet();
+    ret_flag=HotBackup::IsTriggerSet();
     ASSERT_TRUE(ret_flag);
 
     // release one, trigger goes away
-    HotBackupFinished();
-    ret_flag=IsHotBackupTriggerSet();
+    HotBackup::HotBackupFinished();
+    ret_flag=HotBackup::IsTriggerSet();
     ASSERT_TRUE(!ret_flag);
 
     // did our simulation create a syslog entry?
@@ -141,8 +135,11 @@ TEST(HotBackupTester, FileTriggerTest)
     ASSERT_TRUE( 1==perf_after );
 
     // clean up second count.
-    HotBackupFinished();
+    HotBackup::HotBackupFinished();
 
+
+    free(dup_path);
+    dup_path=NULL;
 
 }   // FileTriggerTest
 
