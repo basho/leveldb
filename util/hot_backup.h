@@ -41,23 +41,51 @@ static const char * kTriggerFileName="/etc/riak/hot_backup";
 //   (initiates backup if trigger seen)
 void CheckHotBackupTrigger();
 
+
 /**
- * Next 4 functions exposed here to allow easy unit test
+ * Singleton HotBackup object that unit tests can override.
  */
 
-// Called by each database that is initiating a hot backup.  Blocks
-//  future hot backups until finished.
-void HotBackupScheduled();
+extern class HotBackup * gHotBackup;
 
-// Call by each database upon hot backup completion.
-void HotBackupFinished();
 
-// Test for external trigger to start backup
-bool IsHotBackupTriggerSet();
+/**
+ * Currently this class is mostly a "namespace".  Eases redirection
+ *  of logic to / from unit tests.
+ */
+class HotBackup
+{
+protected:
 
-// Clear external trigger once every backup completes
-//  (this is flag to external process that data is ready)
-void ResetHotBackupTrigger();
+    // tracks how many databases are still processing a hot backup request
+    static volatile uint64_t JobsPending;
+
+public:
+    static void SetHotBackupObject(HotBackup * HB) {gHotBackup=HB;};
+
+    // allows unit test to change path name
+    virtual const char * GetTriggerPath() {return(config::kTriggerFileName);};
+
+
+    static uint64_t GetJobsPending() {return(add_and_fetch(&JobsPending, (uint64_t)0));};
+
+    // Called by each database that is initiating a hot backup.  Blocks
+    //  future hot backups until finished.
+    void HotBackupScheduled();
+
+    // Call by each database upon hot backup completion.
+    void HotBackupFinished();
+
+    // Test for external trigger to start backup
+    bool IsTriggerSet();
+
+    // Clear external trigger once every backup completes
+    //  (this is flag to external process that data is ready)
+    void ResetTrigger();
+
+    bool PrepareDirectories(const Options & LiveOptions);
+
+};  // class HotBackup
 
 
 
@@ -80,7 +108,6 @@ public:
     virtual void operator()();
 
 protected:
-    bool PrepareDirectories();
 
 private:
     HotBackupTask();

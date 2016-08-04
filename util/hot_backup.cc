@@ -35,8 +35,12 @@ namespace leveldb {
 
 
 // tracks how many databases are still processing a hot backup request
-static volatile uint64_t lHotBackupJobsPending(0);
+volatile uint64_t HotBackup::JobsPending(0);
 
+// this local static is used during normal operations.  unit tests
+//  create independent object.
+static HotBackup LocalHotBackupObj;
+HotBackup * gHotBackup(&LocalHotBackupObj);
 
 /**
  * Called by throttle.cc's thread once a minute.  Used to
@@ -46,16 +50,16 @@ void
 CheckHotBackupTrigger()
 {
     // add_and_fetch for memory fences
-    if (0 == add_and_fetch(&lHotBackupJobsPending, (uint64_t)0))
+    if (0 == gHotBackup->GetJobsPending())
     {
-        if (IsHotBackupTriggerSet())
+        if (gHotBackup->IsTriggerSet())
         {
             // two instance counts held for "trigger management"
             //  (protects against hot backups happening as fast as
             //   ScanDB() makes calls ... causing trigger to reset too
             //   early)
-            HotBackupScheduled();
-            HotBackupScheduled();
+            gHotBackup->HotBackupScheduled();
+            gHotBackup->HotBackupScheduled();
 
             // Log() routes to syslog as an error
             Log(NULL, "leveldb HotBackup triggered.");
@@ -66,7 +70,7 @@ CheckHotBackupTrigger()
 
             // reduce to one instance count now that events posted
             //  (trigger reset now enabled)
-            HotBackupFinished();
+            gHotBackup->HotBackupFinished();
         }   // if
     }   // if
 
@@ -79,7 +83,7 @@ CheckHotBackupTrigger()
  * Look for external trigger
  */
 bool
-IsHotBackupTriggerSet()
+HotBackup::IsTriggerSet()
 {
     bool ret_flag;
     int ret_val;
@@ -87,12 +91,12 @@ IsHotBackupTriggerSet()
     //
     // This is code polls for existance of /etc/riak/hot_backup
     //
-    ret_val=access(config::kTriggerFileName, F_OK);
+    ret_val=access(GetTriggerPath(), F_OK);
     ret_flag=(-1!=ret_val);
 
     return(ret_flag);
 
-}   // IsHotBackupTriggerSet
+}   // HotBackup::IsTriggerSet
 
 
 /**
@@ -100,12 +104,12 @@ IsHotBackupTriggerSet()
  *  message to syslog if unable to delete trigger file
  */
 void
-ResetHotBackupTrigger()
+HotBackup::ResetTrigger()
 {
     bool ret_flag;
     int ret_val;
 
-    ret_val=unlink(config::kTriggerFileName);
+    ret_val=unlink(GetTriggerPath());
     if (0==ret_val)
     {
         // release last counter, enabling future backups
@@ -114,7 +118,7 @@ ResetHotBackupTrigger()
     else
     {
         // one count left, effectively disabling trigger forever (or next program restart)
-        Log(NULL, "leveldb HotBackup unable to delete trigger file %s", config::kTriggerFileName);
+        Log(NULL, "leveldb HotBackup unable to delete trigger file %s", GetTriggerPath());
         Log(NULL, "leveldb HotBackup now disabled until program restart");
     }   // if
 
@@ -127,9 +131,9 @@ ResetHotBackupTrigger()
  * A database instance marks its intent to backup
  */
 void
-HotBackupScheduled()
+HotBackup::HotBackupScheduled()
 {
-    inc_and_fetch(&lHotBackupJobsPending);
+    inc_and_fetch(&JobsPending);
 
     return;
 
@@ -140,11 +144,11 @@ HotBackupScheduled()
  * A database instance marks that its backup completed
  */
 void
-HotBackupFinished()
+HotBackup::HotBackupFinished()
 {
     int ret_val;
 
-    ret_val=dec_and_fetch(&lHotBackupJobsPending);
+    ret_val=dec_and_fetch(&JobsPending);
 
     // 1 means CheckHotBackupTrigger()'s counter is only
     //   one left
@@ -152,7 +156,7 @@ HotBackupFinished()
     {
         // hmm, call file sync() at this point?
         Log(NULL, "leveldb HotBackup complete.");
-        ResetHotBackupTrigger();
+        ResetTrigger();
     }   // if
 
     return;
@@ -203,7 +207,7 @@ DBImpl::HotBackup()
     if (create_backup_event)
     {
         // increment pending backup count
-        HotBackupScheduled();
+        gHotBackup->HotBackupScheduled();
 
         // schedule backup job within compaction queue
         ThreadTask * task=new HotBackupTask(this);
@@ -224,7 +228,7 @@ HotBackupTask::operator()()
 
     /**** make each a function of HotBackupTask to facilitate unit test creation ****/
     // rotate directories (tiered storage reminder)
-    good=m_DBImpl.PrepareDirectories();
+    good=gHotBackup->PrepareDirectories(m_DBImpl.GetOptions());
 
     // grab mutex here or where?
     // ??? ++running_compactions_;  with mutex held
@@ -255,7 +259,7 @@ HotBackupTask::operator()()
     }   // if
 
     // inform master object that this db is done.
-    HotBackupFinished();
+    gHotBackup->HotBackupFinished();
 
     return;
 
@@ -267,7 +271,8 @@ HotBackupTask::operator()()
  *  This is similar to many /var/log files on unix systems.
  */
 bool
-DBImpl::PrepareDirectories()
+HotBackup::PrepareDirectories(
+    const Options & LiveOptions)
 {
     Options local_options;
     bool good;
@@ -277,7 +282,7 @@ DBImpl::PrepareDirectories()
     good=true;
 
     // Destroy highest possible directory if it exists
-    local_options=options_;
+    local_options=LiveOptions;
     good=SetBackupPaths(local_options, config::kNumBackups-1);
     status=DestroyDB("", local_options);
 
@@ -295,27 +300,27 @@ DBImpl::PrepareDirectories()
             dest=loop;
 
             // rename fast / default tier
-            src_path=BackupPath(options_.tiered_fast_prefix, src);
-            dest_path=BackupPath(options_.tiered_fast_prefix, dest);
+            src_path=BackupPath(LiveOptions.tiered_fast_prefix, src);
+            dest_path=BackupPath(LiveOptions.tiered_fast_prefix, dest);
 
-            if (options_.env->FileExists(src_path))
-                status=options_.env->RenameFile(src_path, dest_path);
+            if (LiveOptions.env->FileExists(src_path))
+                status=LiveOptions.env->RenameFile(src_path, dest_path);
 
             // rename slow tier
             if (status.ok())
             {
-                if (0<options_.tiered_slow_level)
+                if (0<LiveOptions.tiered_slow_level)
                 {
-                    src_path=BackupPath(options_.tiered_slow_prefix, src);
-                    dest_path=BackupPath(options_.tiered_slow_prefix, dest);
+                    src_path=BackupPath(LiveOptions.tiered_slow_prefix, src);
+                    dest_path=BackupPath(LiveOptions.tiered_slow_prefix, dest);
 
-                    if (options_.env->FileExists(src_path))
-                        status=options_.env->RenameFile(src_path, dest_path);
+                    if (LiveOptions.env->FileExists(src_path))
+                        status=LiveOptions.env->RenameFile(src_path, dest_path);
 
                     if (!status.ok())
                     {
                         good=false;
-                        Log(GetLogger(), "HotBackup failed while renaming %s slow directory",
+                        Log(LiveOptions.info_log, "HotBackup failed while renaming %s slow directory",
                             src_path.c_str());
                     }   // if
                 }   // if
@@ -323,7 +328,7 @@ DBImpl::PrepareDirectories()
             else
             {
                 good=false;
-                Log(GetLogger(), "HotBackup failed while renaming %s directory",
+                Log(LiveOptions.info_log, "HotBackup failed while renaming %s directory",
                     src_path.c_str());
             }   // else
         }   // for
@@ -332,7 +337,7 @@ DBImpl::PrepareDirectories()
     else
     {
         good=false;
-        Log(GetLogger(), "HotBackup failed while removing %s directory",
+        Log(LiveOptions.info_log, "HotBackup failed while removing %s directory",
             local_options.tiered_fast_prefix.c_str());
     }   // else
 
@@ -340,19 +345,19 @@ DBImpl::PrepareDirectories()
     // renaming old stuff succeeded, create new directory tree
     if (good)
     {
-        local_options=options_;
+        local_options=LiveOptions;
         good=SetBackupPaths(local_options, 0);
 
-        status=options_.env->CreateDir(local_options.tiered_fast_prefix);
+        status=LiveOptions.env->CreateDir(local_options.tiered_fast_prefix);
         if (status.ok())
         {
             if (0 < local_options.tiered_slow_level)
             {
-                status=options_.env->CreateDir(local_options.tiered_slow_prefix);
+                status=LiveOptions.env->CreateDir(local_options.tiered_slow_prefix);
                 if (!status.ok())
                 {
                     good=false;
-                    Log(GetLogger(), "HotBackup failed while creating %s slow directory",
+                    Log(LiveOptions.info_log, "HotBackup failed while creating %s slow directory",
                         local_options.tiered_slow_prefix.c_str());
                 }   // if
             }   // if
@@ -360,18 +365,18 @@ DBImpl::PrepareDirectories()
         else
         {
             good=false;
-            Log(GetLogger(), "HotBackup failed while creating %s directory",
+            Log(LiveOptions.info_log, "HotBackup failed while creating %s directory",
                 local_options.tiered_fast_prefix.c_str());
         }   // else
 
         // now create all the sst_? directories
         if (good)
         {
-            status=MakeLevelDirectories(options_.env, local_options);
+            status=MakeLevelDirectories(LiveOptions.env, local_options);
             if (!status.ok())
             {
                 good=false;
-                Log(GetLogger(), "HotBackup failed while creating sst_ directories");
+                Log(LiveOptions.info_log, "HotBackup failed while creating sst_ directories");
             }   // if
         }   // if
     }   // if
