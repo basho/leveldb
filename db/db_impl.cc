@@ -839,7 +839,7 @@ void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
       }
     }
   }
-  TEST_CompactMemTable(); // TODO(sanjay): Skip if memtable does not overlap
+  CompactMemTableSynchronous(); // TODO(sanjay): Skip if memtable does not overlap
   for (int level = 0; level < max_level_with_files; level++) {
     TEST_CompactRange(level, begin, end);
   }
@@ -880,7 +880,17 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
   }
 }
 
+/**
+ * This "test" routine was used in one production location,
+ *  then two with addition of hot backup.  Inappropriate for
+ *  TEST_ prefix if used in production.
+ */
 Status DBImpl::TEST_CompactMemTable() {
+    return(CompactMemTableSynchronous());
+}   // TEST_CompactMemTable
+
+
+Status DBImpl::CompactMemTableSynchronous() {
   // NULL batch means just wait for earlier writes to be done
   Status s = Write(WriteOptions(), NULL);
   if (s.ok()) {
@@ -2009,8 +2019,6 @@ Status DBImpl::MakeRoomForWrite(bool force) {
           bg_cv_.Wait();
       Log(options_.info_log, "running...\n");
     } else {
-      s=NewMemTable(false);
-#if 0
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
@@ -2033,67 +2041,13 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       }
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
-#endif
+
       force = false;   // Do not force another compaction if have room
       MaybeScheduleCompaction();
     }
   }
   return s;
 }
-
-
-// this code used to be within the last "else" clause of
-//  MakeRoomForWrite().  Moved here so both that routine and
-//  HotBackup could use common code. ProcessInline differentiates
-//  the caller.
-Status DBImpl::NewMemTable(
-    bool ProcessInline)
-{
-    mutex_.AssertHeld();
-    assert(NULL==imm_);
-
-    Status s;
-
-    // Attempt to switch to a new memtable and trigger compaction of old
-    assert(versions_->PrevLogNumber() == 0);
-    uint64_t new_log_number = versions_->NewFileNumber();
-
-    gPerfCounters->Inc(ePerfWriteNewMem);
-    s = NewRecoveryLog(new_log_number);
-
-    if (s.ok())
-    {
-        imm_ = mem_;
-        has_imm_.Release_Store((MemTable*)imm_);
-
-        mem_ = new MemTable(internal_comparator_);
-        mem_->Ref();
-
-        // process the recent write buffer (if it exists)
-        if (NULL!=imm_)
-        {
-            if (!ProcessInline)
-            {
-                ThreadTask * task=new ImmWriteTask(this);
-                gImmThreads->Submit(task, true);
-            }   // if
-            else
-            {
-                mutex_.Unlock();
-                BackgroundImmCompactCall();
-                mutex_.Lock();
-            }   // else
-        }   // if
-    }   // if
-    else
-    {
-        // Avoid chewing through file number space in a tight loop.
-        versions_->ReuseFileNumber(new_log_number);
-    }   // else
-
-    return(s);
-
-}   // DBImpl::NewMemTable
 
 
 // the following steps existed in two places, DB::Open() and
