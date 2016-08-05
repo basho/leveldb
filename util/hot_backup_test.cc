@@ -27,11 +27,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "leveldb/db.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
 
 #include "db/dbformat.h"
 #include "db/db_impl.h"
+#include "db/filename.h"
 #include "util/hot_backup.h"
 
 
@@ -69,9 +71,31 @@ public:
 
     ~HotBackupTester()
     {
+
     };
 
     virtual const char * GetTriggerPath() {return(m_Trigger.c_str());};
+
+    void ClearAllBackups(
+        Options & InOptions)
+    {
+        int loop;
+        Options options;
+
+        // clear old if exists
+        for (loop=0; loop<=config::kNumBackups; ++loop)
+        {
+            options=InOptions;
+
+            SetBackupPaths(options, loop);
+            DestroyDB("", options);
+        }   // if
+
+        options.tiered_slow_level=4;
+        options.tiered_fast_prefix=m_DBName + "/fast";
+        options.tiered_slow_prefix=m_DBName + "/slow";
+        DestroyDB("", options);
+    }   // ClearAllBackups
 
 };  // class HotBackupTester
 
@@ -135,16 +159,90 @@ TEST(HotBackupTester, FileTriggerTest)
     ASSERT_TRUE( 1==perf_after );
 
     // clean up second count.
-    HotBackup::HotBackupFinished();
+    HotBackupFinished();
 
-
+    // clean up
     free(dup_path);
     dup_path=NULL;
 
 }   // FileTriggerTest
 
+/**
+ * Verify that backup directories rotate
+ */
+TEST(HotBackupTester, DirectoryRotationTest)
+{
+    int ret_val, loop, inner_loop, offset, file_num;
+    Options options, backup_options, inner_options;
+    bool ret_flag, should_find, did_find;
+    std::string table_file, backup_name;
 
+    options.tiered_slow_level=4;
+    options.tiered_fast_prefix=m_DBName + "/fast";
+    options.tiered_slow_prefix=m_DBName + "/slow";
+    ClearAllBackups(options);
 
+    // manually create database directories
+    ret_val=mkdir(m_DBName.c_str(), 0777);
+    ret_val=mkdir(options.tiered_fast_prefix.c_str(), 0777);
+    ASSERT_TRUE(0==ret_val);
+    ret_val=mkdir(options.tiered_slow_prefix.c_str(), 0777);
+    ASSERT_TRUE(0==ret_val);
+    MakeLevelDirectories(Env::Default(), options);
+
+    backup_options=options;
+    SetBackupPaths(backup_options, 0);
+
+    // this loop goes one higher than permitted retention
+    //  to validate deletion of oldest
+    for (loop=0; loop<=config::kNumBackups; ++loop)
+    {
+        // rotate directories
+        ret_flag=PrepareDirectories(options);
+        ASSERT_TRUE(ret_flag);
+
+        // these files are to "mark" the backups, not
+        //  pretending this is a true file link
+        // make a file in fast tier ... 10 + backup iteration
+        table_file=TableFileName(backup_options, 10+loop, 1);
+        ret_val=open(table_file.c_str(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+        ASSERT_TRUE(-1!=ret_val);
+        close(ret_val);
+
+        // make a file in slow tier ... 20 + backup iteration
+        table_file=TableFileName(backup_options, 20+loop, 5);
+        ret_val=open(table_file.c_str(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+        ASSERT_TRUE(-1!=ret_val);
+        close(ret_val);
+
+        // test files
+        for (inner_loop=config::kNumBackups+1; 0<=inner_loop; --inner_loop)
+        {
+            offset=(loop<config::kNumBackups) ? 0 : loop-config::kNumBackups +1;
+            should_find=(inner_loop<=loop) && (offset<=inner_loop);
+
+            inner_options=options;
+            SetBackupPaths(inner_options, inner_loop-offset);
+
+            file_num=loop - inner_loop + offset;
+
+            table_file=TableFileName(inner_options, 10+file_num, 1);
+            ret_val=access(table_file.c_str(), F_OK);
+            ASSERT_TRUE( (0==ret_val) == should_find);
+
+            table_file=TableFileName(inner_options, 20+file_num, 5);
+            ret_val=access(table_file.c_str(), F_OK);
+            ASSERT_TRUE( (0==ret_val) == should_find);
+        }   // for
+    }   // for
+
+    ClearAllBackups(options);
+
+    // clean up
+    ret_val=rmdir(m_DBName.c_str());
+    ASSERT_TRUE(0==ret_val);
+
+}   // DirectoryRotationTest
 
 }  // namespace leveldb
 
