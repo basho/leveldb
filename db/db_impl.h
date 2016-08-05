@@ -57,8 +57,9 @@ class DBImpl : public DB {
   // Compact any files in the named level that overlap [*begin,*end]
   void TEST_CompactRange(int level, const Slice* begin, const Slice* end);
 
-  // Force current memtable contents to be compacted.
-  Status TEST_CompactMemTable();
+  // Force current memtable contents to be compacted, waits for completion
+  Status CompactMemTableSynchronous();
+  Status TEST_CompactMemTable();       // wraps CompactMemTableSynchronous (historical)
 
   // Return an internal iterator over the current state of the database.
   // The keys of this iterator are internal keys (see format.h).
@@ -122,8 +123,7 @@ class DBImpl : public DB {
 
   Status WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit, Version* base);
 
-  Status MakeRoomForWrite(bool force /* compact even if there is room? */);
-  Status NewMemTable(bool ProcessInline);
+  Status MakeRoomForWrite(bool force /* TRUE forces memtable rotation to disk (for testing) */);
   Status NewRecoveryLog(uint64_t NewLogNumber);
 
   WriteBatch* BuildBatchGroup(Writer** last_writer);
