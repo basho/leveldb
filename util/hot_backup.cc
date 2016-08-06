@@ -35,13 +35,12 @@
 namespace leveldb {
 
 
-// tracks how many databases are still processing a hot backup request
-volatile uint64_t HotBackup::JobsPending(0);
-
 // this local static is used during normal operations.  unit tests
 //  create independent object.
 static HotBackup LocalHotBackupObj;
 HotBackup * gHotBackup(&LocalHotBackupObj);
+void HotBackup::ResetHotBackupObject() {gHotBackup=&LocalHotBackupObj;};
+
 
 /**
  * Called by throttle.cc's thread once a minute.  Used to
@@ -259,7 +258,8 @@ HotBackupTask::operator()()
             good=m_DBImpl.CopyLOGSegment(log_position);
     }   // if
 
-    // inform master object that this db is done.
+    // inform db and master object that this db is done.
+    m_DBImpl.HotBackupComplete();
     gHotBackup->HotBackupFinished();
 
     return;
@@ -519,7 +519,6 @@ DBImpl::WriteBackupManifest()
     // success or failure, must release version (within mutex)
     {
         MutexLock l(&mutex_);
-
         version->Unref();               // must have mutex for Ref/Unref
     }   // mutex
 
@@ -645,4 +644,16 @@ DBImpl::CopyLOGSegment(long EndPos)
     return(good);
 
 }   // DBImpl::CopyLOGSegment
+
+
+void
+DBImpl::HotBackupComplete()
+{
+    MutexLock l(&mutex_);
+    hotbackup_pending_=false;
+    bg_cv_.SignalAll();
+
+    return;
+
+}   // DBImpl::HotBackupComplete
 };  // namespace leveldb

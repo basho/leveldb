@@ -81,6 +81,7 @@ class DBImpl : public DB {
   bool WriteBackupManifest();
   bool CreateBackupLinks(Version * Version, Options & BackupOptions);
   bool CopyLOGSegment(long FileEnd);
+  void HotBackupComplete();
 
   void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
