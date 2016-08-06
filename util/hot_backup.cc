@@ -25,6 +25,7 @@
 #include "leveldb/atomics.h"
 #include "leveldb/env.h"
 
+#include "db/dbformat.h"
 #include "db/db_impl.h"
 #include "db/filename.h"
 #include "util/db_list.h"
@@ -396,34 +397,12 @@ bool
 DBImpl::PurgeWriteBuffer()
 {
     bool good(true);
+    Status s;
 
-    // remember, holding this lock blocks user Writes and other actions.
-    //   release quickly'ish
-    {
-        MutexLock l(&mutex_);
+    // existing "test"
+    s=CompactMemTableSynchronous();
+    good=s.ok();
 
-        // no telling age of current write buffer, flush it
-        if (NULL == imm_)
-        {
-            Status s;
-
-            // rotate memtable and process to disk
-            s=NewMemTable(true);
-            good=s.ok();
-        }   // if
-
-        // a write buffer flush is pending, wait for it
-        else
-        {
-            while(NULL!=imm_ && !shutting_down_.Acquire_Load())
-            {
-                bg_cv_.Wait();
-            }   // while
-            good=!shutting_down_.Acquire_Load();
-        }   // else
-    }   // mutex
-
-    // write log entry after mutex released
     if (!good)
         Log(GetLogger(), "HotBackup failed in PurgeWriteBuffer");
 
@@ -432,6 +411,10 @@ DBImpl::PurgeWriteBuffer()
 }   // DBImpl::PurgeWriteBuffer
 
 
+/**
+ * Need an independent MANIFEST and CURRENT file within
+ * hot backup directory.  This creates them.
+ */
 bool
 DBImpl::WriteBackupManifest()
 {
@@ -448,7 +431,8 @@ DBImpl::WriteBackupManifest()
     // perform all non-disk activity quickly while mutex held
     {
         MutexLock l(&mutex_);
-        InternalKeyComparator const icmp(options_.comparator);
+//        InternalKeyComparator const icmp(BytewiseComparator());
+        InternalKeyComparator const icmp(internal_comparator_.user_comparator());
 
         version=versions_->current();
         version->Ref();               // must have mutex for Ref/Unref
