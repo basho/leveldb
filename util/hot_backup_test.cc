@@ -67,11 +67,12 @@ public:
     {
         m_DBName = test::TmpDir() + "/hot_backup";
         m_Trigger = test::TmpDir() + "/trigger";
+        gHotBackup=this;
     };
 
-    ~HotBackupTester()
+    virtual ~HotBackupTester()
     {
-
+        ResetHotBackupObject();
     };
 
     virtual const char * GetTriggerPath() {return(m_Trigger.c_str());};
@@ -473,5 +474,127 @@ TEST(HotBackupTester, ContentReviewTest)
 
 }   // ContentReviewTest
 
-}  // namespace leveldb
+
+/**
+ * Verify two DBs will backup when
+ *  request issued via trigger
+ */
+TEST(HotBackupTester, DoubleDB)
+{
+    Options options;
+    Status s;
+    DB * db1, * db2;
+    WriteOptions write_ops;
+    ReadOptions read_ops;
+    std::string db_path, backup_path, out_buffer, sst_path;
+    int ret_val, count;
+
+    // preclean
+    unlink(GetTriggerPath());
+
+    db_path=m_DBName + "/db1";
+    backup_path=BackupPath(db_path, 0);
+    DestroyDB(backup_path, options);
+    rmdir(backup_path.c_str());
+    DestroyDB(db_path, options);
+    rmdir(db_path.c_str());
+
+    db_path=m_DBName + "/db2";
+    backup_path=BackupPath(db_path, 0);
+    DestroyDB(backup_path, options);
+    rmdir(backup_path.c_str());
+    DestroyDB(db_path, options);
+    rmdir(db_path.c_str());
+
+    // need live databases for this test.
+    options.create_if_missing=true;
+    options.error_if_exists;
+
+    mkdir(m_DBName.c_str(), 0777);
+    db_path=m_DBName + "/db1";
+    s=DB::Open(options, db_path, &db1);
+    ASSERT_OK(s);
+
+    db_path=m_DBName + "/db2";
+    s=DB::Open(options, db_path, &db2);
+    ASSERT_OK(s);
+
+    // 5 to first db
+    s=db1->Put(write_ops, "10", "apple");
+    ASSERT_OK(s);
+    s=db1->Put(write_ops, "12", "banana");
+    ASSERT_OK(s);
+    s=db1->Put(write_ops, "14", "canalope");
+    ASSERT_OK(s);
+    s=db1->Put(write_ops, "16", "date");
+    ASSERT_OK(s);
+    s=db1->Put(write_ops, "18", "egg plant");
+    ASSERT_OK(s);
+
+    // 5 to second db
+    s=db2->Put(write_ops, "21", "ardvark");
+    ASSERT_OK(s);
+    s=db2->Put(write_ops, "23", "bunny");
+    ASSERT_OK(s);
+    s=db2->Put(write_ops, "25", "cat");
+    ASSERT_OK(s);
+    s=db2->Put(write_ops, "27", "dog");
+    ASSERT_OK(s);
+    s=db2->Put(write_ops, "29", "eagle");
+    ASSERT_OK(s);
+
+    // set trigger
+    ret_val=open(GetTriggerPath(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    ASSERT_TRUE(-1!=ret_val);
+    close(ret_val);
+
+    // cheat, play role of throttle loop and test for trigger
+    CheckHotBackupTrigger();
+
+    // wait for backup to process, but only 10 seconds
+    count=0;
+    do
+    {
+        sleep(1);
+        ++count;
+    } while(0==access(GetTriggerPath(), F_OK) && count<10);
+    ASSERT_TRUE(count<10);
+
+    // expected .sst file exist?
+    db_path=m_DBName + "/db1";
+    backup_path=BackupPath(db_path,0);
+    options.tiered_slow_prefix=backup_path;
+    sst_path=TableFileName(options, 5, 3);
+    ret_val=access(sst_path.c_str(), F_OK);
+    ASSERT_TRUE(0==ret_val);
+
+    db_path=m_DBName + "/db2";
+    backup_path=BackupPath(db_path,0);
+    options.tiered_slow_prefix=backup_path;
+    sst_path=TableFileName(options, 5, 3);
+    ret_val=access(sst_path.c_str(), F_OK);
+    ASSERT_TRUE(0==ret_val);
+
+    // cleanup
+    delete db1;
+    delete db2;
+
+    db_path=m_DBName + "/db1";
+    backup_path=BackupPath(db_path, 0);
+    DestroyDB(backup_path, options);
+    rmdir(backup_path.c_str());
+    DestroyDB(db_path, options);
+    rmdir(db_path.c_str());
+
+    db_path=m_DBName + "/db2";
+    backup_path=BackupPath(db_path, 0);
+    DestroyDB(backup_path, options);
+    rmdir(backup_path.c_str());
+    DestroyDB(db_path, options);
+    rmdir(db_path.c_str());
+
+
+}   // DoubleDBTest
+
+}   // namespace leveldb
 
