@@ -58,10 +58,10 @@ class HotBackup
 protected:
 
     // tracks how many databases are still processing a hot backup request
-    volatile uint64_t JobsPending;
+    volatile uint64_t m_JobsPending;
 
 public:
-    HotBackup() : JobsPending(0) {};
+    HotBackup() : m_JobsPending(0) {};
     virtual ~HotBackup() {};
 
     // next two routines are for unit test support
@@ -72,7 +72,7 @@ public:
     virtual const char * GetTriggerPath() {return(config::kTriggerFileName);};
 
 
-    uint64_t GetJobsPending() {return(add_and_fetch(&JobsPending, (uint64_t)0));};
+    uint64_t GetJobsPending() {return(add_and_fetch(&m_JobsPending, (uint64_t)0));};
 
     // Called by each database that is initiating a hot backup.  Blocks
     //  future hot backups until finished.

@@ -133,7 +133,7 @@ HotBackup::ResetTrigger()
 void
 HotBackup::HotBackupScheduled()
 {
-    inc_and_fetch(&JobsPending);
+    inc_and_fetch(&m_JobsPending);
 
     return;
 
@@ -148,7 +148,7 @@ HotBackup::HotBackupFinished()
 {
     int ret_val;
 
-    ret_val=dec_and_fetch(&JobsPending);
+    ret_val=dec_and_fetch(&m_JobsPending);
 
     // 1 means CheckHotBackupTrigger()'s counter is only
     //   one left
@@ -185,12 +185,11 @@ DBImpl::HotBackup()
         assert(false==hotbackup_pending_);
         if (!hotbackup_pending_)
         {
-            hotbackup_pending_=true;
-
             // test if shutting_down,
             if (!shutting_down_.Acquire_Load())
             {
                 create_backup_event=true;
+                hotbackup_pending_=true;
             }   // if
             else
             {
@@ -226,12 +225,8 @@ HotBackupTask::operator()()
     bool good;
     long log_position(0);
 
-    /**** make each a function of HotBackupTask to facilitate unit test creation ****/
     // rotate directories (tiered storage reminder)
     good=gHotBackup->PrepareDirectories(m_DBImpl.GetOptions());
-
-    // grab mutex here or where?
-    // ??? ++running_compactions_;  with mutex held
 
     // purge imm or current write buffer
     good=good && m_DBImpl.PurgeWriteBuffer();
