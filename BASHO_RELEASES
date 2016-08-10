@@ -1,3 +1,20 @@
+github.com tag 2.0.25 - August 10, 2016
+---------------------------------------
+Make LZ4 the default compression instead of Snappy.
+
+github.com tag 2.0.24 - August 2, 2016
+--------------------------------------
+mv-expiry:  open source expiry.  Supports one expiry policy for all databases.
+
+github.com tag 2.0.23 - July 20, 2016
+-------------------------------------
+mv-no-semaphore:  remove semaphore controlled thread in hot_threads.cc.  Instead use
+ use mutex of thread 0 (only one thread's mutex) to address know race condition.
+
+github.com tag 2.0.22 - June 22, 2016
+-------------------------------------
+no change: iterator fix in eleveldb
+
 github.com tag 2.0.21 - June 16, 2016
 -------------------------------------
 branch mv-iterator-hot-threads:  correct condition where eleveldb MoveTask
