@@ -273,7 +273,7 @@ TEST(HotBackupTester, LOGCopyTest)
 
     // need a live database for this test.
     options.create_if_missing=true;
-    options.error_if_exists;
+    options.error_if_exists=false;
     s=DB::Open(options, m_DBName, &db);
     ASSERT_OK(s);
 
@@ -333,7 +333,7 @@ TEST(HotBackupTester, ContentReviewTest)
 
     // need a live database for this test.
     options.create_if_missing=true;
-    options.error_if_exists;
+    options.error_if_exists=false;
     s=DB::Open(options, m_DBName, &db);
     ASSERT_OK(s);
 
@@ -508,7 +508,7 @@ TEST(HotBackupTester, DoubleDB)
 
     // need live databases for this test.
     options.create_if_missing=true;
-    options.error_if_exists;
+    options.error_if_exists=false;
 
     mkdir(m_DBName.c_str(), 0777);
     db_path=m_DBName + "/db1";
