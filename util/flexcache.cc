@@ -45,7 +45,8 @@ FlexCache::FlexCache()
     // initialize total memory available based upon system data
     ret_val=getrlimit(RLIMIT_DATA, &limit);
 
-    if (0==ret_val && RLIM_INFINITY!=limit.rlim_max)
+    //  unsigned long caste to fix warning in smartos1.8, smartos 13.1, solaris10
+    if (0==ret_val && (unsigned long)RLIM_INFINITY!=limit.rlim_max)
     {
         // 2Gig is "small ram", Riak going to be tight
        if (limit.rlim_max < flex::kRlimSizeIsSmall)
