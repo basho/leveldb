@@ -82,6 +82,7 @@ class DBIter: public Iterator {
     if (kForward==direction_)
     {
       ParsedInternalKey parsed;
+      parsed.type=kTypeValue; parsed.sequence=0; parsed.expiry=0; // clear warnings
       ParseInternalKey(iter_->key(), &parsed);
       keymetadata_.m_Type=parsed.type;
       keymetadata_.m_Sequence=parsed.sequence;
