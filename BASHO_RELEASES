@@ -1,3 +1,7 @@
+github.com tag 2.0.26 - August 21, 2016
+---------------------------------------
+mv-expiry-iter-bug:  DBImpl::NewIterator() was not setting the new expiry parameter.
+
 github.com tag 2.0.25 - August 10, 2016
 ---------------------------------------
 Make LZ4 the default compression instead of Snappy.
