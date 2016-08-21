@@ -22,6 +22,7 @@
 
 #include <limits.h>
 #include <algorithm>
+#include <memory>
 #include <string>
 
 #include "util/testharness.h"
@@ -791,6 +792,10 @@ public:
 
         m_Options.create_if_missing=true;
         m_Options.error_if_exists=false;
+
+        // Note: m_Options.expiry_module is a smart pointer.  It
+        //  owns the m_Expiry object and will automatically delete the
+        //  allocation.
         m_Expiry=new ExpTestModule;
         m_Options.expiry_module=m_Expiry;
 
@@ -1253,6 +1258,7 @@ TEST(ExpiryManifestTester, Overlap2)
 
     // let multiple threads complete
     /// sleep(1) required for Smart OS 1.8 buildbot
+    ///  then rased to sleep(2) for freebsd buildbot
     sleep(2);
     VerifyFiles(Overlap1, manifest_count, 5);
 
@@ -1372,6 +1378,10 @@ public:
 
         m_Options.create_if_missing=true;
         m_Options.error_if_exists=false;
+
+        // Note: m_Options.expiry_module is a smart pointer.  It
+        //  owns the m_Expiry object and will automatically delete the
+        //  allocation.
         m_Expiry=new leveldb::ExpiryModuleOS;
         m_Options.expiry_module=m_Expiry;
 
@@ -1385,13 +1395,6 @@ public:
         leveldb::DestroyDB(m_DBName, m_Options);
     };
 
-    bool m_Good;
-    std::string m_DBName;
-    Options m_Options;
-    leveldb::ExpiryModuleOS * m_Expiry;
-    ExpDB * m_DB;
-    uint64_t m_BaseTime;
-
     void OpenTestDB()
     {
         leveldb::Status status;
@@ -1402,6 +1405,14 @@ public:
         ASSERT_OK(status);
         m_DB->SetClock(m_BaseTime);
     }   // OpenTestDB
+
+protected:
+    bool m_Good;
+    std::string m_DBName;
+    Options m_Options;
+    leveldb::ExpiryModuleOS * m_Expiry;
+    ExpDB * m_DB;
+    uint64_t m_BaseTime;
 
 };  // ExpiryDBTester
 
@@ -1426,7 +1437,7 @@ TEST(ExpiryDBTester, Simple)
     Status s;
     sExpiryDBObject * cursor;
     std::string buffer;
-    leveldb::Iterator * iterator;
+    std::auto_ptr<leveldb::Iterator> iterator;
 
     // enable compaction expiry
     m_Expiry->expiry_enabled=true;
@@ -1450,14 +1461,12 @@ TEST(ExpiryDBTester, Simple)
     }   // for
 
     // verify we can walk it
-    iterator=m_DB->NewIterator(ReadOptions());
+    iterator.reset(m_DB->NewIterator(ReadOptions()));
     for (loop=0, iterator->SeekToFirst(); loop<obj_count; ++loop, iterator->Next())
     {
         ASSERT_EQ(iterator->Valid(), true);
     }   // for
     ASSERT_EQ(iterator->Valid(), false);
-    delete iterator;
-    iterator=NULL;
 
     // expiry set to 2 min, so shift 10
     m_DB->ShiftClockMinutes(10);
@@ -1466,14 +1475,12 @@ TEST(ExpiryDBTester, Simple)
     for (loop=0, cursor=SimpleData; loop<obj_count; ++loop, ++cursor)
     {
         s=m_DB->Get(ReadOptions(), cursor->m_Key, &buffer);
-        ASSERT_EQ(s.ok(), false);
+        ASSERT_TRUE(s.IsNotFound());
     }   // for
 
-    iterator=m_DB->NewIterator(ReadOptions());
+    iterator.reset(m_DB->NewIterator(ReadOptions()));
     iterator->SeekToFirst();
     ASSERT_EQ(iterator->Valid(), false);
-    delete iterator;
-    iterator=NULL;
 
     // force data from memory buffer to .sst file
     //  (after shifting clock!!)
@@ -1488,14 +1495,12 @@ TEST(ExpiryDBTester, Simple)
     }   // for
 
     // verify we can walk it
-    iterator=m_DB->NewIterator(ReadOptions());
+    iterator.reset(m_DB->NewIterator(ReadOptions()));
     for (loop=0, iterator->SeekToFirst(); loop<obj_count; ++loop, iterator->Next())
     {
         ASSERT_EQ(iterator->Valid(), true);
     }   // for
     ASSERT_EQ(iterator->Valid(), false);
-    delete iterator;
-    iterator=NULL;
 
     // expiry set to 2 min, so shift 10
     m_DB->ShiftClockMinutes(10);
@@ -1504,14 +1509,31 @@ TEST(ExpiryDBTester, Simple)
     for (loop=0, cursor=SimpleData; loop<obj_count; ++loop, ++cursor)
     {
         s=m_DB->Get(ReadOptions(), cursor->m_Key, &buffer);
-        ASSERT_EQ(s.ok(), false);
+        ASSERT_TRUE(s.IsNotFound());
     }   // for
 
-    iterator=m_DB->NewIterator(ReadOptions());
+    iterator.reset(m_DB->NewIterator(ReadOptions()));
     iterator->SeekToFirst();
     ASSERT_EQ(iterator->Valid(), false);
-    delete iterator;
-    iterator=NULL;
+
+
+    // run compaction again with clock advanced
+    //  to physically remove records.  Then move
+    //  clock to starting time and prove records gone gone.
+    ///  (note that we "know" .sst file is on level 3)
+    m_DB->TEST_CompactRange(3, NULL, NULL);
+    m_DB->SetClock(m_BaseTime);
+
+    // all data gone?
+    for (loop=0, cursor=SimpleData; loop<obj_count; ++loop, ++cursor)
+    {
+        s=m_DB->Get(ReadOptions(), cursor->m_Key, &buffer);
+        ASSERT_TRUE(s.IsNotFound());
+    }   // for
+
+    iterator.reset(m_DB->NewIterator(ReadOptions()));
+    iterator->SeekToFirst();
+    ASSERT_EQ(iterator->Valid(), false);
 
 }   // ExpiryDBTester::Simple
 
