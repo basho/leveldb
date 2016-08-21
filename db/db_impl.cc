@@ -1752,7 +1752,8 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
       &dbname_, env_, user_comparator(), internal_iter,
       (options.snapshot != NULL
        ? reinterpret_cast<const SnapshotImpl*>(options.snapshot)->number_
-       : latest_snapshot));
+       : latest_snapshot),
+      options_.expiry_module.get());
 }
 
 const Snapshot* DBImpl::GetSnapshot() {
