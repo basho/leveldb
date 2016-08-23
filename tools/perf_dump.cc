@@ -23,6 +23,7 @@ main(
 
     running=true;
     error_seen=false;
+    error_counter=0;
 
     csv_header=false;
     diff_mode=false;

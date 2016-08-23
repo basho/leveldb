@@ -215,7 +215,6 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
         ExpiryTime now, aged;
         const std::vector<FileMetaData*> & files(Ver.GetFileList(Level));
         std::vector<FileMetaData*>::const_iterator it;
-        size_t old_index[config::kNumLevels];
 
         now=GetTimeMinutes();
         aged=now - expiry_minutes*60*port::UINT64_ONE_SECOND;
