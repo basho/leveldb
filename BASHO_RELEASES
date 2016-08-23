@@ -1,3 +1,8 @@
+github.com tag 2.0.27 - August 22, 2016
+---------------------------------------
+mv-mem-fences:  fix iterator double delete bug in eleveldb and
+                build better memory fenced operations for referenced count objects.
+
 github.com tag 2.0.26 - August 21, 2016
 ---------------------------------------
 mv-expiry-iter-bug:  DBImpl::NewIterator() was not setting the new expiry parameter.
