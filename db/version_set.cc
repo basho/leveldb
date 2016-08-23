@@ -1343,7 +1343,7 @@ VersionSet::UpdatePenalty(
         {
             const uint64_t level_bytes = TotalFileSize(v->files_[level]);
 
-            count=static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel;
+            count=(int)(static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel);
 
             if (0<count)
             {
@@ -1357,7 +1357,7 @@ VersionSet::UpdatePenalty(
             //  not worse because of this.
             else if (config::kNumOverlapLevels==level)
             {   // light penalty
-                count=static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel;
+                count=(int)(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel);
                 value=count; // this approximates the number of compactions needed, no other penalty
                 increment=1;
                 count=0;

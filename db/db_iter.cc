@@ -82,6 +82,9 @@ class DBIter: public Iterator {
     if (kForward==direction_)
     {
       ParsedInternalKey parsed;
+      // this initialization clears a warning.  ParsedInternalKey says
+      //  it is not initializing for performance reasons ... oh well
+      parsed.type=kTypeValue; parsed.sequence=0; parsed.expiry=0;
       ParseInternalKey(iter_->key(), &parsed);
       keymetadata_.m_Type=parsed.type;
       keymetadata_.m_Sequence=parsed.sequence;

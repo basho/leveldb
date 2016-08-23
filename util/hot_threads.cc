@@ -291,7 +291,6 @@ HotThreadPool::Submit(
     bool OkToQueue)
 {
     bool ret_flag(false);
-    int ret_val;
 
     if (NULL!=item)
     {
