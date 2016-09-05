@@ -618,7 +618,8 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         {"ExpiredKeys", true},
         {"ExpiredFiles", true},
         {"SyslogWrite", false},
-        {"BackupStarted", false}
+        {"BackupStarted", false},
+        {"BackupError", false},
     };
 
 

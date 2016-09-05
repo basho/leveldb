@@ -242,6 +242,7 @@ enum PerformanceCountersEnum
 
     ePerfSyslogWrite=96,      //!< logged message to syslog
     ePerfBackupStarted=97,    //!< hot backup initiated
+    ePerfBackupError=98,      //!< hot backup had an error
 
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)

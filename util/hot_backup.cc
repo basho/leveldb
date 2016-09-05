@@ -121,6 +121,7 @@ HotBackup::ResetTrigger()
         Log(NULL, "leveldb HotBackup unable to delete trigger file %s (errno %d)",
             GetTriggerPath(), errno);
         Log(NULL, "leveldb HotBackup now disabled until program restart");
+        gPerfCounters->Inc(ePerfBackupError);
     }   // if
 
     return;
@@ -200,6 +201,7 @@ DBImpl::HotBackup()
         else
         {
             Log(options_.info_log, "HotBackup aborted, backup already in progress");
+            gPerfCounters->Inc(ePerfBackupError);
         }   // else
     }   // mutex released
 
@@ -253,6 +255,10 @@ HotBackupTask::operator()()
         if (good && 0!=log_position)
             good=m_DBImpl.CopyLOGSegment(log_position);
     }   // if
+    else
+    {
+        gPerfCounters->Inc(ePerfBackupError);
+    }   // else
 
     // inform db and master object that this db is done.
     m_DBImpl.HotBackupComplete();
