@@ -433,7 +433,6 @@ DBImpl::WriteBackupManifest()
     // perform all non-disk activity quickly while mutex held
     {
         MutexLock l(&mutex_);
-//        InternalKeyComparator const icmp(BytewiseComparator());
         InternalKeyComparator const icmp(internal_comparator_.user_comparator());
 
         version=versions_->current();
@@ -559,8 +558,8 @@ DBImpl::CreateBackupLinks(
             if (0!=ret_val)
             {
                 good=false;
-                Log(GetLogger(), "HotBackup failed linking (return val %d) %s",
-                    ret_val, src_path.c_str());
+                Log(GetLogger(), "HotBackup failed linking (errno %d) %s",
+                    errno, src_path.c_str());
             }   // if
         }   // for
     }   // for
@@ -627,15 +626,15 @@ DBImpl::CopyLOGSegment(long EndPos)
 
             if (!s.ok())
                 Log(GetLogger(), "HotBackup LOG write failed at %ld (%s)",
-                    remaining, s.ToString().c_str());
+                    EndPos - remaining, s.ToString().c_str());
         }   // if
         else
         {
                 Log(GetLogger(), "HotBackup LOG read failed at %ld (%s)",
-                    remaining, s.ToString().c_str());
+                    EndPos - remaining, s.ToString().c_str());
         }   // else
 
-        remaining-=count;
+        remaining-=data_read.size();
     }   // while
 
     // close files and go home
