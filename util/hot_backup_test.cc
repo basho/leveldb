@@ -110,18 +110,14 @@ TEST(HotBackupTester, FileTriggerTest)
     char * dup_path, *path;
     int ret_val;
     bool ret_flag;
-    uint64_t perf_before, perf_after;
+    uint64_t perf_before, perf_diff;
 
     perf_before=gPerfCounters->Value(ePerfSyslogWrite);
 
     // cleanup anything existing, likely fails
-    ///  hmm, should there be a way to move this trigger
-    ///  to a "safe" area like /tmp?
     unlink(GetTriggerPath());
 
     // does parent path exist?
-    //  bypass test if it does not ... Travis CI and
-    //  other users might not be able to access /etc/riak
     dup_path=strdup(GetTriggerPath());
     path=dirname(dup_path);
     ret_val=access(path, R_OK | W_OK);
@@ -156,11 +152,8 @@ TEST(HotBackupTester, FileTriggerTest)
 
     // did our simulation create a syslog entry?
     //  (bonus if you manually check /var/log/syslog for actual entries)
-    perf_after=gPerfCounters->Value(ePerfSyslogWrite) - perf_before;
-    ASSERT_TRUE( 1==perf_after );
-
-    // clean up second count.
-    HotBackupFinished();
+    perf_diff=gPerfCounters->Value(ePerfSyslogWrite) - perf_before;
+    ASSERT_TRUE( 1==perf_diff );
 
     // clean up
     free(dup_path);
@@ -401,7 +394,7 @@ TEST(HotBackupTester, ContentReviewTest)
     ASSERT_OK(s);
     // test fail case
     s=db->Get(read_ops, "26.1", &out_buffer);
-    ASSERT_TRUE(!s.ok());
+    ASSERT_NOTOK(s);
 
     // close parent
     delete db;
@@ -418,7 +411,7 @@ TEST(HotBackupTester, ContentReviewTest)
     s=db->Get(read_ops, "10", &out_buffer);
     ASSERT_OK(s);
     s=db->Get(read_ops, "70.3", &out_buffer);
-    ASSERT_TRUE(!s.ok());
+    ASSERT_NOTOK(s);
 
     // close backup
     delete db;
@@ -433,9 +426,9 @@ TEST(HotBackupTester, ContentReviewTest)
     s=db->Get(read_ops, "18", &out_buffer);
     ASSERT_OK(s);
     s=db->Get(read_ops, "29", &out_buffer);
-    ASSERT_TRUE(!s.ok());
+    ASSERT_NOTOK(s);
     s=db->Get(read_ops, "26.2", &out_buffer);
-    ASSERT_TRUE(!s.ok());
+    ASSERT_NOTOK(s);
 
     // close backup
     delete db;
@@ -452,9 +445,9 @@ TEST(HotBackupTester, ContentReviewTest)
     s=db->Get(read_ops, "18", &out_buffer);
     ASSERT_OK(s);
     s=db->Get(read_ops, "29", &out_buffer);
-    ASSERT_TRUE(!s.ok());
+    ASSERT_NOTOK(s);
     s=db->Get(read_ops, "26.2", &out_buffer);
-    ASSERT_TRUE(!s.ok());
+    ASSERT_NOTOK(s);
 
     // close backup
     delete db;
