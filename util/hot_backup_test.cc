@@ -125,7 +125,7 @@ TEST(HotBackupTester, FileTriggerTest)
 
     // is a trigger seen (hope not)
     ret_flag=HotBackup::IsTriggerSet();
-    ASSERT_TRUE(!ret_flag);
+    ASSERT_FALSE(ret_flag);
 
     // make a trigger
     ret_val=open(GetTriggerPath(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
@@ -148,7 +148,7 @@ TEST(HotBackupTester, FileTriggerTest)
     // release one, trigger goes away
     HotBackup::HotBackupFinished();
     ret_flag=HotBackup::IsTriggerSet();
-    ASSERT_TRUE(!ret_flag);
+    ASSERT_FALSE(ret_flag);
 
     // did our simulation create a syslog entry?
     //  (bonus if you manually check /var/log/syslog for actual entries)
