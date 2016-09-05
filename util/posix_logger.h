@@ -26,7 +26,17 @@ class PosixLogger : public Logger {
   virtual ~PosixLogger() {
     fclose(file_);
   }
-  virtual long LogSize() {return(ftell(file_));};
+  virtual long LogSize()
+      {
+          long ret_val;
+
+          // if ftell() gives error, return zero
+          //  to match default class' "does not exist" response
+          ret_val=ftell(file_);
+          if (-1==ret_val)
+              ret_val=0;
+          return(ret_val);
+      };
   virtual void Logv(const char* format, va_list ap) {
     const uint64_t thread_id = (*gettid_)();
 
