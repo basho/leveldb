@@ -106,7 +106,6 @@ HotBackup::IsTriggerSet()
 void
 HotBackup::ResetTrigger()
 {
-    bool ret_flag;
     int ret_val;
 
     ret_val=unlink(GetTriggerPath());
