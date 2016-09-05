@@ -323,16 +323,16 @@ HotBackup::PrepareDirectories(
                     if (!status.ok())
                     {
                         good=false;
-                        Log(LiveOptions.info_log, "HotBackup failed while renaming %s slow directory",
-                            src_path.c_str());
+                        Log(LiveOptions.info_log, "HotBackup failed while renaming %s slow directory (error %s)",
+                            src_path.c_str(), status.ToString().c_str());
                     }   // if
                 }   // if
             }
             else
             {
                 good=false;
-                Log(LiveOptions.info_log, "HotBackup failed while renaming %s directory",
-                    src_path.c_str());
+                Log(LiveOptions.info_log, "HotBackup failed while renaming %s directory (error %s)",
+                    src_path.c_str(), status.ToString().c_str());
             }   // else
         }   // for
 
@@ -340,8 +340,8 @@ HotBackup::PrepareDirectories(
     else
     {
         good=false;
-        Log(LiveOptions.info_log, "HotBackup failed while removing %s directory",
-            local_options.tiered_fast_prefix.c_str());
+        Log(LiveOptions.info_log, "HotBackup failed while removing %s database (error %s)",
+            local_options.tiered_fast_prefix.c_str(), status.ToString().c_str());
     }   // else
 
 
