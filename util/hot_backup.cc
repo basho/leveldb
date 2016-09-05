@@ -183,7 +183,9 @@ DBImpl::HotBackup()
         // get mutex,
         MutexLock l(&mutex_);
 
-        // set backup flag && see if
+        // set backup flag only if shutdown not started
+        //  (shutdown flag cannot set while we hold mutex_,
+        //   and hotbackup_pending_ will hold db open upon mutex_ release)
         assert(false==hotbackup_pending_);
         if (!hotbackup_pending_)
         {
@@ -203,6 +205,8 @@ DBImpl::HotBackup()
             Log(options_.info_log, "HotBackup aborted, backup already in progress");
             gPerfCounters->Inc(ePerfBackupError);
         }   // else
+
+
     }   // mutex released
 
     // post event and log message outside mutex
