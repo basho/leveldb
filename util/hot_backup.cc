@@ -20,6 +20,7 @@
 //
 // -------------------------------------------------------------------
 
+#include <errno.h>
 #include <unistd.h>
 
 #include "leveldb/atomics.h"
@@ -117,7 +118,8 @@ HotBackup::ResetTrigger()
     else
     {
         // one count left, effectively disabling trigger forever (or next program restart)
-        Log(NULL, "leveldb HotBackup unable to delete trigger file %s", GetTriggerPath());
+        Log(NULL, "leveldb HotBackup unable to delete trigger file %s (errno %d)",
+            GetTriggerPath(), errno);
         Log(NULL, "leveldb HotBackup now disabled until program restart");
     }   // if
 
