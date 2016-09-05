@@ -471,7 +471,7 @@ DBImpl::WriteBackupManifest()
     manifest_string=DescriptorFileName(local_options.tiered_fast_prefix, manifest_num);
 
     WritableFile* file;
-    status = env_->NewWritableFile(manifest_string, &file, 4096);
+    status = env_->NewWritableFile(manifest_string, &file, gMapSize);
     if (status.ok())
     {
         log::Writer log(file);
@@ -599,7 +599,7 @@ DBImpl::CopyLOGSegment(long EndPos)
     s=options_.env->NewSequentialFile(src_name, &src);
     if (s.ok())
     {
-        s=options_.env->NewWritableFile(dst_name, &dst, 4096);
+        s=options_.env->NewWritableFile(dst_name, &dst, gMapSize);
 
         if (!s.ok())
             Log(GetLogger(), "HotBackup failed to create destination LOG file (%s, %s)",
@@ -612,13 +612,13 @@ DBImpl::CopyLOGSegment(long EndPos)
     }   // else
 
     // copy data between files
-    buffer.reserve(4096);
+    buffer.reserve(gMapSize);
 
     while(0<remaining && s.ok())
     {
         long count;
 
-        count=(4096<remaining ? 4096 : remaining);
+        count=(gMapSize<remaining ? gMapSize : remaining);
         s=src->Read(count, &data_read, (char *)buffer.data());
 
         if (s.ok())
