@@ -64,10 +64,10 @@ public:
     std::string m_Trigger;
 
     HotBackupTester()
+        : HotBackup(this)
     {
         m_DBName = test::TmpDir() + "/hot_backup";
         m_Trigger = test::TmpDir() + "/trigger";
-        gHotBackup=this;
     };
 
     virtual ~HotBackupTester()

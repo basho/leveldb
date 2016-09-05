@@ -42,12 +42,6 @@ static const char * kTriggerFileName="/etc/riak/hot_backup";
 void CheckHotBackupTrigger();
 
 
-/**
- * Singleton HotBackup object that unit tests can override.
- */
-
-extern class HotBackup * gHotBackup;
-
 
 /**
  * Currently this class is mostly a "namespace".  Eases redirection
@@ -62,15 +56,18 @@ protected:
 
 public:
     HotBackup() : m_JobsPending(0) {};
-    virtual ~HotBackup() {};
 
-    // next two routines are for unit test support
-    static void SetHotBackupObject(HotBackup * HB) {gHotBackup=HB;};
-    static void ResetHotBackupObject();
+protected:
+    HotBackup(HotBackup * BackupTester) : m_JobsPending(0)
+    {gHotBackup=BackupTester;}
+
+public:
+    virtual ~HotBackup() {};
 
     // allows unit test to change path name
     virtual const char * GetTriggerPath() {return(config::kTriggerFileName);};
 
+    static HotBackup * Ptr() {return(gHotBackup);};
 
     uint64_t GetJobsPending() {return(add_and_fetch(&m_JobsPending, (uint64_t)0));};
 
@@ -89,6 +86,16 @@ public:
     void ResetTrigger();
 
     bool PrepareDirectories(const Options & LiveOptions);
+
+protected:
+    // next two routines are for unit test support
+    static void SetHotBackupObject(HotBackup * HB) {gHotBackup=HB;};
+    static void ResetHotBackupObject();
+
+private:
+
+    //Singleton HotBackup object that unit tests can override.
+    static HotBackup * gHotBackup;
 
 };  // class HotBackup
 

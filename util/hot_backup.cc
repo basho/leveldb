@@ -38,7 +38,7 @@ namespace leveldb {
 // this local static is used during normal operations.  unit tests
 //  create independent object.
 static HotBackup LocalHotBackupObj;
-HotBackup * gHotBackup(&LocalHotBackupObj);
+HotBackup * HotBackup::gHotBackup(&LocalHotBackupObj);
 void HotBackup::ResetHotBackupObject() {gHotBackup=&LocalHotBackupObj;};
 
 
@@ -50,16 +50,16 @@ void
 CheckHotBackupTrigger()
 {
     // add_and_fetch for memory fences
-    if (0 == gHotBackup->GetJobsPending())
+    if (0 == HotBackup::Ptr()->GetJobsPending())
     {
-        if (gHotBackup->IsTriggerSet())
+        if (HotBackup::Ptr()->IsTriggerSet())
         {
             // two instance counts held for "trigger management"
             //  (protects against hot backups happening as fast as
             //   ScanDB() makes calls ... causing trigger to reset too
             //   early)
-            gHotBackup->HotBackupScheduled();
-            gHotBackup->HotBackupScheduled();
+            HotBackup::Ptr()->HotBackupScheduled();
+            HotBackup::Ptr()->HotBackupScheduled();
 
             // Log() routes to syslog as an error
             Log(NULL, "leveldb HotBackup triggered.");
@@ -70,7 +70,7 @@ CheckHotBackupTrigger()
 
             // reduce to one instance count now that events posted
             //  (trigger reset now enabled)
-            gHotBackup->HotBackupFinished();
+            HotBackup::Ptr()->HotBackupFinished();
         }   // if
     }   // if
 
@@ -206,7 +206,7 @@ DBImpl::HotBackup()
     if (create_backup_event)
     {
         // increment pending backup count
-        gHotBackup->HotBackupScheduled();
+        HotBackup::Ptr()->HotBackupScheduled();
 
         // schedule backup job within compaction queue
         ThreadTask * task=new HotBackupTask(this);
@@ -226,7 +226,7 @@ HotBackupTask::operator()()
     long log_position(0);
 
     // rotate directories (tiered storage reminder)
-    good=gHotBackup->PrepareDirectories(m_DBImpl.GetOptions());
+    good=HotBackup::Ptr()->PrepareDirectories(m_DBImpl.GetOptions());
 
     // purge imm or current write buffer
     good=good && m_DBImpl.PurgeWriteBuffer();
@@ -255,7 +255,7 @@ HotBackupTask::operator()()
 
     // inform db and master object that this db is done.
     m_DBImpl.HotBackupComplete();
-    gHotBackup->HotBackupFinished();
+    HotBackup::Ptr()->HotBackupFinished();
 
     return;
 
