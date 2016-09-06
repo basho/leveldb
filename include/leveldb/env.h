@@ -284,6 +284,12 @@ class Logger {
   Logger() { }
   virtual ~Logger();
 
+  // Riak specific function for hot backup.
+  //  hot_backup.cc assumes that it can rotate the LOG file
+  //  via standard Env routines if this function returns a
+  //  non-zero value.
+  virtual long LogSize() {return(0);};
+
   // Write an entry to the log file with the specified format.
   virtual void Logv(const char* format, va_list ap) = 0;
 

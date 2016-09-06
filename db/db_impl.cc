@@ -193,10 +193,10 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       log_(NULL),
       tmp_batch_(new WriteBatch),
       manual_compaction_(NULL),
-      level0_good(true),
       throttle_end(0),
       running_compactions_(0),
-      block_size_changed_(0), last_low_mem_(0)
+      block_size_changed_(0), last_low_mem_(0),
+      hotbackup_pending_(false)
 {
   current_block_size_=options_.block_size;
 
@@ -839,7 +839,7 @@ void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
       }
     }
   }
-  TEST_CompactMemTable(); // TODO(sanjay): Skip if memtable does not overlap
+  CompactMemTableSynchronous(); // TODO(sanjay): Skip if memtable does not overlap
   for (int level = 0; level < max_level_with_files; level++) {
     TEST_CompactRange(level, begin, end);
   }
@@ -880,7 +880,17 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
   }
 }
 
+/**
+ * This "test" routine was used in one production location,
+ *  then two with addition of hot backup.  Inappropriate for
+ *  TEST_ prefix if used in production.
+ */
 Status DBImpl::TEST_CompactMemTable() {
+    return(CompactMemTableSynchronous());
+}   // TEST_CompactMemTable
+
+
+Status DBImpl::CompactMemTableSynchronous() {
   // NULL batch means just wait for earlier writes to be done
   Status s = Write(WriteOptions(), NULL);
   if (s.ok()) {
@@ -1963,9 +1973,6 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   bool allow_delay = !force;
   Status s;
 
-  // hint to background compaction.
-  level0_good=(versions_->NumLevelFiles(0) < (int)config::kL0_CompactionTrigger);
-
   while (true) {
     if (!bg_error_.ok()) {
       // Yield previous error
@@ -2034,12 +2041,14 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       }
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
+
       force = false;   // Do not force another compaction if have room
       MaybeScheduleCompaction();
     }
   }
   return s;
 }
+
 
 // the following steps existed in two places, DB::Open() and
 //  DBImpl::MakeRoomForWrite().  This lead to a bug in Basho's
@@ -2389,7 +2398,7 @@ DBImpl::IsCompactionScheduled()
     bool flag(false);
     for (int level=0; level< config::kNumLevels && !flag; ++level)
         flag=versions_->IsCompactionSubmitted(level);
-    return(flag || NULL!=imm_);
+    return(flag || NULL!=imm_ || hotbackup_pending_);
 }   // DBImpl::IsCompactionScheduled
 
 }  // namespace leveldb

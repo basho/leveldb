@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <syslog.h>
+#include <stdarg.h>
+
 #include "leveldb/env.h"
+#include "leveldb/perf_count.h"
 
 namespace leveldb {
 
@@ -25,12 +29,22 @@ FileLock::~FileLock() {
 }
 
 void Log(Logger* info_log, const char* format, ...) {
-  if (info_log != NULL) {
     va_list ap;
+
     va_start(ap, format);
-    info_log->Logv(format, ap);
+
+    if (info_log != NULL)
+    {
+        info_log->Logv(format, ap);
+    }   // if
+    else
+    {
+        // perf counter is clue to check syslog
+        vsyslog(LOG_ERR, format, ap);
+        gPerfCounters->Inc(ePerfSyslogWrite);
+    }   // else
+
     va_end(ap);
-  }
 }
 
 static Status DoWriteStringToFile(Env* env, const Slice& data,

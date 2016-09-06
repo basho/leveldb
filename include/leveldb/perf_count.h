@@ -2,7 +2,7 @@
 //
 // perf_count.h:  performance counters LevelDB
 //
-// Copyright (c) 2012-2015 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2012-2016 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -239,6 +239,10 @@ enum PerformanceCountersEnum
 
     ePerfExpiredKeys=94,      //!< key physically removed because it expired
     ePerfExpiredFiles=95,     //!< entire file removed because all keys expired
+
+    ePerfSyslogWrite=96,      //!< logged message to syslog
+    ePerfBackupStarted=97,    //!< hot backup initiated
+    ePerfBackupError=98,      //!< hot backup had an error
 
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)

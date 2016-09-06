@@ -83,6 +83,13 @@ extern std::string OldInfoLogFileName(const std::string& dbname);
 // "dbname".  The result will be prefixed with "dbname".
 extern std::string CowFileName(const std::string& dbname);
 
+// Append appropriate "backup" string to input path
+extern std::string BackupPath(const std::string& dbname, int backup_num);
+
+// update tiered_fast_prefix and tiered_slow_prefix members of
+//  given Options object to point to backup path
+extern bool SetBackupPaths(Options & options, int backup_num);
+
 // If filename is a leveldb file, store the type of the file in *type.
 // The number encoded in the filename is stored in *number.  If the
 // filename was successfully parsed, returns true.  Else return false.

@@ -111,6 +111,32 @@ std::string CowFileName(const std::string& dbname) {
   return dbname + "/COW";
 }
 
+
+// Append appropriate "backup" string to input path
+std::string BackupPath(const std::string& dbname, int backup_num) {
+    std::string dirname;
+
+  char buf[100];
+  if (0 != backup_num)
+      snprintf(buf, sizeof(buf), "/backup.%-d", backup_num);
+  else
+      snprintf(buf, sizeof(buf), "/backup");
+
+  return(dbname + buf);
+}
+
+
+// update tiered_fast_prefix and tiered_slow_prefix members of
+//  given Options object to point to desired backup path
+bool SetBackupPaths(Options & options, int backup_num) {
+
+    options.tiered_fast_prefix = BackupPath(options.tiered_fast_prefix, backup_num);
+    options.tiered_slow_prefix = BackupPath(options.tiered_slow_prefix, backup_num);
+
+    return(true);
+}
+
+
 // Owned filenames have the form:
 //    dbname/CURRENT
 //    dbname/LOCK

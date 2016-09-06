@@ -52,11 +52,14 @@ class DBImpl : public DB {
 
   // Extra methods (for testing) that are not in the public DB interface
 
+  const Options & GetOptions() const { return options_; };
+
   // Compact any files in the named level that overlap [*begin,*end]
   void TEST_CompactRange(int level, const Slice* begin, const Slice* end);
 
-  // Force current memtable contents to be compacted.
-  Status TEST_CompactMemTable();
+  // Force current memtable contents to be compacted, waits for completion
+  Status CompactMemTableSynchronous();
+  Status TEST_CompactMemTable();       // wraps CompactMemTableSynchronous (historical)
 
   // Return an internal iterator over the current state of the database.
   // The keys of this iterator are internal keys (see format.h).
@@ -67,9 +70,18 @@ class DBImpl : public DB {
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
 
+  // These are routines that DBListImpl calls across all open databases
   void ResizeCaches() {double_cache.ResizeCaches();};
   size_t GetCacheCapacity() {return(double_cache.GetCapacity(false));}
   void PurgeExpiredFileCache() {double_cache.PurgeExpiredFiles();};
+
+  // in util/hot_backup.cc
+  void HotBackup();
+  bool PurgeWriteBuffer();
+  bool WriteBackupManifest();
+  bool CreateBackupLinks(Version * Version, Options & BackupOptions);
+  bool CopyLOGSegment(long FileEnd);
+  void HotBackupComplete();
 
   void BackgroundCall2(Compaction * Compact);
   void BackgroundImmCompactCall();
@@ -112,7 +124,7 @@ class DBImpl : public DB {
 
   Status WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit, Version* base);
 
-  Status MakeRoomForWrite(bool force /* compact even if there is room? */);
+  Status MakeRoomForWrite(bool force /* TRUE forces memtable rotation to disk (for testing) */);
   Status NewRecoveryLog(uint64_t NewLogNumber);
 
   WriteBatch* BuildBatchGroup(Writer** last_writer);
@@ -206,9 +218,6 @@ class DBImpl : public DB {
   };
   CompactionStats stats_[config::kNumLevels];
 
-  // hint to background thread when level0 is backing up
-  volatile bool level0_good;
-
   volatile uint64_t throttle_end;
   volatile uint32_t running_compactions_;
   volatile size_t current_block_size_;    // last dynamic block size computed
@@ -218,6 +227,8 @@ class DBImpl : public DB {
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};
   Cache * file_cache() {return(double_cache.GetFileCache());};
+
+  volatile bool hotbackup_pending_;
 
   // No copying allowed
   DBImpl(const DBImpl&);

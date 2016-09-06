@@ -111,6 +111,7 @@ class Tester {
 };
 
 #define ASSERT_TRUE(c) ::leveldb::test::Tester(__FILE__, __LINE__).Is((c), #c)
+#define ASSERT_FALSE(c) ::leveldb::test::Tester(__FILE__, __LINE__).Is(!(c), #c)
 #define ASSERT_OK(s) ::leveldb::test::Tester(__FILE__, __LINE__).IsOk((s))
 #define ASSERT_NOTOK(s) ::leveldb::test::Tester(__FILE__, __LINE__).IsNotOk((s))
 #define ASSERT_EQ(a,b) ::leveldb::test::Tester(__FILE__, __LINE__).IsEq((a),(b))
