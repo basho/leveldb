@@ -102,7 +102,7 @@ public:
 
 
 /**
- * Initial code used the existance of /etc/riak/hot_backup file
+ * Initial code used the existance of /etc/basho/leveldb_hot_backup file
  *  as flag to start a backup.
  */
 TEST(HotBackupTester, FileTriggerTest)

@@ -90,7 +90,7 @@ HotBackup::IsTriggerSet()
     int ret_val;
 
     //
-    // This is code polls for existence of /etc/riak/hot_backup
+    // This is code polls for existence of /etc/basho/leveldb_hot_backup
     //
     ret_val=access(GetTriggerPath(), F_OK);
     ret_flag=(-1!=ret_val);

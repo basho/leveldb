@@ -33,7 +33,7 @@ namespace config {
 // how many hot backup directories:  backup, backup.1, ... backup.(kNumBackups-1)
 static const int kNumBackups = 5;
 
-static const char * kTriggerFileName="/etc/riak/hot_backup";
+static const char * kTriggerFileName="/etc/basho/leveldb_hot_backup";
 
 }   // namespace config
 
