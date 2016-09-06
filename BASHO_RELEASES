@@ -1,3 +1,7 @@
+github.com tag 2.0.28 - September 6, 2016
+-----------------------------------------
+mv-hot-backup:  add externally triggered hot backup feature
+
 github.com tag 2.0.27 - August 22, 2016
 ---------------------------------------
 mv-mem-fences:  fix iterator double delete bug in eleveldb and
