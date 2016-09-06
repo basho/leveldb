@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "db/skiplist.h"
 #include <set>
 #include "leveldb/env.h"
@@ -468,7 +471,7 @@ RunSequentialInsert(
 
   uint64_t averageTime = (totalTime / (loopCount - 2));
   double timePerKey = (double)averageTime / (double)NumKeys;
-  fprintf( stderr, "   Average insertion time: %llu (%f/key)\n", averageTime, timePerKey );
+  fprintf( stderr, "   Average insertion time: %" PRIu64 " (%f/key)\n", averageTime, timePerKey );
 }
 
 TEST(SkipTest, SequentialInsert_NoLock_ForwardInsert)
