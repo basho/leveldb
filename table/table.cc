@@ -36,6 +36,7 @@ struct Table::Rep {
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   Block* index_block;
+  CompressionType compress;
   SstCounters sst_counters;
 };
 
@@ -81,6 +82,7 @@ Status Table::Open(const Options& options,
     rep->file_size = size;
     rep->metaindex_handle = footer.metaindex_handle();
     rep->index_block = index_block;
+    rep->compress = contents.compress;
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     rep->filter_data = NULL;
     rep->filter_data_size = 0;
@@ -392,5 +394,7 @@ Table::TableObjectSize()
 size_t
 Table::TEST_FilterDataSize() {return(rep_->filter_data_size);};
 
+CompressionType
+Table::GetCompressionType() const {return(rep_->compress);};
 
 }  // namespace leveldb

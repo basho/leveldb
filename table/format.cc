@@ -116,6 +116,8 @@ Status ReadBlock(RandomAccessFile* file,
 
   if (s.ok())
   {
+      // save compression type then process compression
+      result->compress=(CompressionType)data[n];
       switch (data[n]) {
           case kNoCompression:
               if (data != buf) {

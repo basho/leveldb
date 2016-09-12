@@ -67,6 +67,9 @@ class Table {
   //  ("virtual" is for unit test activites)
   virtual uint64_t GetFileSize();
 
+  // riak routine to retrieve compression type used in table
+  virtual CompressionType GetCompressionType() const;
+
   // access routines for testing tools, not for public use
   Block * TEST_GetIndexBlock();
   size_t TEST_TableObjectSize() {return(TableObjectSize());};

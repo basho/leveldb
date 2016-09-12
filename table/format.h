@@ -87,6 +87,7 @@ struct BlockContents {
   Slice data;           // Actual contents of data
   bool cachable;        // True iff data can be cached
   bool heap_allocated;  // True iff caller should delete[] data.data()
+  CompressionType compress;  // type of compression seen in ReadBlock
 };
 
 // Read the block identified by "handle" from "file".  On failure

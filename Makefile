@@ -41,7 +41,14 @@ TOOLS = \
 	leveldb_repair \
 	perf_dump \
 	sst_rewrite \
+	sst_rewrite_test \
 	sst_scan
+
+TOOLS_LIB     := libldbtools.a
+TOOLS_LIB_SRC := tools/ldb_table.cc tools/rewrite_state.cc
+TOOLS_LIB_OBJ := $(TOOLS_LIB_SRC:.cc=.o)
+TOOLS_LIB_DEP := $(TOOLS_LIB_SRC:.cc=.d)
+DEPEND        += $(TOOLS_LIB_DEP)
 
 PROGRAMS = db_bench $(TESTS) $(TOOLS)
 BENCHMARKS = db_bench_sqlite3 db_bench_tree_db
@@ -92,7 +99,7 @@ all: $(SHARED) $(LIBRARY)
 test check: all $(PROGRAMS) $(TESTS)
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done
 
-tools: all $(TOOLS)
+tools: all $(TOOLS_LIB) $(TOOLS)
 
 #
 # command line targets:  debug and prof
@@ -117,6 +124,10 @@ $(LIBRARY): $(LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(LIBOBJECTS)
 
+$(TOOLS_LIB): $(TOOLS_LIB_OBJ)
+	rm -f $@
+	$(AR) -rs $@ $(TOOLS_LIB_OBJ)
+
 #
 # all tools, programs, and tests depend upon the static library
 $(TESTS) $(PROGRAMS) $(TOOLS) : $(LIBRARY)
@@ -124,6 +135,10 @@ $(TESTS) $(PROGRAMS) $(TOOLS) : $(LIBRARY)
 #
 # all tests depend upon the test harness
 $(TESTS) : $(TESTHARNESS)
+
+#
+# all tools depend upon the tools library (or will eventually)
+$(TOOLS) : $(TOOLS_LIB)
 
 #
 # tools, programs, and tests will compile to the root directory
@@ -204,9 +219,9 @@ else
 %: db/%.c
 	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ $(LEVEL_LDFLAGS) $(LDFLAGS)
 
-# for tools, omits test harness
+# for tools, adds libldbtools
 %: tools/%.cc
-	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< -o $@ $(LEVEL_LDFLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $< $(TESTHARNESS) -o $@ $(LEVEL_LDFLAGS) $(LDFLAGS) -lldbtools
 
 endif
 
