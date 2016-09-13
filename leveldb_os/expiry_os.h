@@ -46,6 +46,10 @@ public:
     // Print expiry options to LOG file
     virtual void Dump(Logger * log) const;
 
+    // Quick test to allow manifest logic and such know if
+    //  extra expiry logic should be checked
+    virtual bool ExpiryActivated() const {return(expiry_enabled);};
+
     // db/write_batch.cc MemTableInserter::Put() calls this.
     // returns false on internal error
     virtual bool MemTableInserterCallback(

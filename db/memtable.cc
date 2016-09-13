@@ -147,7 +147,7 @@ bool MemTable::Get(const LookupKey& key, Value* value, Status* s,
         case kTypeValueExplicitExpiry:
         {
             bool expired=false;
-            if (NULL!=options && NULL!=options->expiry_module.get())
+            if (NULL!=options && options->ExpiryActivated())
                 expired=options->expiry_module->MemTableCallback(internal_key);
             if (expired)
             {

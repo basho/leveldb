@@ -145,6 +145,8 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
       r->sst_counters.Set(eSstCountSequence,ExtractSequenceNumber(key));
 
   // statistics if an expiry key
+  //  Note: not using ExpiryActivated().  Forcing expiry statistics which
+  //  are upgrade / downgrade safe.
   if (NULL!=r->options.expiry_module.get())
   {
       r->options.expiry_module->TableBuilderCallback(key, r->sst_counters);

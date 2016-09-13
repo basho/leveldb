@@ -89,6 +89,7 @@ Options::Dump(
     Log(log,"    Options.tiered_slow_prefix: %s", tiered_slow_prefix.c_str());
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
     Log(log,"  Options.cache_object_warming: %s", cache_object_warming ? "true" : "false");
+    Log(log,"       Options.ExpiryActivated: %s", ExpiryActivated() ? "true" : "false");
 
     if (NULL!=expiry_module.get())
         expiry_module->Dump(log);

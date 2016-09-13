@@ -272,7 +272,7 @@ Status DBImpl::NewDB() {
   {
     log::Writer log(file);
     std::string record;
-    new_db.EncodeTo(&record);
+    new_db.EncodeTo(&record, options_.ExpiryActivated());
     s = log.AddRecord(record);
     if (s.ok()) {
       s = file->Close();

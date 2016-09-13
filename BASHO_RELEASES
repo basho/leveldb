@@ -1,3 +1,9 @@
+github.com tag 2.0.29 - September 13, 2016
+------------------------------------------
+mv-expiry-manifest:  only switch to expiry enabled manifest format
+                     if expiry function enabled.  Eases downgrade
+                     during early Riak releases containing expiry
+
 github.com tag 2.0.28 - September 6, 2016
 -----------------------------------------
 mv-hot-backup:  add externally triggered hot backup feature
