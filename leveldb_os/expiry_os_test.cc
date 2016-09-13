@@ -85,6 +85,7 @@ TEST(ExpiryTester, Defaults)
     ASSERT_EQ(expiry.expiry_enabled, false);
     ASSERT_EQ(expiry.expiry_minutes, 0);
     ASSERT_EQ(expiry.whole_file_expiry, false);
+    ASSERT_EQ(expiry.ExpiryActivated(), false);
 
 }   // test Defaults
 
@@ -103,6 +104,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
 
     module.expiry_enabled=true;
     module.whole_file_expiry=true;
+    ASSERT_EQ(module.ExpiryActivated(), true);
 
     // deletion, do nothing
     type=kTypeDeletion;
@@ -185,9 +187,11 @@ TEST(ExpiryTester, MemTableCallback)
     ExpiryTime expiry;
     Slice key, value;
 
+    ASSERT_EQ(module.ExpiryActivated(), false);
     module.expiry_enabled=true;
     module.whole_file_expiry=true;
     module.expiry_minutes=5;
+    ASSERT_EQ(module.ExpiryActivated(), true);
 
     before=port::TimeUint64();
     SetTimeMinutes(before);
@@ -213,11 +217,14 @@ TEST(ExpiryTester, MemTableCallback)
     ASSERT_EQ(flag, true);
     // disable expiry
     module.expiry_enabled=false;
+    ASSERT_EQ(module.ExpiryActivated(), false);
+
     flag=module.MemTableCallback(key3.internal_key());
     ASSERT_EQ(flag, false);
 
     // age expiry
     module.expiry_enabled=true;
+    ASSERT_EQ(module.ExpiryActivated(), true);
     module.expiry_minutes=2;
     after=GetTimeMinutes();
     InternalKey key4("AgeKey", after, 0, kTypeValueWriteTime);
@@ -271,6 +278,8 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     ExpiryModuleOS module;
     VersionTester ver;
     int level;
+
+    ASSERT_EQ(ver.m_Options.ExpiryActivated(), false);
 
     module.expiry_enabled=true;
     module.whole_file_expiry=true;
@@ -798,6 +807,7 @@ public:
         //  allocation.
         m_Expiry=new ExpTestModule;
         m_Options.expiry_module=m_Expiry;
+        m_Expiry->expiry_enabled=true;
 
         OpenTestDB();
     };
@@ -1191,10 +1201,14 @@ TEST(ExpiryManifestTester, Overlap1)
     VerifyManifest(Overlap1, manifest_count);
     VerifyFiles(Overlap1, manifest_count, 0);
 
-    // enable compaction expiry
+
+    // fully enable compaction expiry
+    m_Expiry->expiry_enabled=false;
+    ASSERT_EQ(m_Options.ExpiryActivated(), false);
     m_Expiry->expiry_enabled=true;
     m_Expiry->expiry_minutes=60;
     m_Expiry->whole_file_expiry=true;
+    ASSERT_EQ(m_Options.ExpiryActivated(), true);
 
     m_DB->ShiftClockMinutes(10);
     m_Expiry->m_ExpiryAllow=1;

@@ -258,6 +258,9 @@ struct Options {
 
   void Dump(Logger * log) const;
 
+  bool ExpiryActivated() const
+        {return(NULL!=expiry_module.get() && expiry_module->ExpiryActivated());};
+
 private:
 
 };
