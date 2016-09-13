@@ -455,7 +455,7 @@ class Repairer {
     {
       log::Writer log(file);
       std::string record;
-      edit_.EncodeTo(&record);
+      edit_.EncodeTo(&record);  // manifest format is default for release, options_ often incomplete
       status = log.AddRecord(record);
     }
     if (status.ok()) {

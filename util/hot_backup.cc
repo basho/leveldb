@@ -479,7 +479,7 @@ DBImpl::WriteBackupManifest()
     {
         log::Writer log(file);
         std::string record;
-        edit.EncodeTo(&record);
+        edit.EncodeTo(&record, options_.ExpiryActivated());
         status = log.AddRecord(record);
 
         if (status.ok())

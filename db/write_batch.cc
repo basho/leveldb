@@ -146,7 +146,7 @@ class MemTableInserter : public WriteBatch::Handler {
     ValueType type_use(type);
     ExpiryTime expiry_use(expiry);
 
-    if (NULL!=options_ && NULL!=options_->expiry_module.get())
+    if (NULL!=options_ && options_->ExpiryActivated())
         options_->expiry_module->MemTableInserterCallback(key, value, type_use, expiry_use);
     mem_->Add(sequence_, (ValueType)type_use, key, value, expiry_use);
     sequence_++;

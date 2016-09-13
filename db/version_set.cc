@@ -313,7 +313,7 @@ static bool SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   } else {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
       match=true;
-      if (NULL!=s->options && NULL!=s->options->expiry_module.get())
+      if (NULL!=s->options && s->options->ExpiryActivated())
         expired=s->options->expiry_module->KeyRetirementCallback(parsed_key);
       s->state = (parsed_key.type != kTypeDeletion && !expired) ? kFound : kDeleted;
       if (s->state == kFound) {
@@ -904,7 +904,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
             // Write new record to MANIFEST log
             if (s.ok()) {
                 std::string record;
-                edit->EncodeTo(&record, true);
+                edit->EncodeTo(&record, options_->ExpiryActivated());
                 s = descriptor_log_->AddRecord(record);
                 if (s.ok()) {
                     s = descriptor_file_->Sync();
@@ -1249,7 +1249,7 @@ VersionSet::Finalize(Version* v)
             }   // if
 
             // finally test for expiry if no compaction candidates
-            if (!compaction_found && NULL!=options_->expiry_module.get())
+            if (!compaction_found && options_->ExpiryActivated())
             {
                 compaction_found=options_->expiry_module->CompactionFinalizeCallback(false,
                                                                                      *v,
@@ -1410,7 +1410,7 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
   }
 
   std::string record;
-  edit.EncodeTo(&record, true);
+  edit.EncodeTo(&record, options_->ExpiryActivated());
   return log->AddRecord(record);
 }
 
