@@ -20,6 +20,9 @@ void VersionEdit::Clear() {
   has_prev_log_number_ = false;
   has_next_file_number_ = false;
   has_last_sequence_ = false;
+  has_f1_files_ = false;
+  has_f2_files_ = false;
+
   deleted_files_.clear();
   new_files_.clear();
 }
@@ -182,6 +185,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest))
         {
+          has_f1_files_ = true;
           f.level=level;
           new_files_.push_back(std::make_pair(level, f));
         } else {
@@ -199,6 +203,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             GetVarint64(&input, &f.exp_write_high) &&
             GetVarint64(&input, &f.exp_explicit_high))
         {
+          has_f2_files_ = true;
           f.level=level;
           new_files_.push_back(std::make_pair(level, f));
         } else {
@@ -272,6 +277,12 @@ std::string VersionEdit::DebugString() const {
     r.append(f.smallest.DebugString());
     r.append(" .. ");
     r.append(f.largest.DebugString());
+    r.append(" ");
+    AppendNumberTo(&r, f.exp_write_low);
+    r.append(" ");
+    AppendNumberTo(&r, f.exp_write_high);
+    r.append(" ");
+    AppendNumberTo(&r, f.exp_explicit_high);
   }
   r.append("\n}\n");
   return r;
