@@ -17,11 +17,14 @@ namespace leveldb {
 
 static void DeleteEntry(const Slice& key, void* value) {
   TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
-  if (NULL!=tf->doublecache)
-      tf->doublecache->SubFileSize(tf->table->GetFileSize());
-  delete tf->table;
-  delete tf->file;
-  delete tf;
+  if (0==dec_and_fetch(&tf->user_count))
+  {
+      if (NULL!=tf->doublecache)
+          tf->doublecache->SubFileSize(tf->table->GetFileSize());
+      delete tf->table;
+      delete tf->file;
+      delete tf;
+  }   // if
 }
 
 static void UnrefEntry(void* arg1, void* arg2) {
@@ -46,7 +49,8 @@ TableCache::~TableCache() {
 }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level,
-                             Cache::Handle** handle, bool is_compaction) {
+                             Cache::Handle** handle, bool is_compaction,
+                             bool for_iterator) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
@@ -90,6 +94,30 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
   }
   else
   {
+      Table *table = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->table;
+
+      // this is NOT first access, see if bloom filter can load now
+      if (!for_iterator && table->ReadFilter())
+      {
+          // TableAndFile now going to be present in two cache entries
+          TableAndFile* tf = reinterpret_cast<TableAndFile*>(cache_->Value(*handle));
+          inc_and_fetch(&tf->user_count);
+
+          //  must clean file size, do not want double count
+          if (NULL!=tf->doublecache)
+              tf->doublecache->SubFileSize(tf->table->GetFileSize());
+
+          cache_->Release(*handle);
+          if (tf->level<config::kNumOverlapLevels)
+              cache_->Release(*handle);
+
+          *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
+          if (level<config::kNumOverlapLevels)
+              cache_->Addref(*handle);
+
+          gPerfCounters->Inc(ePerfDebug0);
+      }   // if
+
       // for Linux, let fadvise start precaching
       if (is_compaction)
       {
@@ -112,7 +140,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   }
 
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, level, &handle, options.IsCompaction());
+  Status s = FindTable(file_number, file_size, level, &handle, options.IsCompaction(), true);
 
   if (!s.ok()) {
     return NewErrorIterator(s);
