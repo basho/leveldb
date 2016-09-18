@@ -281,7 +281,7 @@ DBImpl::BackgroundExpiry(
     assert(NULL != Compact && NULL!=options_.expiry_module.get());
     assert(NULL != Compact->version());
 
-    if (NULL!=Compact && NULL!=options_.expiry_module.get())
+    if (NULL!=Compact && options_.ExpiryActivated())
     {
         VersionEdit edit;
         int level(Compact->level());
