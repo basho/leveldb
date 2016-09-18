@@ -27,6 +27,13 @@ void VersionEdit::Clear() {
   new_files_.clear();
 }
 
+/**
+ * EncodeTo serializes the VersionEdit object
+ *  to the "dst" string parameter.  "format2" flag
+ *  indicates whether serialization should use original
+ *  Google format for file objects (false) or Basho's updated
+ *  file2 format for expiry enabled file objects (true)
+ */
 void VersionEdit::EncodeTo(std::string* dst, bool format2) const {
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
