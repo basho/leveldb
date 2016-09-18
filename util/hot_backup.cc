@@ -621,7 +621,7 @@ DBImpl::CopyLOGSegment(long EndPos)
     {
         long count;
 
-        count=(gMapSize<remaining ? gMapSize : remaining);
+        count=(gMapSize<(uint64_t)(remaining ? gMapSize : remaining));
         s=src->Read(count, &data_read, (char *)buffer.data());
 
         if (s.ok())
