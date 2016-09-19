@@ -1464,11 +1464,18 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
   if (s.ok() && current_entries > 0) {
     // Verify that the table is usable
+    Table * table_ptr;
     Iterator* iter = table_cache_->NewIterator(ReadOptions(),
                                                output_number,
                                                current_bytes,
-                                               compact->compaction->level()+1);
+                                               compact->compaction->level()+1,
+                                               &table_ptr);
     s = iter->status();
+    // Riak specific: bloom filter is no longer read by default,
+    //  force read on highly used overlapped table files
+    if (s.ok() && VersionSet::IsLevelOverlapped(compact->compaction->level()+1))
+        table_ptr->ReadFilter();
+
     delete iter;
     if (s.ok()) {
       Log(options_.info_log,
