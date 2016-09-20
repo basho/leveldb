@@ -206,7 +206,7 @@ ThrottleThread(
                     * ((tot_backlog*100) / tot_compact);
 
                 new_throttle /= 10000;  // remove *100 stuff
-                //new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
+                new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
 
                 if (0==new_throttle)
                     new_throttle=1;     // throttle must have an effect
