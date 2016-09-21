@@ -89,12 +89,12 @@ class DBImpl : public DB {
   bool IsCompactionScheduled();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
 
- protected:
   // memory barrier set/retrieval of last_penalty_
   uint64_t GetLastPenalty() {return(add_and_fetch(&last_penalty_, (uint64_t)0));};
   void SetLastPenalty(uint64_t NewPenalty)
   {compare_and_swap(&last_penalty_, (uint64_t)last_penalty_, NewPenalty);};
 
+protected:
   friend class DB;
   struct CompactionState;
   struct Writer;
