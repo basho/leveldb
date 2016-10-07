@@ -100,18 +100,24 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       if (!for_iterator && table->ReadFilter())
       {
           // TableAndFile now going to be present in two cache entries
+	  //  1. retrieve old entry within file cache
           TableAndFile* tf = reinterpret_cast<TableAndFile*>(cache_->Value(*handle));
           inc_and_fetch(&tf->user_count);
 
-          //  must clean file size, do not want double count
+          //  2. must clean file size, do not want double count
           if (NULL!=tf->doublecache)
               tf->doublecache->SubFileSize(tf->table->GetFileSize());
 
+	  //  3. release current reference (and possible special overlap reference)
           cache_->Release(*handle);
           if (tf->level<config::kNumOverlapLevels)
               cache_->Release(*handle);
 
+	  //  4. create second table cache entry using TableObjectSize that now includes
+	  //     bloom filter size
           *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
+
+	  //  5. set double reference if an overlapped file (prevents from being flushed)
           if (level<config::kNumOverlapLevels)
               cache_->Addref(*handle);
 
