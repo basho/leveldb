@@ -135,6 +135,7 @@ main(
                     tot_size=0;
 
                     table = reinterpret_cast<leveldb::TableAndFile*>(table_cache->TEST_GetInternalCache()->Value(fhandle))->table;
+		    table->ReadFilter();
                     file = reinterpret_cast<leveldb::TableAndFile*>(table_cache->TEST_GetInternalCache()->Value(fhandle))->file;
                     it = table->TEST_GetIndexBlock()->NewIterator(options.comparator);
 
