@@ -149,14 +149,12 @@ void Table::ReadMeta(const Footer& footer) {
               iter->Seek(key);
               if (iter->Valid() && iter->key() == Slice(key))
               {
-#if 0
-                  ReadFilter(iter->value(), policy);
-                  gPerfCounters->Inc(ePerfBlockFilterRead);
-#else
-                  Slice v = iter->value();
+		  // store information needed to load bloom filter
+		  //  at a later time
+		  Slice v = iter->value();
                   rep_->filter_handle.DecodeFrom(&v);
                   rep_->filter_policy = policy;
-#endif
+
                   found=true;
               }   // if
           }   //if
@@ -200,20 +198,12 @@ Table::ReadFilter()
     return(ret_flag);
 }   // ReadFilter
 
+// Private version of ReadFilter that does the actual work
 void
 Table::ReadFilter(
-//    const Slice& filter_handle_value,
     BlockHandle & filter_handle,
     const FilterPolicy * policy)
 {
-#if 0
-  Slice v = filter_handle_value;
-  BlockHandle filter_handle;
-  if (!filter_handle.DecodeFrom(&v).ok()) {
-    return;
-  }
-#endif
-
   // We might want to unify with ReadBlock() if we start
   // requiring checksum verification in Table::Open.
   ReadOptions opt;
