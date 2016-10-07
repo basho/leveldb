@@ -1122,8 +1122,6 @@ VersionSet::Finalize(Version* v)
             else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted
                      && (parent_level_bytes<=gLevelTraits[level+1].m_DesiredBytesForLevel
                          || config::kL0_CompactionTrigger <= v->files_[level].size()))
-
-//                         || gLevelTraits[level].m_MaxBytesForLevel<(uint64_t)TotalFileSize(v->files_[level])))
             {
                 // good ... stop consideration
             }   // else if
@@ -1184,16 +1182,7 @@ VersionSet::Finalize(Version* v)
                 // score of 1 at compaction trigger, incrementing for each thereafter
                 if ( config::kL0_CompactionTrigger <= v->files_[level].size())
                     score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
-#if 0
-                // special case: hold off on highest overlapped level where possible to
-                //  give more time to landing level
-                if (!gLevelTraits[level+1].m_OverlappedFiles
-                    && v->files_[level].size()< config::kL0_SlowdownWritesTrigger)
-                {
-                    if (1 < (parent_level_bytes / gLevelTraits[level+1].m_DesiredBytesForLevel))
-                        score=0;
-                }   // if
-#endif
+
                 is_grooming=false;
 
                 // early overlapped compaction
@@ -1325,13 +1314,8 @@ VersionSet::UpdatePenalty(
                 if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
                 {
                     // this code block will not execute due both "if"s using same values now
-#if 0
-                    value = (v->files_[level].size() - config::kL0_CompactionTrigger);
-                    count=0;
-#else
                     value = 1;
                     count = 0;
-#endif
                 }   // if
 
                 // no longer estimating work, now trying to throw on the breaks
@@ -1366,7 +1350,7 @@ VersionSet::UpdatePenalty(
                 value=5;
                 increment=8;
             }   // if
-#if 1
+
             // this penalty is not about "backlog", its goal is to
             //  slow the operations during a known period of high
             //  background activity.  Overall, latencies get better
@@ -1379,7 +1363,7 @@ VersionSet::UpdatePenalty(
                 increment=1;
                 count=0;
             }   // else if
-#endif
+
         }   // else
 
         for (loop=0; loop<count; ++loop)
