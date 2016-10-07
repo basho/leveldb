@@ -96,7 +96,6 @@ class Table {
 
 
   void ReadMeta(const Footer& footer);
-//  void ReadFilter(const Slice& filter_handle_value, const class FilterPolicy * policy);
   void ReadFilter(class BlockHandle & filter_handle_value, const class FilterPolicy * policy);
   void ReadSstCounters(const Slice& sst_counters_handle_value);
 
