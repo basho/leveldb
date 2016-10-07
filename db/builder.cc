@@ -108,6 +108,7 @@ Status BuildTable(const std::string& dbname,
       if (s.ok() && VersionSet::IsLevelOverlapped(meta->level))
           table_ptr->ReadFilter();
 
+      // table_ptr is owned by it and therefore invalidated by this delete
       delete it;
     }
   }
