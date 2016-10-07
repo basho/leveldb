@@ -1476,7 +1476,9 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
     if (s.ok() && VersionSet::IsLevelOverlapped(compact->compaction->level()+1))
         table_ptr->ReadFilter();
 
+    // table_ptr invalidated by this delete
     delete iter;
+    
     if (s.ok()) {
       Log(options_.info_log,
           "Generated table #%llu: %lld keys, %lld bytes",
