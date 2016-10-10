@@ -19,11 +19,12 @@ static void DeleteEntry(const Slice& key, void* value) {
   TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
   if (0==dec_and_fetch(&tf->user_count))
   {
-      if (NULL!=tf->doublecache)
-          tf->doublecache->SubFileSize(tf->table->GetFileSize());
-      delete tf->table;
-      delete tf->file;
-      delete tf;
+    if (NULL!=tf->doublecache)
+      tf->doublecache->SubFileSize(tf->table->GetFileSize());
+    delete tf->table;
+    delete tf->file;
+    delete tf;
+    gPerfCounters->Inc(ePerfDebug1);
   }   // if
 }
 
@@ -94,44 +95,44 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
   }
   else
   {
-      Table *table = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->table;
+    Table *table = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->table;
 
-      // this is NOT first access, see if bloom filter can load now
-      if (!for_iterator && table->ReadFilter())
-      {
-          // TableAndFile now going to be present in two cache entries
-	  //  1. retrieve old entry within file cache
-          TableAndFile* tf = reinterpret_cast<TableAndFile*>(cache_->Value(*handle));
-          inc_and_fetch(&tf->user_count);
+    // this is NOT first access, see if bloom filter can load now
+    if (!for_iterator && table->ReadFilter())
+    {
+      // TableAndFile now going to be present in two cache entries
+      //  1. retrieve old entry within file cache
+      TableAndFile* tf = reinterpret_cast<TableAndFile*>(cache_->Value(*handle));
+      inc_and_fetch(&tf->user_count);
 
-          //  2. must clean file size, do not want double count
-          if (NULL!=tf->doublecache)
-              tf->doublecache->SubFileSize(tf->table->GetFileSize());
+      //  2. must clean file size, do not want double count
+      if (NULL!=tf->doublecache)
+        tf->doublecache->SubFileSize(tf->table->GetFileSize());
 
-	  //  3. release current reference (and possible special overlap reference)
-          cache_->Release(*handle);
-          if (tf->level<config::kNumOverlapLevels)
-              cache_->Release(*handle);
+      //  3. release current reference (and possible special overlap reference)
+      cache_->Release(*handle);
+      if (tf->level<config::kNumOverlapLevels)
+        cache_->Release(*handle);
 
-	  //  4. create second table cache entry using TableObjectSize that now includes
-	  //     bloom filter size
-          *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
+      //  4. create second table cache entry using TableObjectSize that now includes
+      //     bloom filter size
+      *handle = cache_->Insert(key, tf, table->TableObjectSize(), &DeleteEntry);
 
-	  //  5. set double reference if an overlapped file (prevents from being flushed)
-          if (level<config::kNumOverlapLevels)
-              cache_->Addref(*handle);
+      //  5. set double reference if an overlapped file (prevents from being flushed)
+      if (level<config::kNumOverlapLevels)
+        cache_->Addref(*handle);
 
-          gPerfCounters->Inc(ePerfDebug0);
-      }   // if
+      gPerfCounters->Inc(ePerfDebug0);
+    }   // if
 
-      // for Linux, let fadvise start precaching
-      if (is_compaction)
-      {
-          RandomAccessFile *file = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->file;
-          file->SetForCompaction(file_size);
-      }   // if
+    // for Linux, let fadvise start precaching
+    if (is_compaction)
+    {
+        RandomAccessFile *file = reinterpret_cast<TableAndFile*>(cache_->Value(*handle))->file;
+        file->SetForCompaction(file_size);
+    }   // if
 
-      gPerfCounters->Inc(ePerfTableCached);
+    gPerfCounters->Inc(ePerfTableCached);
   }   // else
   return s;
 }

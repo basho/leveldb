@@ -149,9 +149,9 @@ void Table::ReadMeta(const Footer& footer) {
               iter->Seek(key);
               if (iter->Valid() && iter->key() == Slice(key))
               {
-		  // store information needed to load bloom filter
-		  //  at a later time
-		  Slice v = iter->value();
+                  // store information needed to load bloom filter
+                  //  at a later time
+                  Slice v = iter->value();
                   rep_->filter_handle.DecodeFrom(&v);
                   rep_->filter_policy = policy;
 
