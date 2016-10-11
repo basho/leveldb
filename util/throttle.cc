@@ -206,7 +206,7 @@ ThrottleThread(
                     * ((tot_backlog*100) / tot_compact);
 
                 new_throttle /= 10000;  // remove *100 stuff
-                //new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
+                new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
 
                 if (0==new_throttle)
                     new_throttle=1;     // throttle must have an effect
@@ -272,7 +272,8 @@ ThrottleThread(
         // This is a second non-throttle task added to this one minute loop.  Pattern forming.
         //  See if hot backup wants to initiate.
         //
-        CheckHotBackupTrigger();
+        // disabled Oct 7, 2016 per management discussion.  Will move to Riak EE product.
+	// CheckHotBackupTrigger();
 
         // nudge compaction logic of potential grooming
         if (0==gCompactionThreads->m_WorkQueueAtomic)  // user databases

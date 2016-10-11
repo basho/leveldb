@@ -11,6 +11,7 @@
 #include "db/dbformat.h"
 #include "db/table_cache.h"
 #include "db/version_edit.h"
+#include "db/version_set.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
@@ -94,11 +95,20 @@ Status BuildTable(const std::string& dbname,
 
     if (s.ok()) {
       // Verify that the table is usable
+      Table * table_ptr;
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
                                               meta->file_size,
-                                              meta->level);
+                                              meta->level,
+                                              &table_ptr);
       s = it->status();
+
+      // Riak specific: bloom filter is no longer read by default,
+      //  force read on highly used overlapped table files
+      if (s.ok() && VersionSet::IsLevelOverlapped(meta->level))
+          table_ptr->ReadFilter();
+
+      // table_ptr is owned by it and therefore invalidated by this delete
       delete it;
     }
   }

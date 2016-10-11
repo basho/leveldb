@@ -1,3 +1,11 @@
+github.com tag 2.0.30 - October 11, 2016
+----------------------------------------
+mv-delayed-bloom: - when opening an .sst table file, only load
+                    bloom filter on second Get() operation.  Saves time.
+                  - correct VersionSet::Finalize() logic for level 1 when
+                    when level 2 is above desired size
+                  - disable hot backup
+
 github.com tag 2.0.29 - September 13, 2016
 ------------------------------------------
 mv-expiry-manifest:  only switch to expiry enabled manifest format

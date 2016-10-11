@@ -17,6 +17,12 @@ static void TestEncodeDecode(
   ASSERT_TRUE(s.ok()) << s.ToString();
   parsed.EncodeTo(&encoded2,format2);
   ASSERT_EQ(encoded, encoded2);
+
+  if (parsed.HasF1Files() || parsed.HasF2Files())
+  {
+      ASSERT_EQ(parsed.HasF1Files(), !format2);
+      ASSERT_EQ(parsed.HasF2Files(), format2);
+  }   // if
 }
 
 class VersionEditTest { };

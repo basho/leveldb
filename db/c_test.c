@@ -56,7 +56,7 @@ static void CheckEqual(const char* expected, const char* v, size_t n) {
     fprintf(stderr, "%s: expected '%s', got '%s'\n",
             phase,
             (expected ? expected : "(null)"),
-            (v ? v : "(null"));
+            (v ? v : "(null)"));
     abort();
   }
 }

@@ -1120,7 +1120,8 @@ VersionSet::Finalize(Version* v)
 
             // overlapped and next level is not compacting
             else if (gLevelTraits[level].m_OverlappedFiles && !m_CompactionStatus[level+1].m_Submitted
-                     && parent_level_bytes<=gLevelTraits[level+1].m_DesiredBytesForLevel)
+                     && (parent_level_bytes<=gLevelTraits[level+1].m_DesiredBytesForLevel
+                         || config::kL0_CompactionTrigger <= v->files_[level].size()))
             {
                 // good ... stop consideration
             }   // else if
@@ -1182,23 +1183,22 @@ VersionSet::Finalize(Version* v)
                 if ( config::kL0_CompactionTrigger <= v->files_[level].size())
                     score += v->files_[level].size() - config::kL0_CompactionTrigger +1;
 
-                // special case: hold off on highest overlapped level where possible to
-                //  give more time to landing level
-                if (!gLevelTraits[level+1].m_OverlappedFiles
-                    && v->files_[level].size()< config::kL0_SlowdownWritesTrigger)
-                {
-                    if (1 < (parent_level_bytes / gLevelTraits[level+1].m_DesiredBytesForLevel))
-                        score=0;
-                }   // if
-
                 is_grooming=false;
 
                 // early overlapped compaction
                 //  only occurs if no other compactions running on groomer thread
-                if (0==score && grooming_trigger<=v->files_[level].size())
+                //  (no grooming if landing level is still overloaded)
+                if (0==score && grooming_trigger<=v->files_[level].size()
+                    && TotalFileSize(v->files_[config::kNumOverlapLevels]) 
+                       < gLevelTraits[config::kNumOverlapLevels].m_DesiredBytesForLevel)
                 {
-                    score=1;
-                    is_grooming=true;
+                    // secondary test, don't push too much to next Overlap too soon
+                    if (!gLevelTraits[level+1].m_OverlappedFiles 
+                         || v->files_[level+1].size()<=config::kL0_CompactionTrigger)
+                    {
+                        score=1;
+                        is_grooming=true;
+                    }   // if
                 }   // if
             }   // if
 
@@ -1307,14 +1307,15 @@ VersionSet::UpdatePenalty(
         {
 
             // compute penalty for write throttle if too many Level-0 files accumulating
-            if (config::kL0_CompactionTrigger < v->files_[level].size())
+            if (config::kL0_SlowdownWritesTrigger < v->files_[level].size())
             {
                 // assume each overlapped file represents another pass at same key
                 //   and we are "close" on compaction backlog
                 if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
                 {
-                    value = (v->files_[level].size() - config::kL0_CompactionTrigger);
-                    count=0;
+                    // this code block will not execute due both "if"s using same values now
+                    value = 1;
+                    count = 0;
                 }   // if
 
                 // no longer estimating work, now trying to throw on the breaks
@@ -1332,7 +1333,7 @@ VersionSet::UpdatePenalty(
                     }   // if
                     else
                     {   // slightly less penalty
-                        value=count+1;
+                        value=count;
                         count=0;
                     }   // else
                 }   // else
@@ -1358,9 +1359,11 @@ VersionSet::UpdatePenalty(
             {   // light penalty
                 count=(int)(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel);
                 value=count; // this approximates the number of compactions needed, no other penalty
+                value/=10;  // allow 10 files, approx 2G without throttle
                 increment=1;
                 count=0;
             }   // else if
+
         }   // else
 
         for (loop=0; loop<count; ++loop)

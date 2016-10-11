@@ -128,6 +128,10 @@ class VersionEdit {
   void EncodeTo(std::string* dst, bool format2=true) const;
   Status DecodeFrom(const Slice& src);
 
+  // unit test access to validate file entries' format types
+  bool HasF1Files() const {return(has_f1_files_);};
+  bool HasF2Files() const {return(has_f2_files_);};
+
   std::string DebugString() const;
 
 // Tag numbers for serialized VersionEdit.  These numbers are written to
@@ -161,6 +165,9 @@ enum Tag {
   bool has_prev_log_number_;
   bool has_next_file_number_;
   bool has_last_sequence_;
+  // following should be mutually exclusive, but tested independently to be sure
+  bool has_f1_files_;         // manifest uses format 1 (for unit tests)
+  bool has_f2_files_;         // manifest uses format 2 (for unit tests)
 
   USED_BY_NESTED_FRIEND2(std::vector< std::pair<int, InternalKey> > compact_pointers_)
   USED_BY_NESTED_FRIEND(DeletedFileSet deleted_files_)

@@ -67,6 +67,10 @@ class Table {
   //  ("virtual" is for unit test activites)
   virtual uint64_t GetFileSize();
 
+  // Riak routine to request bloom filter load on
+  //  second read operation (not iterator read)
+  bool ReadFilter();
+
   // access routines for testing tools, not for public use
   Block * TEST_GetIndexBlock();
   size_t TEST_TableObjectSize() {return(TableObjectSize());};
@@ -92,7 +96,7 @@ class Table {
 
 
   void ReadMeta(const Footer& footer);
-  void ReadFilter(const Slice& filter_handle_value, const class FilterPolicy * policy);
+  void ReadFilter(class BlockHandle & filter_handle_value, const class FilterPolicy * policy);
   void ReadSstCounters(const Slice& sst_counters_handle_value);
 
   // No copying allowed
