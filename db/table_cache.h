@@ -82,7 +82,9 @@ class TableCache {
   DoubleCache & doublecache_;
 
   // virtual to enable unit test overrides
-  virtual Status FindTable(uint64_t file_number, uint64_t file_size, int level, Cache::Handle**, bool is_compaction=false);
+  virtual Status FindTable(uint64_t file_number, uint64_t file_size, int level,
+                           Cache::Handle**, bool is_compaction=false,
+                           bool for_iterator=false);
 };
 
 
@@ -92,10 +94,11 @@ struct TableAndFile {
   DoubleCache * doublecache;
   uint64_t file_number;     // saved for cache object warming
   int level;                // saved for cache object warming
+  volatile uint32_t user_count;
 
    TableAndFile()
    : file(NULL), table(NULL), doublecache(NULL),
-     file_number(0), level(0)
+     file_number(0), level(0), user_count(1)
    {};
 };
 
