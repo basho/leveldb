@@ -422,6 +422,7 @@ command_help()
     fprintf(stderr, "      -x purge expiry data\n");
     fprintf(stderr, "      -m manifest only\n");
     fprintf(stderr, "      -k keep processing files even when some files fail\n");
+    fprintf(stderr, "      -o keep original files\n");
     fprintf(stderr, "      -f force rewrite even if compression/expiry ok\n");
     fprintf(stderr, "      -N only list files and expected rewrite, no real conversion\n");
     fprintf(stderr, "      -v verbose reporting (default)\n");

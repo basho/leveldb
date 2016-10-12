@@ -940,6 +940,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   return s;
 }
 
+
+/**
+ * Recover():  a.k.a. LoadPreviousManifest()
+ */
 Status VersionSet::Recover() {
   struct LogReporter : public log::Reader::Reporter {
     Status* status;
