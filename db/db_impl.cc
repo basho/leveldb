@@ -372,6 +372,7 @@ DBImpl::KeepOrDelete(
           case kCurrentFile:
           case kDBLockFile:
           case kInfoLogFile:
+          case kCacheWarming:
               keep = true;
               break;
       }   // switch
@@ -1478,7 +1479,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
     // table_ptr invalidated by this delete
     delete iter;
-    
+
     if (s.ok()) {
       Log(options_.info_log,
           "Generated table #%llu: %lld keys, %lld bytes",
