@@ -169,6 +169,16 @@ private:
 
 };  // class LegacyTask
 
+
+/**
+ * Riak Enterprise Edition's hot backup entry point
+ *
+ *  Called every 60 seconds to test for external hot backup trigger
+ *   (initiates backup if trigger seen)
+ */
+
+void CheckHotBackupTrigger();
+
 } // namespace leveldb
 
 

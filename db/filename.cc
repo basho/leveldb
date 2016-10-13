@@ -105,8 +105,7 @@ std::string OldInfoLogFileName(const std::string& dbname) {
   return dbname + "/LOG.old";
 }
 
-// not putting this in ParseFileName since long term
-//  intend to merge this data into manifest.
+//
 std::string CowFileName(const std::string& dbname) {
   return dbname + "/COW";
 }
@@ -144,6 +143,7 @@ bool SetBackupPaths(Options & options, int backup_num) {
 //    dbname/LOG.old
 //    dbname/MANIFEST-[0-9]+
 //    dbname/[0-9]+.(log|sst)
+//    dbname/COW
 bool ParseFileName(const std::string& fname,
                    uint64_t* number,
                    FileType* type) {
@@ -151,6 +151,9 @@ bool ParseFileName(const std::string& fname,
   if (rest == "CURRENT") {
     *number = 0;
     *type = kCurrentFile;
+  } else if (rest == "COW") {
+    *number = 0;
+    *type = kCacheWarming;
   } else if (rest == "LOCK") {
     *number = 0;
     *type = kDBLockFile;
