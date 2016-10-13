@@ -30,8 +30,8 @@
 #include "util/cache2.h"
 #include "util/db_list.h"
 #include "util/flexcache.h"
-#include "util/hot_backup.h"
 #include "util/hot_threads.h"
+#include "util/thread_tasks.h"
 #include "util/throttle.h"
 
 namespace leveldb {
@@ -272,8 +272,7 @@ ThrottleThread(
         // This is a second non-throttle task added to this one minute loop.  Pattern forming.
         //  See if hot backup wants to initiate.
         //
-        // disabled Oct 7, 2016 per management discussion.  Will move to Riak EE product.
-	// CheckHotBackupTrigger();
+	CheckHotBackupTrigger();
 
         // nudge compaction logic of potential grooming
         if (0==gCompactionThreads->m_WorkQueueAtomic)  // user databases

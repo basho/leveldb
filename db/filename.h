@@ -26,7 +26,8 @@ enum FileType {
   kDescriptorFile,
   kCurrentFile,
   kTempFile,
-  kInfoLogFile  // Either the current one, or an old one
+  kInfoLogFile,  // Either the current one, or an old one
+  kCacheWarming
 };
 
 // Riak specific routine to help create sst_? subdirectory names
