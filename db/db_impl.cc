@@ -1807,8 +1807,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   }
 
   // May temporarily unlock and wait.
-  if (!options.non_blocking)
+  if (0==add_and_fetch(&non_block_tickets_, (uint32_t)0))
       status = MakeRoomForWrite(my_batch == NULL);
+
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
@@ -1862,7 +1863,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   }   // if
   else
   {
-      dec_and_fetch(&non_block_tickets_);
+      // only reduce count for operations that were marked
+      if (options.non_blocking)
+          dec_and_fetch(&non_block_tickets_);
       throttle=0;
       gPerfCounters->Inc(ePerfDebug1);
   }   // else
