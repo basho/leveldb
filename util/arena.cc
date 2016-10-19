@@ -60,15 +60,8 @@ char* Arena::AllocateAligned(size_t bytes) {
 
 char* Arena::AllocateNewBlock(size_t block_bytes) {
   char* result = new char[block_bytes];
-
-  // updates memory usage in sync free fashion
-  //  note: assumes this function is NOT sync free
-  size_t before, diff;
-  before=blocks_.capacity();
+  blocks_memory_ += block_bytes;
   blocks_.push_back(result);
-  diff=blocks_.capacity() - before;
-
-  add_and_fetch(&blocks_memory_, (block_bytes + diff * sizeof(char*)));
   return result;
 }
 
