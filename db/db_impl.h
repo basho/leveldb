@@ -231,6 +231,7 @@ protected:
   volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
   volatile bool hotbackup_pending_;       // true if hotbackup cycle initiated, blocks close
   volatile uint32_t non_block_tickets_;   // how many non-blocking writes promised?
+  volatile uint64_t est_mem_usage_;       // cached mem->ApproximateMemoryUsage()
   volatile uint64_t last_penalty_;        // most recent Version->penalty_ value seen
 
   // accessor to new, dynamic block_cache

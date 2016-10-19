@@ -197,7 +197,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       running_compactions_(0),
       block_size_changed_(0), last_low_mem_(0),
       hotbackup_pending_(false),
-      non_block_tickets_(0), last_penalty_(0)
+      non_block_tickets_(0), last_penalty_(0), est_mem_usage_(0)
 {
   current_block_size_=options_.block_size;
 
@@ -1835,6 +1835,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     if (updates == tmp_batch_) tmp_batch_->Clear();
 
     versions_->SetLastSequence(last_sequence);
+
+    // cache this value while mutex held
+    est_mem_usage_=mem_->ApproximateMemoryUsage();
   }
 
   while (true) {
@@ -1994,8 +1997,8 @@ DBImpl::RequestNonBlockTicket()
     // assume ticket succeeds
     inc_and_fetch(&non_block_tickets_);
 
-    // ApproximateMemoryUsage() updated to sync free, write_buffer_size is constant
-    ret_flag = (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size);
+    // est_mem_usage_ is last known mem_->ApproximateMemoryUsage(), write_buffer_size is constant
+    ret_flag = (est_mem_usage_ <= options_.write_buffer_size);
     ret_flag = ret_flag && 1==GetThrottleWriteRate();
     ret_flag = ret_flag && 0==GetLastPenalty();
 
