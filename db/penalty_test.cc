@@ -112,8 +112,44 @@ TEST(PenaltyTester, Debug1)
     //version.m_FalseFile[3].file_size=;
     
     
-}   // test Defaults
+}   // test Debug1
 
 
+/**
+ * No penalty
+ */
+TEST(PenaltyTester, NoPenalty)
+{
+    TestVersion version;
+    int penalty;
+
+    m_Options.write_buffer_size=46416847;
+
+    // nothing
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+
+    // level 0, no penalty 
+    version.m_LevelFileCount[0]=config::kL0_CompactionTrigger;
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+
+    version.m_LevelFileCount[0]=config::kL0_SlowdownWritesTrigger;
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+    
+    // threshold reached ... some penaltyc
+    version.m_LevelFileCount[0]=config::kL0_SlowdownWritesTrigger+1;
+    UpdatePenalty(&version);
+    ASSERT_NE(version.WritePenalty(), 0);
+    
+
+    //version.m_FalseFile[2].file_size=1075676398;
+    //version.m_FalseFile[3].file_size=;
+    
+    
+}   // test NoPenalty
+
+    
 
 }  // namespace leveldb
