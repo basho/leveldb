@@ -105,13 +105,13 @@ class Version {
                                  const Slice& largest_user_key,
                                  const int level_limit);
 
-  size_t NumFiles(int level) const { return files_[level].size(); }
+  virtual size_t NumFiles(int level) const { return files_[level].size(); }
 
   const VersionSet * GetVersionSet() const { return vset_; }
 
   typedef std::vector<FileMetaData*> FileMetaDataVector_t;
 
-  const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
+  virtual const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
   volatile int WritePenalty() const {return write_penalty_; }
 
