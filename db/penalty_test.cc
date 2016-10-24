@@ -95,6 +95,7 @@ public:
 /**
  * Debug 1
  */
+#if 0    
 TEST(PenaltyTester, Debug1)
 {
     TestVersion version;
@@ -109,19 +110,16 @@ TEST(PenaltyTester, Debug1)
 
     ASSERT_EQ(version.WritePenalty(), 0);
 
-    //version.m_FalseFile[3].file_size=;
-    
-    
 }   // test Debug1
-
+#endif
 
 /**
- * No penalty
+ * No penalty scenarios
  */
 TEST(PenaltyTester, NoPenalty)
 {
     TestVersion version;
-    int penalty;
+    int level;
 
     m_Options.write_buffer_size=46416847;
 
@@ -129,7 +127,11 @@ TEST(PenaltyTester, NoPenalty)
     UpdatePenalty(&version);
     ASSERT_EQ(version.WritePenalty(), 0);
 
-    // level 0, no penalty 
+    /**
+     * Level 0
+     *  (overlapped level, penalty is count based)
+     */
+    // no penalty 
     version.m_LevelFileCount[0]=config::kL0_CompactionTrigger;
     UpdatePenalty(&version);
     ASSERT_EQ(version.WritePenalty(), 0);
@@ -138,15 +140,95 @@ TEST(PenaltyTester, NoPenalty)
     UpdatePenalty(&version);
     ASSERT_EQ(version.WritePenalty(), 0);
     
-    // threshold reached ... some penaltyc
+    // threshold reached ... some penalty
     version.m_LevelFileCount[0]=config::kL0_SlowdownWritesTrigger+1;
     UpdatePenalty(&version);
     ASSERT_NE(version.WritePenalty(), 0);
-    
 
-    //version.m_FalseFile[2].file_size=1075676398;
-    //version.m_FalseFile[3].file_size=;
+    // clean up
+    version.m_LevelFileCount[0]=0;
     
+    /**
+     * Level 1
+     *  (overlapped level, penalty is count based)
+     */
+    // no penalty 
+    version.m_LevelFileCount[1]=config::kL0_CompactionTrigger;
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+
+    version.m_LevelFileCount[1]=config::kL0_SlowdownWritesTrigger;
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+    
+    // threshold reached ... some penalty
+    version.m_LevelFileCount[1]=config::kL0_SlowdownWritesTrigger+1;
+    UpdatePenalty(&version);
+    ASSERT_NE(version.WritePenalty(), 0);
+    
+    // clean up
+    version.m_LevelFileCount[1]=0;
+    
+    /**
+     * Level 2
+     *  (landing level, penalty size based)
+     */
+    // no penalty 
+    version.m_FalseFile[2].file_size=0;
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+
+    version.m_FalseFile[2].file_size=VersionSet::DesiredBytesForLevel(2);
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+
+    version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2)-1;
+    UpdatePenalty(&version);
+    ASSERT_EQ(version.WritePenalty(), 0);
+
+    version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2);
+    UpdatePenalty(&version);
+    ASSERT_NE(version.WritePenalty(), 0);
+
+    // interaction rule with level 1
+    version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2)-1;
+    version.m_LevelFileCount[1]=config::kL0_CompactionTrigger/2;
+    UpdatePenalty(&version);
+    ASSERT_NE(version.WritePenalty(), 0);
+    
+    // clean up
+    version.m_LevelFileCount[1]=0;
+    version.m_FalseFile[2].file_size=0;
+
+    /**
+     * Level 3+
+     *  (landing level, penalty size based)
+     */
+    for (level=3; level<config::kNumLevels; ++level)
+    {
+        // no penalty 
+        version.m_FalseFile[level].file_size=0;
+        UpdatePenalty(&version);
+        ASSERT_EQ(version.WritePenalty(), 0);
+
+        version.m_FalseFile[level].file_size=VersionSet::DesiredBytesForLevel(level);
+        UpdatePenalty(&version);
+        ASSERT_EQ(version.WritePenalty(), 0);
+
+        version.m_FalseFile[level].file_size=VersionSet::MaxBytesForLevel(level)-1;
+        UpdatePenalty(&version);
+        ASSERT_EQ(version.WritePenalty(), 0);
+
+        version.m_FalseFile[level].file_size=VersionSet::MaxBytesForLevel(level);
+        UpdatePenalty(&version);
+        if ((config::kNumLevels-1)!=level)
+            ASSERT_NE(version.WritePenalty(), 0);
+        else
+            ASSERT_EQ(version.WritePenalty(), 0);
+
+        // clean up
+        version.m_FalseFile[level].file_size=0;
+    }   // for
     
 }   // test NoPenalty
 
