@@ -1351,8 +1351,11 @@ VersionSet::UpdatePenalty(
             if (0<count)
             {
 	        // how many compaction behind
-                value=level_bytes / options_->write_buffer_size;
+                value=(level_bytes-gLevelTraits[level].m_MaxBytesForLevel) / options_->write_buffer_size;
+                value+=1;
                 increment=3;
+                Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
+                        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
             }   // if
 
             // this penalty is about reducing write amplification, its
@@ -1367,7 +1370,7 @@ VersionSet::UpdatePenalty(
 
 		// how urgent is the need to clear this level before next flood
 		//  (negative value is ignored)
-                count= v->files_[level-1].size() - (config::kL0_CompactionTrigger/2);
+                count= v->NumFiles(level-1) - (config::kL0_CompactionTrigger/2);
 
                 // only throttle if backlog on the horizon
                 if (count < 0)
@@ -1444,7 +1447,19 @@ bool VersionSet::IsLevelOverlapped(int level) {
   return(gLevelTraits[level].m_OverlappedFiles);
 }
 
-uint64_t VersionSet::MaxFileSizeForLevel(int level) const {
+uint64_t VersionSet::DesiredBytesForLevel(int level) {
+  assert(level >= 0);
+  assert(level < config::kNumLevels);
+  return(gLevelTraits[level].m_DesiredBytesForLevel);
+}
+
+uint64_t VersionSet::MaxBytesForLevel(int level) {
+  assert(level >= 0);
+  assert(level < config::kNumLevels);
+  return(gLevelTraits[level].m_MaxBytesForLevel);
+}
+
+uint64_t VersionSet::MaxFileSizeForLevel(int level) {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return(gLevelTraits[level].m_MaxFileSizeForLevel);
