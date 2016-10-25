@@ -512,10 +512,10 @@ void
 PrintInternalKeyInfo(
     leveldb::ParsedInternalKey & ParsedKey)
 {
-    printf("%s, seq: %llu", leveldb::KeyTypeString(ParsedKey.type), ParsedKey.sequence);
+    printf("%s, seq: %" PRIu64, leveldb::KeyTypeString(ParsedKey.type), ParsedKey.sequence);
 
     if (leveldb::IsExpiryKey(ParsedKey.type))
-        printf(", expiry: %llu", ParsedKey.expiry);
+        printf(", expiry: %" PRIu64, ParsedKey.expiry);
 
 }   // PrintInternalKeyInfo
 
