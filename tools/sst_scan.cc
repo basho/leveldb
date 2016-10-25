@@ -24,6 +24,7 @@
 void command_help();
 bool PrintSextKey(leveldb::Slice & Cursor, int Limit=1);
 bool PrintSextAtom(leveldb::Slice & Cursor);
+void PrintInternalKeyInfo(leveldb::ParsedInternalKey & ParsedKey);
 
 int
 main(
@@ -244,6 +245,9 @@ main(
                                         printf("     ");
                                         PrintSextKey(cursor_slice);
                                         printf("\n");
+                                        printf("     ");
+                                        PrintInternalKeyInfo(parsed);
+                                        printf("\n");
                                     }   // if
                                 }   // if
                             }   // if
@@ -411,6 +415,7 @@ PrintSextAtom(
 
     while(good && (uint8_t)*Cursor.data() & mask)
     {
+        // this could be done easier with variables instead of fixed constants
         switch(mask)
         {
             case(0x80):
@@ -503,6 +508,16 @@ PrintSextAtom(
 }   // PrintSextAtom
 
 
+void
+PrintInternalKeyInfo(
+    leveldb::ParsedInternalKey & ParsedKey)
+{
+    printf("%s, seq: %llu", leveldb::KeyTypeString(ParsedKey.type), ParsedKey.sequence);
+
+    if (leveldb::IsExpiryKey(ParsedKey.type))
+        printf(", expiry: %llu", ParsedKey.expiry);
+
+}   // PrintInternalKeyInfo
 
 namespace leveldb {
 
