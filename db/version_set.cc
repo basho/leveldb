@@ -1354,8 +1354,8 @@ VersionSet::UpdatePenalty(
                 value=(level_bytes-gLevelTraits[level].m_MaxBytesForLevel) / options_->write_buffer_size;
                 value+=1;
                 increment=3;
-                Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
-                        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
+                // Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
+                //        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
             }   // if
 
             // this penalty is about reducing write amplification, its
@@ -1375,9 +1375,9 @@ VersionSet::UpdatePenalty(
                 // only throttle if backlog on the horizon
                 if (count < 0)
                     value=0;
-                else
-                    Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, level_bytes: %llu",
-                        value, count, options_->write_buffer_size, level_bytes);
+                //else
+                //Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, level_bytes: %llu",
+                //        value, count, options_->write_buffer_size, level_bytes);
                 increment=3;
             }   // else if
 
@@ -1397,7 +1397,7 @@ VersionSet::UpdatePenalty(
     v->write_penalty_ = penalty;
 
 // mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
-    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d", penalty);
+//    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d", penalty);
 
     return;
 
