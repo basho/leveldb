@@ -1551,5 +1551,56 @@ TEST(ExpiryDBTester, Simple)
 
 }   // ExpiryDBTester::Simple
 
+
+/**
+ * Riak uses a special key to mark a "feature upgrade".  That
+ *  key must never expire.
+ */
+// from riak_kv_eleveldb_backend.erl:  sext:encode({md,fixed_indexes}).
+static const char * MDKey=
+{"\x10\x00\x00\x00\x02\x0c\xb6\xd9\x00\x08\x0c\xb3\x5a\x6f\x16\x5b\x25\x7e\xd3\x6e\xb2\x59\x64\x16\x5b\x98\x08"};
+static const int MDKeyLen=27;
+
+// example Riak key:  sext:encode({o,{<<bob1>>,<<buck1>>,<<key0>>}).
+static const char * RiakKey=
+{"\x10\x00\x00\x00\x03\x0c\xb7\x80\x08\x10\x00\x00\x00\x02\x12\xb1\x5b\xec\x53\x10\x08\x12\xb1\x5d\x6c\x76\xb9\x88\x08\x12\xb5\xd9\x6f\x33\x10\x08"};
+static const int RiakKeyLen=36;
+
+TEST(ExpiryDBTester, MetaDataKey)
+{
+    Slice key_md(MDKey, MDKeyLen);
+    Slice key_riak(RiakKey, RiakKeyLen);
+    Slice no_value;
+    std::string return_value;
+    KeyMetaData meta;
+    Status s;
+
+    // enable expiry
+    m_Expiry->expiry_enabled=true;
+    m_Expiry->expiry_minutes=2;
+    m_Expiry->whole_file_expiry=false;
+
+    // write special key that should not receive expiry
+    s=m_DB->Put(WriteOptions(), key_md, no_value);
+    ASSERT_OK(s);
+
+    // verify
+    s=m_DB->Get(ReadOptions(), key_md, &return_value, &meta);
+    ASSERT_OK(s);
+    ASSERT_EQ(meta.m_Type, kTypeValue);
+
+    // write a normal key that SHOULD get expiry
+    s=m_DB->Put(WriteOptions(), key_riak, no_value);
+    ASSERT_OK(s);
+
+    // verify
+    s=m_DB->Get(ReadOptions(), key_riak, &return_value, &meta);
+    ASSERT_OK(s);
+    ASSERT_EQ(meta.m_Type, kTypeValueWriteTime);
+
+}   // ExpiryDBTester, MetaDataKey
+
+
+
 }  // namespace leveldb
 

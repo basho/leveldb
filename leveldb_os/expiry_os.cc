@@ -34,6 +34,12 @@
 #include "util/throttle.h"
 
 namespace leveldb {
+
+// sext key for Riak's meta data
+static const char * lRiakMetaDataKey=
+    {"\x10\x00\x00\x00\x02\x0c\xb6\xd9\x00\x08"};
+static const size_t lRiakMetaDataKeyLen=10;
+
 void
 ExpiryModuleOS::Dump(
     Logger * log) const
@@ -56,9 +62,13 @@ bool ExpiryModuleOS::MemTableInserterCallback(
     bool good(true);
 
     // only update the expiry time if explicit type
-    //  without expiry, or ExpiryMinutes set
+    //  without expiry, OR ExpiryMinutes set and not internal key
     if ((kTypeValueWriteTime==ValType && 0==Expiry)
-        || (kTypeValue==ValType && 0!=expiry_minutes && expiry_enabled))
+        || (kTypeValue==ValType
+            && 0!=expiry_minutes
+            && expiry_enabled
+            && (Key.size()<lRiakMetaDataKeyLen
+                || 0!=memcmp(lRiakMetaDataKey,Key.data(),lRiakMetaDataKeyLen))))
     {
         ValType=kTypeValueWriteTime;
         Expiry=GetTimeMinutes();
