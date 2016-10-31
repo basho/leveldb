@@ -105,13 +105,13 @@ class Version {
                                  const Slice& largest_user_key,
                                  const int level_limit);
 
-  size_t NumFiles(int level) const { return files_[level].size(); }
+  virtual size_t NumFiles(int level) const { return files_[level].size(); }
 
   const VersionSet * GetVersionSet() const { return vset_; }
 
   typedef std::vector<FileMetaData*> FileMetaDataVector_t;
 
-  const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
+  virtual const std::vector<FileMetaData*> & GetFileList(int level) const {return files_[level];};
 
   volatile int WritePenalty() const {return write_penalty_; }
 
@@ -219,7 +219,9 @@ class VersionSet {
   // is the specified level overlapped (or if false->sorted)
   static bool IsLevelOverlapped(int level);
 
-  uint64_t MaxFileSizeForLevel(int level) const;
+  static uint64_t DesiredBytesForLevel(int level);
+  static uint64_t MaxBytesForLevel(int level);
+  static uint64_t MaxFileSizeForLevel(int level);
 
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;

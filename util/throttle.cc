@@ -34,6 +34,9 @@
 #include "util/thread_tasks.h"
 #include "util/throttle.h"
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 namespace leveldb {
 
 // mutex and condition variable objects for use in the code below
@@ -206,7 +209,7 @@ ThrottleThread(
                     * ((tot_backlog*100) / tot_compact);
 
                 new_throttle /= 10000;  // remove *100 stuff
-                new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
+                //new_throttle /= gCompactionThreads->m_Threads.size();      // number of general compaction threads
 
                 if (0==new_throttle)
                     new_throttle=1;     // throttle must have an effect
@@ -245,6 +248,8 @@ ThrottleThread(
 
             gUnadjustedThrottleRate=new_unadjusted;
 
+	    // Log(NULL, "ThrottleRate %" PRIu64 ", UnadjustedThrottleRate %" PRIu64, gThrottleRate, gUnadjustedThrottleRate);
+	    
             gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
             gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
             gPerfCounters->Set(ePerfThrottleUnadjusted, gUnadjustedThrottleRate);
