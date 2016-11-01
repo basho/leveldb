@@ -1189,8 +1189,8 @@ VersionSet::Finalize(Version* v)
                 //  only occurs if no other compactions running on groomer thread
                 //  (no grooming if landing level is still overloaded)
                 if (0==score && grooming_trigger<=v->files_[level].size()
-                    && TotalFileSize(v->files_[config::kNumOverlapLevels]) 
-                       < gLevelTraits[config::kNumOverlapLevels].m_DesiredBytesForLevel)
+                    && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels]) 
+		    < gLevelTraits[config::kNumOverlapLevels].m_DesiredBytesForLevel)
                 {
                     // secondary test, don't push too much to next Overlap too soon
                     if (!gLevelTraits[level+1].m_OverlappedFiles 
@@ -1300,18 +1300,20 @@ VersionSet::UpdatePenalty(
     for (int level = 0; level < config::kNumLevels-1; ++level)
     {
         int loop, count, value, increment;
+        
         value=0;
         count=0;
+        increment=0;
 
         if (gLevelTraits[level].m_OverlappedFiles)
         {
 
             // compute penalty for write throttle if too many Level-0 files accumulating
-            if (config::kL0_SlowdownWritesTrigger < v->files_[level].size())
+            if (config::kL0_SlowdownWritesTrigger < v->NumFiles(level))
             {
                 // assume each overlapped file represents another pass at same key
                 //   and we are "close" on compaction backlog
-                if ( v->files_[level].size() < config::kL0_SlowdownWritesTrigger)
+                if ( v->NumFiles(level) < config::kL0_SlowdownWritesTrigger)
                 {
                     // this code block will not execute due both "if"s using same values now
                     value = 1;
@@ -1322,7 +1324,7 @@ VersionSet::UpdatePenalty(
                 //  to keep leveldb from stalling
                 else
                 {
-                    count=(v->files_[level].size() - config::kL0_SlowdownWritesTrigger);
+                    count=(v->NumFiles(level) - config::kL0_SlowdownWritesTrigger);
 
                     // level 0 has own thread pool and will stall writes,
                     //  heavy penalty
@@ -1341,27 +1343,42 @@ VersionSet::UpdatePenalty(
         }   // if
         else
         {
-            const uint64_t level_bytes = TotalFileSize(v->files_[level]);
+            const uint64_t level_bytes = TotalFileSize(v->GetFileList(level));
 
+	    // how dire is the situation
             count=(int)(static_cast<double>(level_bytes) / gLevelTraits[level].m_MaxBytesForLevel);
 
             if (0<count)
             {
-                value=5;
-                increment=8;
+	        // how many compaction behind
+                value=(level_bytes-gLevelTraits[level].m_MaxBytesForLevel) / options_->write_buffer_size;
+                value+=1;
+                increment=3;
+                // Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
+                //        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
             }   // if
 
-            // this penalty is not about "backlog", its goal is to
-            //  slow the operations during a known period of high
-            //  background activity.  Overall, latencies get better
-            //  not worse because of this.
-            else if (config::kNumOverlapLevels==level)
-            {   // light penalty
-                count=(int)(static_cast<double>(level_bytes) / gLevelTraits[level].m_DesiredBytesForLevel);
-                value=count; // this approximates the number of compactions needed, no other penalty
-                value/=10;  // allow 10 files, approx 2G without throttle
-                increment=1;
-                count=0;
+            // this penalty is about reducing write amplification, its
+            //  side effect is to also improve compaction performance across
+            //  the level 1 to 2 to 3 boundry.
+            else if (config::kNumOverlapLevels==level
+                && gLevelTraits[level].m_DesiredBytesForLevel < level_bytes)
+            {
+                // this approximates the number of compactions needed, no other penalty
+//                value=(level_bytes / gLevelTraits[level].m_DesiredBytesForLevel);
+                value=(int)(static_cast<double>(level_bytes-gLevelTraits[level].m_DesiredBytesForLevel) / options_->write_buffer_size);
+
+		// how urgent is the need to clear this level before next flood
+		//  (negative value is ignored)
+                count= v->NumFiles(level-1) - (config::kL0_CompactionTrigger/2);
+
+                // only throttle if backlog on the horizon
+                if (count < 0)
+                    value=0;
+                //else
+                //Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, level_bytes: %llu",
+                //        value, count, options_->write_buffer_size, level_bytes);
+                increment=3;
             }   // else if
 
         }   // else
@@ -1374,12 +1391,13 @@ VersionSet::UpdatePenalty(
     }   // for
 
     // put a ceiling on the value
-    if (100000<penalty)
+    if (100000<penalty || penalty<0)
         penalty=100000;
 
     v->write_penalty_ = penalty;
 
 // mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
+//    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d", penalty);
 
     return;
 
@@ -1429,7 +1447,19 @@ bool VersionSet::IsLevelOverlapped(int level) {
   return(gLevelTraits[level].m_OverlappedFiles);
 }
 
-uint64_t VersionSet::MaxFileSizeForLevel(int level) const {
+uint64_t VersionSet::DesiredBytesForLevel(int level) {
+  assert(level >= 0);
+  assert(level < config::kNumLevels);
+  return(gLevelTraits[level].m_DesiredBytesForLevel);
+}
+
+uint64_t VersionSet::MaxBytesForLevel(int level) {
+  assert(level >= 0);
+  assert(level < config::kNumLevels);
+  return(gLevelTraits[level].m_MaxBytesForLevel);
+}
+
+uint64_t VersionSet::MaxFileSizeForLevel(int level) {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return(gLevelTraits[level].m_MaxFileSizeForLevel);
@@ -1637,6 +1667,9 @@ VersionSet::PickCompaction(
   {
       bool submit_flag;
 
+      Log(options_->info_log,"Finalize level: %d, grooming %d",
+	  current_->compaction_level_, current_->compaction_grooming_);
+      
       c=NULL;
 
       // We prefer compactions triggered by too much data in a level over

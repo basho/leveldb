@@ -1,3 +1,11 @@
+github.com tag 2.0.31 - November 1, 2016
+----------------------------------------
+mv-no-md-expiry: - Riak specific
+                 - never convert a key prefix of sext:encoded "{md" to expiry
+                 - update sst_scan for dumping Riak formated keys
+mv-tuning8:      - rework penalty rules in version_set.cc UpdatePenalty()
+                 - add unit test framework for UpdatePenalty()
+
 github.com tag 2.0.30 - October 11, 2016
 ----------------------------------------
 mv-delayed-bloom: - when opening an .sst table file, only load
