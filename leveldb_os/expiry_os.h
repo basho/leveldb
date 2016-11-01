@@ -1,6 +1,6 @@
 // -------------------------------------------------------------------
 //
-// expiry_ee.h
+// expiry_os.h
 //
 // Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
 //
