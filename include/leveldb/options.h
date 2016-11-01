@@ -371,6 +371,8 @@ struct KeyMetaData
     {};
 };  // struct KeyMetaData
 
+const char * CompileOptionsString();
+
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_OPTIONS_H_

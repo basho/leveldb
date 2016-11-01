@@ -59,6 +59,20 @@ std::string ParsedInternalKey::DebugStringHex() const {
   return result;
 }
 
+
+const char * KeyTypeString(ValueType val_type) {
+  const char * ret_ptr;
+  switch(val_type)
+  {
+      case kTypeDeletion: ret_ptr="kTypeDelete"; break;
+      case kTypeValue:    ret_ptr="kTypeValue"; break;
+      case kTypeValueWriteTime: ret_ptr="kTypeValueWriteTime"; break;
+      case kTypeValueExplicitExpiry: ret_ptr="kTypeValueExplicitExpiry"; break;
+      default: ret_ptr="(unknown ValueType)"; break;
+  }   // switch
+  return(ret_ptr);
+}
+
 std::string InternalKey::DebugString() const {
   std::string result;
   ParsedInternalKey parsed;

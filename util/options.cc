@@ -60,7 +60,7 @@ void
 Options::Dump(
     Logger * log) const
 {
-    Log(log,"                       Version: %s", STR(LEVELDB_VSN));
+    Log(log,"                       Version: %s %s", STR(LEVELDB_VSN), CompileOptionsString());
     Log(log,"            Options.comparator: %s", comparator->Name());
     Log(log,"     Options.create_if_missing: %d", create_if_missing);
     Log(log,"       Options.error_if_exists: %d", error_if_exists);

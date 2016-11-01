@@ -132,6 +132,8 @@ inline size_t KeySuffixSize(ValueType val_type) {
   return(ret_val);
 }
 
+const char * KeyTypeString(ValueType val_type);
+
 inline size_t KeySuffixSize(const Slice & internal_key) {
     return(KeySuffixSize(ExtractValueType(internal_key)));
 }
