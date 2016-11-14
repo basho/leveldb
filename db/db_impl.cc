@@ -712,8 +712,7 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     local_options=options_;
     // matthewv Nov 2, 2016 local_options.compression=kNoCompression;
     local_options.block_size=current_block_size_;
-    s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter,
-                   &meta, smallest_snapshot, IsOkToPreCache(meta.level));
+    s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
     Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
         (unsigned long long) meta.number,
@@ -2462,9 +2461,5 @@ DBImpl::IsOkToPreCache(
     return(ret_flag);
 
 }   // DBImpl::IsOkToPreCache
-
-
-
-
 
 }  // namespace leveldb

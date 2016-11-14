@@ -237,11 +237,6 @@ class DBImpl : public DB {
   const Comparator* user_comparator() const {
     return internal_comparator_.user_comparator();
   }
-
-  // Riak specific algorithm to determine if compactions should
-  //  directly feed block_cache.
-  virtual bool IsOkToPreCache(int Level);
-
 };
 
 // Sanitize db options.  The caller should delete result.info_log if

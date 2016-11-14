@@ -549,7 +549,7 @@ DoubleCache::GetCapacity(
                 //  file cache usage
                 ret_val=m_TotalAllocation - temp;
 
-                if (0 && EstimatePageCache)
+                if (EstimatePageCache)
                 {
                     // if block cache allocation exceeds threshold,
                     //  give up some to page cache
