@@ -25,8 +25,7 @@ Status BuildTable(const std::string& dbname,
                   TableCache* table_cache,
                   Iterator* iter,
                   FileMetaData* meta,
-                  SequenceNumber smallest_snapshot,
-                  bool pre_cache) {
+                  SequenceNumber smallest_snapshot) {
   Status s;
   size_t keys_seen, keys_retired;
 
@@ -54,12 +53,12 @@ Status BuildTable(const std::string& dbname,
 
     uint64_t cache_id;
 
-    if (pre_cache)
+    if (0 == meta->level)
         cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     else
         cache_id = 0;
 
-    TableBuilder* builder = new TableBuilder(options, file, cache_id);
+    TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       ++keys_seen;

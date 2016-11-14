@@ -30,8 +30,7 @@ extern Status BuildTable(const std::string& dbname,
                          TableCache* table_cache,
                          Iterator* iter,
                          FileMetaData* meta,
-                         SequenceNumber smallest_snapshot,
-                         bool pre_cache=false);
+                         SequenceNumber smallest_snapshot);
 
 }  // namespace leveldb
 

@@ -710,10 +710,9 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     // want the data slammed to disk as fast as possible,
     //  no compression for level 0.
     local_options=options_;
-    //local_options.compression=kNoCompression;
+    local_options.compression=kNoCompression;
     local_options.block_size=current_block_size_;
-    s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter,
-                   &meta, smallest_snapshot, IsOkToPreCache(meta.level));
+    s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
 
     Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
         (unsigned long long) meta.number,
@@ -1276,15 +1275,7 @@ Status DBImpl::OpenCompactionOutputFile(
       //  reasonably possible
       if (pagecache_flag)
           compact->outfile->SetMetadataOffset(1);
-      
-    uint64_t cache_id;
-
-    if (IsOkToPreCache(compact->compaction->level()+1))
-        cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
-    else
-        cache_id = 0;
-
-    compact->builder = new TableBuilder(options, compact->outfile, cache_id);
+      compact->builder = new TableBuilder(options, compact->outfile);
   }   // if
 
   return s;
@@ -2424,47 +2415,5 @@ DBImpl::IsCompactionScheduled()
         flag=versions_->IsCompactionSubmitted(level);
     return(flag || NULL!=imm_ || hotbackup_pending_);
 }   // DBImpl::IsCompactionScheduled
-
-// Review size of write buffer and current size of
-//  block cache to see if reasonable to precache this
-//  this upcoming compaction    
-bool
-DBImpl::IsOkToPreCache(
-    int Level)            // destination level
-{
-    bool ret_flag;
-
-    // currently only precaching into 0, 1, 2
-    //  (overlap levels and landing level)
-    ret_flag=(Level <= config::kNumOverlapLevels);
-
-    // now test size of block cache
-    if (ret_flag)
-    {
-        size_t est_limit;
-        int loop;
-
-        est_limit=options_.write_buffer_size;
-
-        // raise kLO_CompactionTrigger to power of level
-        for (loop=0; loop<Level; ++loop)
-            est_limit*=config::kL0_CompactionTrigger;
-
-        ret_flag=(est_limit < double_cache.GetCapacity(false)/2);
-
-        if (ret_flag)
-            gPerfCounters->Inc(ePerfDebug1);
-        else
-            gPerfCounters->Inc(ePerfDebug2);
-
-    }   // if
-    
-    return(ret_flag);
-    
-}   // DBImpl::IsOkToPreCache
-
-    
-
-
 
 }  // namespace leveldb
