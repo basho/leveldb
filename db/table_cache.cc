@@ -24,7 +24,6 @@ static void DeleteEntry(const Slice& key, void* value) {
     delete tf->table;
     delete tf->file;
     delete tf;
-    gPerfCounters->Inc(ePerfDebug1);
   }   // if
 }
 
@@ -121,8 +120,6 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size, int level
       //  5. set double reference if an overlapped file (prevents from being flushed)
       if (level<config::kNumOverlapLevels)
         cache_->Addref(*handle);
-
-      gPerfCounters->Inc(ePerfDebug0);
     }   // if
 
     // for Linux, let fadvise start precaching
