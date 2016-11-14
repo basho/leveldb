@@ -11,6 +11,8 @@
 #include "leveldb/env.h"
 #include "leveldb/expiry.h"
 #include "leveldb/filter_policy.h"
+
+#include "db/dbformat.h"
 #include "util/cache2.h"
 #include "util/crc32c.h"
 

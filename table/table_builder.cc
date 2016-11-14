@@ -36,7 +36,6 @@ struct TableBuilder::Rep {
   bool closed;          // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
   SstCounters sst_counters;
-  uint64_t cache_id;
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
   // keys in the index block.  For example, consider a block boundary
@@ -47,6 +46,7 @@ struct TableBuilder::Rep {
   //
   // Invariant: r->pending_index_entry is true only if data_block is empty.
   bool pending_index_entry;
+  uint64_t cache_id;
   BlockHandle pending_handle;  // Handle to add to index block
 
   std::string compressed_output;
@@ -204,14 +204,14 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       new_mem=new char[raw.size()];
       memcpy(new_mem, raw.data(), raw.size());
       Slice new_slice(new_mem, raw.size());
-      Block new_block(new_slice);
+      Block * new_block = new Block(new_slice);
       
       EncodeFixed64(cache_key_buffer, r->cache_id);
       EncodeFixed64(cache_key_buffer+8, r->offset);
       Slice key(cache_key_buffer, sizeof(cache_key_buffer));
 
-      cache_handle = r->options.block_cache->Insert(key, &new_block,
-                                                     new_block.size()+key.size(),
+      cache_handle = r->options.block_cache->Insert(key, new_block,
+                                                     new_block->size()+key.size(),
                                                      &DeleteCachedBlock);
       r->options.block_cache->Release(cache_handle);
 

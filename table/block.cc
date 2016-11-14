@@ -36,6 +36,7 @@ Block::Block(const BlockContents& contents)
   }
 }
 
+// same as original constructor but uses Slice as input.    
 Block::Block(const Slice & raw)
     : data_(raw.data()), size_(raw.size()), owned_(true)
 {
