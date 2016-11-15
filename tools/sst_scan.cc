@@ -1,3 +1,25 @@
+// -------------------------------------------------------------------
+//
+// sst_scan.cc
+//
+// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+//
+// This file is provided to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file
+// except in compliance with the License.  You may obtain
+// a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+//
+// -------------------------------------------------------------------
+
 #include <stdlib.h>
 #include <libgen.h>
 #include <arpa/inet.h>
@@ -18,6 +40,8 @@
 #include "table/filter_block.h"
 #include "util/cache2.h"
 
+#include "leveldb_ee/riak_object.h"
+
 //#include "util/logging.h"
 //#include "db/log_reader.h"
 
@@ -32,7 +56,7 @@ main(
     char ** argv)
 {
     bool error_seen, index_keys, all_keys, block_info, csv_header, counter_info,
-        running, no_csv, summary_only, riak_translations;
+        running, no_csv, summary_only, riak_translations, value_dump;
     int error_counter;
     char ** cursor;
 
@@ -47,6 +71,7 @@ main(
     no_csv=false;
     summary_only=false;
     riak_translations=false;
+    value_dump=false;
 
     error_counter=0;
 
@@ -69,6 +94,7 @@ main(
                 case 'n':  no_csv=true; break;
                 case 'r':  riak_translations=true; break;
                 case 's':  summary_only=true; break;
+                case 'v':  all_keys=true; value_dump=true; break;
                 default:
                     fprintf(stderr, " option \'%c\' is not valid\n", flag);
                     command_help();
@@ -241,6 +267,8 @@ main(
                                     if (riak_translations && '\x10'==*parsed.user_key.data())
                                     {
                                         leveldb::Slice cursor_slice;
+                                        std::string type, bucket;
+
                                         cursor_slice=parsed.user_key;
                                         printf("     ");
                                         PrintSextKey(cursor_slice);
@@ -248,6 +276,23 @@ main(
                                         printf("     ");
                                         PrintInternalKeyInfo(parsed);
                                         printf("\n");
+
+                                        cursor_slice=parsed.user_key;
+                                        if (KeyGetBucket(cursor_slice, type, bucket))
+                                            printf("     type: %s, bucket: %s\n", type.c_str(), bucket.c_str());
+                                        else
+                                            printf("     *** KeyGetBucket() failed. ***\n");
+                                    }   // if
+
+                                    if (value_dump)
+                                    {
+                                        uint64_t mod_time;
+
+                                        printf("  %s\n", HexString(it2->value()).c_str());
+                                        if (ValueGetLastModTime(it2->value(), mod_time))
+                                            printf("  last mod time: %" PRIu64 "\n", mod_time);
+                                        else
+                                            printf("   *** ValueGetLastModTime() failed. ***\n");
                                     }   // if
                                 }   // if
                             }   // if
@@ -347,6 +392,9 @@ command_help()
     fprintf(stderr, "      -i  print index keys\n");
     fprintf(stderr, "      -k  print all keys\n");
     fprintf(stderr, "      -n  NO csv data (or header)\n");
+    fprintf(stderr, "      -r  print riak translations\n");
+    fprintf(stderr, "      -v  print all keys and their values\n");
+
 }   // command_help
 
 
