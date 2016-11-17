@@ -445,6 +445,17 @@ PrintSextKey(
                 printf(">>");
                 break;
             }   // atom
+
+#if 0
+            case(11):   // big positive int
+            {
+                Cursor.remove_prefix(1);
+                printf("<<");
+                good=PrintSextAtom(Cursor);
+                printf(">>");
+                break;
+            }   // atom
+#endif
         }   // switch
     }   // for
 
