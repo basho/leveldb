@@ -20,6 +20,7 @@
 //
 // -------------------------------------------------------------------
 
+#include "db/dbformat.h"
 #include "leveldb/expiry.h"
 #include "util/expiry_os.h"
 

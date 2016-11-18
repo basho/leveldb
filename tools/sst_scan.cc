@@ -40,7 +40,7 @@
 #include "table/filter_block.h"
 #include "util/cache2.h"
 
-#include "leveldb_ee/riak_object.h"
+//#include "leveldb_ee/riak_object.h"
 
 //#include "util/logging.h"
 //#include "db/log_reader.h"
@@ -278,10 +278,12 @@ main(
                                         printf("\n");
 
                                         cursor_slice=parsed.user_key;
+#if 0
                                         if (KeyGetBucket(cursor_slice, type, bucket))
                                             printf("     type: %s, bucket: %s\n", type.c_str(), bucket.c_str());
                                         else
                                             printf("     *** KeyGetBucket() failed. ***\n");
+#endif
                                     }   // if
 
                                     if (value_dump)
@@ -289,10 +291,12 @@ main(
                                         uint64_t mod_time;
 
                                         printf("  %s\n", HexString(it2->value()).c_str());
+#if 0
                                         if (ValueGetLastModTime(it2->value(), mod_time))
                                             printf("  last mod time: %" PRIu64 "\n", mod_time);
                                         else
                                             printf("   *** ValueGetLastModTime() failed. ***\n");
+#endif
                                     }   // if
                                 }   // if
                             }   // if
