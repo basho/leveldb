@@ -108,7 +108,7 @@ TEST(PenaltyTester, Debug1)
     
     UpdatePenalty(&version);
 
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
 
 }   // test Debug1
 #endif
@@ -125,7 +125,7 @@ TEST(PenaltyTester, NoPenalty)
 
     // nothing
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
 
     /**
      * Level 0
@@ -134,16 +134,16 @@ TEST(PenaltyTester, NoPenalty)
     // no penalty 
     version.m_LevelFileCount[0]=config::kL0_CompactionTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
 
     version.m_LevelFileCount[0]=config::kL0_SlowdownWritesTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
     
     // threshold reached ... some penalty
     version.m_LevelFileCount[0]=config::kL0_SlowdownWritesTrigger+1;
     UpdatePenalty(&version);
-    ASSERT_NE(version.WritePenalty(), 0);
+    ASSERT_NE((int)version.WritePenalty(), 0);
 
     // clean up
     version.m_LevelFileCount[0]=0;
@@ -155,16 +155,16 @@ TEST(PenaltyTester, NoPenalty)
     // no penalty 
     version.m_LevelFileCount[1]=config::kL0_CompactionTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
 
     version.m_LevelFileCount[1]=config::kL0_SlowdownWritesTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
     
     // threshold reached ... some penalty
     version.m_LevelFileCount[1]=config::kL0_SlowdownWritesTrigger+1;
     UpdatePenalty(&version);
-    ASSERT_NE(version.WritePenalty(), 0);
+    ASSERT_NE((int)version.WritePenalty(), 0);
     
     // clean up
     version.m_LevelFileCount[1]=0;
@@ -176,25 +176,25 @@ TEST(PenaltyTester, NoPenalty)
     // no penalty 
     version.m_FalseFile[2].file_size=0;
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
 
     version.m_FalseFile[2].file_size=VersionSet::DesiredBytesForLevel(2);
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
 
     version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2)-1;
     UpdatePenalty(&version);
-    ASSERT_EQ(version.WritePenalty(), 0);
+    ASSERT_EQ((int)version.WritePenalty(), 0);
 
     version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2);
     UpdatePenalty(&version);
-    ASSERT_NE(version.WritePenalty(), 0);
+    ASSERT_NE((int)version.WritePenalty(), 0);
 
     // interaction rule with level 1
     version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2)-1;
     version.m_LevelFileCount[1]=config::kL0_CompactionTrigger/2;
     UpdatePenalty(&version);
-    ASSERT_NE(version.WritePenalty(), 0);
+    ASSERT_NE((int)version.WritePenalty(), 0);
     
     // clean up
     version.m_LevelFileCount[1]=0;
@@ -209,22 +209,22 @@ TEST(PenaltyTester, NoPenalty)
         // no penalty 
         version.m_FalseFile[level].file_size=0;
         UpdatePenalty(&version);
-        ASSERT_EQ(version.WritePenalty(), 0);
+        ASSERT_EQ((int)version.WritePenalty(), 0);
 
         version.m_FalseFile[level].file_size=VersionSet::DesiredBytesForLevel(level);
         UpdatePenalty(&version);
-        ASSERT_EQ(version.WritePenalty(), 0);
+        ASSERT_EQ((int)version.WritePenalty(), 0);
 
         version.m_FalseFile[level].file_size=VersionSet::MaxBytesForLevel(level)-1;
         UpdatePenalty(&version);
-        ASSERT_EQ(version.WritePenalty(), 0);
+        ASSERT_EQ((int)version.WritePenalty(), 0);
 
         version.m_FalseFile[level].file_size=VersionSet::MaxBytesForLevel(level);
         UpdatePenalty(&version);
         if ((config::kNumLevels-1)!=level)
-            ASSERT_NE(version.WritePenalty(), 0);
+            ASSERT_NE((int)version.WritePenalty(), 0);
         else
-            ASSERT_EQ(version.WritePenalty(), 0);
+            ASSERT_EQ((int)version.WritePenalty(), 0);
 
         // clean up
         version.m_FalseFile[level].file_size=0;
