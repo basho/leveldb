@@ -29,7 +29,7 @@
 #include "db/dbformat.h"
 #include "db/db_impl.h"
 #include "db/version_set.h"
-#include "leveldb_os/expiry_os.h"
+#include "util/expiry_os.h"
 #include "util/logging.h"
 #include "util/throttle.h"
 
@@ -40,6 +40,10 @@ static const char * lRiakMetaDataKey=
     {"\x10\x00\x00\x00\x02\x0c\xb6\xd9\x00\x08"};
 static const size_t lRiakMetaDataKeyLen=10;
 
+/**
+ * settings information that gets dumped to LOG upon
+ *  leveldb start
+ */
 void
 ExpiryModuleOS::Dump(
     Logger * log) const
@@ -52,7 +56,9 @@ ExpiryModuleOS::Dump(
 
 }   // ExpiryModuleOS::Dump
 
-bool ExpiryModuleOS::MemTableInserterCallback(
+
+bool
+ExpiryModuleOS::MemTableInserterCallback(
     const Slice & Key,   // input: user's key about to be written
     const Slice & Value, // input: user's value object
     ValueType & ValType,   // input/output: key type. call might change
@@ -71,13 +77,28 @@ bool ExpiryModuleOS::MemTableInserterCallback(
                 || 0!=memcmp(lRiakMetaDataKey,Key.data(),lRiakMetaDataKeyLen))))
     {
         ValType=kTypeValueWriteTime;
-        Expiry=GetTimeMinutes();
+        Expiry=GenerateWriteTime(Key, Value);
     }   // if
 
     return(good);
 
 }   // ExpiryModuleOS::MemTableInserterCallback
 
+
+/**
+ * Use Basho's GetTimeMinutes() as write time source.
+ *  This clock returns microseconds since epoch, but
+ *  only updates every 60 seconds or so.
+ */
+uint64_t
+ExpiryModuleOS::GenerateWriteTime(
+    const Slice & Key,
+    const Slice & Value) const
+{
+
+    return(GetTimeMinutes());
+
+}  // ExpiryModuleOS::GenerateWriteTime()
 
 /**
  * Returns true if key is expired.  False if key is NOT expired

@@ -20,8 +20,8 @@
 //
 // -------------------------------------------------------------------
 
-#ifndef EXPIRY_EE_H
-#define EXPIRY_EE_H
+#ifndef EXPIRY_OS_H
+#define EXPIRY_OS_H
 
 #include <vector>
 
@@ -40,7 +40,6 @@ public:
     ExpiryModuleOS()
         : expiry_enabled(false), expiry_minutes(0), whole_file_expiry(false)
     {};
-
     ~ExpiryModuleOS() {};
 
     // Print expiry options to LOG file
@@ -104,7 +103,13 @@ public:
     // removing expired data during compactions).
     bool whole_file_expiry;
 
-};  // ExpiryModule
+protected:
+    // When "creating" write time, chose its source based upon
+    //  open source versus enterprise edition
+    virtual uint64_t GenerateWriteTime(const Slice & Key, const Slice & Value) const;
+
+
+};  // ExpiryModuleOS
 
 }  // namespace leveldb
 
