@@ -92,6 +92,15 @@ public:
 };  // class PenaltyTester
 
 
+  /*******************
+   * Form note:
+   *   using     ASSERT_TRUE(0==version.WritePenalty());
+   *    instead of ASSERT_EQ / ASSERT_NE because WritePenalty
+   *    returns a volatile int, which older compilers believe is
+   *    not an equivalent type to a constant.  RedHat 5, Solaris,
+   *    and SmartOS were giving grief.
+   *******************/
+
 /**
  * Debug 1
  */
@@ -108,10 +117,11 @@ TEST(PenaltyTester, Debug1)
 
     UpdatePenalty(&version);
 
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
 }   // test Debug1
 #endif
+
 
 /**
  * No penalty scenarios
@@ -125,7 +135,7 @@ TEST(PenaltyTester, NoPenalty)
 
     // nothing
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     /**
      * Level 0
@@ -134,16 +144,16 @@ TEST(PenaltyTester, NoPenalty)
     // no penalty
     version.m_LevelFileCount[0]=config::kL0_CompactionTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     version.m_LevelFileCount[0]=config::kL0_SlowdownWritesTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     // threshold reached ... some penalty
     version.m_LevelFileCount[0]=config::kL0_SlowdownWritesTrigger+1;
     UpdatePenalty(&version);
-    ASSERT_NE((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0!=version.WritePenalty());
 
     // clean up
     version.m_LevelFileCount[0]=0;
@@ -155,16 +165,16 @@ TEST(PenaltyTester, NoPenalty)
     // no penalty
     version.m_LevelFileCount[1]=config::kL0_CompactionTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     version.m_LevelFileCount[1]=config::kL0_SlowdownWritesTrigger;
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     // threshold reached ... some penalty
     version.m_LevelFileCount[1]=config::kL0_SlowdownWritesTrigger+1;
     UpdatePenalty(&version);
-    ASSERT_NE((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0!=version.WritePenalty());
 
     // clean up
     version.m_LevelFileCount[1]=0;
@@ -176,25 +186,25 @@ TEST(PenaltyTester, NoPenalty)
     // no penalty
     version.m_FalseFile[2].file_size=0;
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     version.m_FalseFile[2].file_size=VersionSet::DesiredBytesForLevel(2);
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2)-1;
     UpdatePenalty(&version);
-    ASSERT_EQ((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0==version.WritePenalty());
 
     version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2);
     UpdatePenalty(&version);
-    ASSERT_NE((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0!=version.WritePenalty());
 
     // interaction rule with level 1
     version.m_FalseFile[2].file_size=VersionSet::MaxBytesForLevel(2)-1;
     version.m_LevelFileCount[1]=config::kL0_CompactionTrigger/2;
     UpdatePenalty(&version);
-    ASSERT_NE((int)version.WritePenalty(), 0);
+    ASSERT_TRUE(0!=version.WritePenalty());
 
     // clean up
     version.m_LevelFileCount[1]=0;
@@ -209,22 +219,22 @@ TEST(PenaltyTester, NoPenalty)
         // no penalty
         version.m_FalseFile[level].file_size=0;
         UpdatePenalty(&version);
-        ASSERT_EQ((int)version.WritePenalty(), 0);
+	ASSERT_TRUE(0==version.WritePenalty());
 
         version.m_FalseFile[level].file_size=VersionSet::DesiredBytesForLevel(level);
         UpdatePenalty(&version);
-        ASSERT_EQ((int)version.WritePenalty(), 0);
+	ASSERT_TRUE(0==version.WritePenalty());
 
         version.m_FalseFile[level].file_size=VersionSet::MaxBytesForLevel(level)-1;
         UpdatePenalty(&version);
-        ASSERT_EQ((int)version.WritePenalty(), 0);
+	ASSERT_TRUE(0==version.WritePenalty());
 
         version.m_FalseFile[level].file_size=VersionSet::MaxBytesForLevel(level);
         UpdatePenalty(&version);
         if ((config::kNumLevels-1)!=level)
-            ASSERT_NE((int)version.WritePenalty(), 0);
+	  ASSERT_TRUE(0!=version.WritePenalty());
         else
-            ASSERT_EQ((int)version.WritePenalty(), 0);
+	  ASSERT_TRUE(0==version.WritePenalty());
 
         // clean up
         version.m_FalseFile[level].file_size=0;
