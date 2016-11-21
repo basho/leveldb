@@ -41,7 +41,6 @@ struct FileMetaData;
 class ExpiryModule : public RefObjectBase
 {
 public:
-    ExpiryModule() {};
     ~ExpiryModule() {};
 
     // Print expiry options to LOG file
@@ -90,6 +89,17 @@ public:
         int Level,                    // input: level to review for expiry
         VersionEdit * Edit) const     // output: NULL or destination of delete list
     {return(false);};
+
+    // Creates derived ExpiryModule object that matches compile time
+    //  switch for open source or Basho enterprise edition features.
+    static ExpiryModule * CreateExpiryModule();
+
+protected:
+    ExpiryModule() {};
+
+private:
+    ExpiryModule(const ExpiryModule &);
+    ExpiryModule & operator=(const ExpiryModule &);
 
 };  // ExpiryModule
 

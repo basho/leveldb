@@ -33,13 +33,13 @@
 #include "leveldb/options.h"
 #include "leveldb/slice.h"
 #include "leveldb/write_batch.h"
-#include "leveldb_os/expiry_os.h"
 
 #include "db/db_impl.h"
 #include "db/dbformat.h"
 #include "db/filename.h"
 #include "db/version_set.h"
 #include "port/port.h"
+#include "util/expiry_os.h"
 #include "util/mutexlock.h"
 #include "util/throttle.h"
 
