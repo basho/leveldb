@@ -267,7 +267,6 @@ main(
                                     if (riak_translations && '\x10'==*parsed.user_key.data())
                                     {
                                         leveldb::Slice cursor_slice;
-                                        std::string type, bucket;
 
                                         cursor_slice=parsed.user_key;
                                         printf("     ");
@@ -279,6 +278,7 @@ main(
 
                                         cursor_slice=parsed.user_key;
 #if 0
+                                        std::string type, bucket;
                                         if (KeyGetBucket(cursor_slice, type, bucket))
                                             printf("     type: %s, bucket: %s\n", type.c_str(), bucket.c_str());
                                         else
