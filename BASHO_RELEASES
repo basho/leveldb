@@ -1,5 +1,13 @@
+github.com tag 2.0.33 - November 21, 2016
+-----------------------------------------
+mv-bucket-expiry:  - partial branch to enable X-Riak-Meta-Expiry-Base-Seconds
+                     property within enterprise edition
+
+--- no 2.0.32 tag on leveldb ---
+
 github.com tag 2.0.31 - November 1, 2016
 ----------------------------------------
+ - version shipped with Riak 2.2
 mv-no-md-expiry: - Riak specific
                  - never convert a key prefix of sext:encoded "{md" to expiry
                  - update sst_scan for dumping Riak formated keys
