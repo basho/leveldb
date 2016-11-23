@@ -82,6 +82,9 @@ class TableBuilder {
   uint64_t GetExpiryWriteHigh() const;
   uint64_t GetExpiryExplicitHigh() const;
 
+  // retrieve precache info
+  uint64_t GetCacheId() const;
+  
  private:
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);
