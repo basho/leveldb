@@ -1464,9 +1464,11 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->current_output()->exp_write_low = compact->builder->GetExpiryWriteLow();
   compact->current_output()->exp_write_high = compact->builder->GetExpiryWriteHigh();
   compact->current_output()->exp_explicit_high = compact->builder->GetExpiryExplicitHigh();
+#if 0
   delete compact->builder;
   compact->builder = NULL;
-
+#endif
+  
   // Finish and check for file errors
   if (s.ok()) {
     s = compact->outfile->Sync();
@@ -1478,6 +1480,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->outfile = NULL;
 
   if (s.ok() && current_entries > 0) {
+#if 0      
     // Verify that the table is usable
     Table * table_ptr;
     Iterator* iter = table_cache_->NewIterator(ReadOptions(),
@@ -1493,7 +1496,18 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
     // table_ptr invalidated by this delete
     delete iter;
+#else
+    Cache::Handle * handle;
+    // use FindTable so as to give cache_id
+    s = table_cache_->FindTable(output_number, current_bytes, compact->compaction->level()+1,
+                               &handle, false, false, compact->builder->GetCacheId());
+    /// add code to read filter
+    table_cache_->Release(handle);
+    delete compact->builder;
+    compact->builder = NULL;
 
+#endif      
+    
     if (s.ok()) {
       Log(options_.info_log,
           "Generated table #%llu: %lld keys, %lld bytes",
@@ -2448,9 +2462,9 @@ DBImpl::IsOkToPreCache(
 
         // raise kLO_CompactionTrigger to power of level
         for (loop=0; loop<Level; ++loop)
-            est_limit*=config::kL0_CompactionTrigger;
+            est_limit*=4; //config::kL0_CompactionTrigger;
 
-        ret_flag=(est_limit < double_cache.GetCapacity(false)/2);
+        ret_flag=(est_limit < double_cache.GetCapacity(false)/*/2*/);
 
         if (ret_flag)
             gPerfCounters->Inc(ePerfDebug1);
