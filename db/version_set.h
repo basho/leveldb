@@ -166,7 +166,7 @@ protected:
   {
   }
 
-  ~Version();
+  virtual ~Version();
 
 private:
   // No copying allowed
