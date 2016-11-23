@@ -81,10 +81,11 @@ class TableCache {
   Cache * cache_;
   DoubleCache & doublecache_;
 
+public:
   // virtual to enable unit test overrides
   virtual Status FindTable(uint64_t file_number, uint64_t file_size, int level,
                            Cache::Handle**, bool is_compaction=false,
-                           bool for_iterator=false);
+                           bool for_iterator=false, uint64_t cache_id=0);
 };
 
 
