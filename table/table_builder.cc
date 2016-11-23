@@ -418,4 +418,7 @@ uint64_t TableBuilder::GetExpiryExplicitHigh() const {
   return rep_->sst_counters.Value(eSstCountExpiry3);
 }
 
+uint64_t TableBuilder::GetCacheId() const {
+  return rep_->cache_id;
+}
 }  // namespace leveldb
