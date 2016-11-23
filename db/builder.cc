@@ -103,6 +103,7 @@ Status BuildTable(const std::string& dbname,
 
     if (s.ok()) {
       // Verify that the table is usable
+#if 0
       Table * table_ptr;
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
@@ -118,6 +119,14 @@ Status BuildTable(const std::string& dbname,
 
       // table_ptr is owned by it and therefore invalidated by this delete
       delete it;
+#else
+      Cache::Handle * handle;
+      // use FindTable so as to give cache_id
+      s = table_cache->FindTable(meta->number, meta->file_size, meta->level,
+                                 &handle, false, false, cache_id);
+      /// add code to read filter
+      table_cache->Release(handle);
+#endif      
     }
   }
 
