@@ -1277,6 +1277,7 @@ Status DBImpl::OpenCompactionOutputFile(
       if (pagecache_flag)
           compact->outfile->SetMetadataOffset(1);
 
+
     uint64_t cache_id;
 
     if (IsOkToPreCache(compact->compaction->level()+1))
@@ -1468,7 +1469,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   delete compact->builder;
   compact->builder = NULL;
 #endif
-  
+
   // Finish and check for file errors
   if (s.ok()) {
     s = compact->outfile->Sync();
@@ -1480,7 +1481,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->outfile = NULL;
 
   if (s.ok() && current_entries > 0) {
-#if 0      
+#if 0
     // Verify that the table is usable
     Table * table_ptr;
     Iterator* iter = table_cache_->NewIterator(ReadOptions(),
@@ -1506,8 +1507,8 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
     delete compact->builder;
     compact->builder = NULL;
 
-#endif      
-    
+#endif
+
     if (s.ok()) {
       Log(options_.info_log,
           "Generated table #%llu: %lld keys, %lld bytes",
