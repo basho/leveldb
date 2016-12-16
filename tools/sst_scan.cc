@@ -288,7 +288,7 @@ main(
 
                                     if (value_dump)
                                     {
-                                        uint64_t mod_time;
+//                                        uint64_t mod_time;
 
                                         printf("  %s\n", HexString(it2->value()).c_str());
 #if 0
