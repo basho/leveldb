@@ -815,7 +815,10 @@ VersionSet::VersionSet(const std::string& dbname,
       descriptor_file_(NULL),
       descriptor_log_(NULL),
       dummy_versions_(this),
-      current_(NULL) {
+      current_(NULL),
+      last_penalty_minutes_(0),
+      prev_write_penalty_(0)
+{
   AppendVersion(new Version(this));
 }
 
@@ -1189,11 +1192,11 @@ VersionSet::Finalize(Version* v)
                 //  only occurs if no other compactions running on groomer thread
                 //  (no grooming if landing level is still overloaded)
                 if (0==score && grooming_trigger<=v->files_[level].size()
-                    && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels]) 
+                    && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels])
 		    < gLevelTraits[config::kNumOverlapLevels].m_DesiredBytesForLevel)
                 {
                     // secondary test, don't push too much to next Overlap too soon
-                    if (!gLevelTraits[level+1].m_OverlappedFiles 
+                    if (!gLevelTraits[level+1].m_OverlappedFiles
                          || v->files_[level+1].size()<=config::kL0_CompactionTrigger)
                     {
                         score=1;
@@ -1300,7 +1303,7 @@ VersionSet::UpdatePenalty(
     for (int level = 0; level < config::kNumLevels-1; ++level)
     {
         int loop, count, value, increment;
-        
+
         value=0;
         count=0;
         increment=0;
@@ -1394,7 +1397,22 @@ VersionSet::UpdatePenalty(
     if (100000<penalty || penalty<0)
         penalty=100000;
 
-    v->write_penalty_ = penalty;
+    uint64_t temp_min;
+    temp_min=GetTimeMinutes();
+
+    if (temp_min!=last_penalty_minutes_ || 0==penalty)
+    {
+        last_penalty_minutes_=temp_min;
+
+        if (0==penalty)
+            prev_write_penalty_=0;
+        else if (prev_write_penalty_<penalty)
+            prev_write_penalty_+=(penalty - prev_write_penalty_)/17;
+        else
+            prev_write_penalty_-=(prev_write_penalty_ - penalty)/17;
+    }   // if
+
+    v->write_penalty_=prev_write_penalty_;
 
 // mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
 //    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d", penalty);
@@ -1669,7 +1687,7 @@ VersionSet::PickCompaction(
 
       Log(options_->info_log,"Finalize level: %d, grooming %d",
 	  current_->compaction_level_, current_->compaction_grooming_);
-      
+
       c=NULL;
 
       // We prefer compactions triggered by too much data in a level over

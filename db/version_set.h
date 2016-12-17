@@ -391,6 +391,11 @@ protected:
   //  only one to write to manifest at a time.  Only used in LogAndApply
   port::Mutex manifest_mutex_;
 
+  volatile uint64_t last_penalty_minutes_;
+  volatile int prev_write_penalty_;
+
+
+
   struct CompactionStatus_s
   {
       bool m_Submitted;     //!< level submitted to hot thread pool
