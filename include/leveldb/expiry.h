@@ -94,6 +94,10 @@ public:
     //  switch for open source or Basho enterprise edition features.
     static ExpiryModule * CreateExpiryModule();
 
+    // Cleans up global objects related to expiry
+    //  switch for open source or Basho enterprise edition features.
+    static void ShutdownExpiryModule();
+
 protected:
     ExpiryModule() {};
 
