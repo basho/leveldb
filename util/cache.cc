@@ -212,9 +212,7 @@ LRUCache::~LRUCache() {
     LRUHandle* next = e->next;
 
     assert(e->refs == 1);  // Error if caller has an unreleased handle
-    // must allow for 2 refs given overlapped files
-    //  being double ref'd intentionally ... ruins this assert :-(
-//    assert(e->refs == 1 || e->refs == 2);  // Error if caller has an unreleased handle
+
     Unref(e);
     e = next;
   }
