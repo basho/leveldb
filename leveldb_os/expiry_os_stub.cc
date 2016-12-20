@@ -38,4 +38,14 @@ ExpiryModule::CreateExpiryModule()
 
 }   // ExpiryModule::CreateExpiryModule()
 
+
+void
+ExpiryModule::ShutdownExpiryModule()
+{
+
+    return;
+
+}   // ExpiryModule::ShutdownExpiryModule
+
+
 }  // namespace leveldb
