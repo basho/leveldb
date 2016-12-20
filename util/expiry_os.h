@@ -104,6 +104,10 @@ public:
     bool whole_file_expiry;
 
 protected:
+    // utility to CompactionFinalizeCallback to review
+    //  characteristics of one SstFile to see if entirely expired
+    virtual bool IsFileExpired(const FileMetaData & SstFile, ExpiryTime Now, ExpiryTime Aged) const;
+
     // When "creating" write time, chose its source based upon
     //  open source versus enterprise edition
     virtual uint64_t GenerateWriteTime(const Slice & Key, const Slice & Value) const;

@@ -240,6 +240,8 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
 {
     bool ret_flag(false);
 
+//?? error if expiry_minutes is zero?
+
     if (expiry_enabled && whole_file_expiry)
     {
         bool expired_file(false);
@@ -251,19 +253,8 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
         aged=now - expiry_minutes*60*port::UINT64_ONE_SECOND;
         for (it=files.begin(); (!expired_file || WantAll) && files.end()!=it; ++it)
         {
-            // First, find an eligible file:
-            //  - if exp_write_low is zero, game over -  contains non-expiry records
-            //  - if exp_write_high is below current aged time and aging enabled,
-            //       or no exp_write_high keys (is zero)
-            //  - highest explicit expiry (exp_explicit_high) is non-zero and below now
-            //  Note:  say file only contained deleted records:  ... still delete file
-            //      exp_write_low would be ULONG_MAX, exp_write_high would be 0, exp_explicit_high would be zero
-            expired_file = (0!=(*it)->exp_write_low) && (0!=(*it)->exp_write_high || 0!=(*it)->exp_explicit_high);
-            expired_file = expired_file && (((*it)->exp_write_high<=aged && 0!=expiry_minutes)
-                                            || 0==(*it)->exp_write_high);
-
-            expired_file = expired_file && (0==(*it)->exp_explicit_high
-                                            || (0!=(*it)->exp_explicit_high && (*it)->exp_explicit_high<=now));
+            // First, is file eligible?
+            expired_file=IsFileExpired(*(*it), now, aged);
 
             // identified an expired file, do any higher levels overlap
             //  its key range?
@@ -295,6 +286,36 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
     return(ret_flag);
 
 }   // ExpiryModuleOS::CompactionFinalizeCallback
+
+
+/**
+ * Review the metadata of one file to see if it is
+ *  eligible for file expiry
+ */
+bool
+ExpiryModuleOS::IsFileExpired(
+    const FileMetaData & SstFile,
+    ExpiryTime Now,
+    ExpiryTime Aged) const
+{
+    bool expired_file;
+
+    //  - if exp_write_low is zero, game over -  contains non-expiry records
+    //  - if exp_write_high is below current aged time and aging enabled,
+    //       or no exp_write_high keys (is zero)
+    //  - highest explicit expiry (exp_explicit_high) is non-zero and below now
+    //  Note:  say file only contained deleted records:  ... still delete file
+    //      exp_write_low would be ULONG_MAX, exp_write_high would be 0, exp_explicit_high would be zero
+    expired_file = (0!=SstFile.exp_write_low) && (0!=SstFile.exp_write_high || 0!=SstFile.exp_explicit_high);
+    expired_file = expired_file && ((SstFile.exp_write_high<=Aged && 0!=expiry_minutes)
+                                    || 0==SstFile.exp_write_high);
+
+    expired_file = expired_file && (0==SstFile.exp_explicit_high
+                                    || (0!=SstFile.exp_explicit_high && SstFile.exp_explicit_high<=Now));
+
+    return(expired_file);
+
+}   // ExpiryModuleOS::IsFileExpired
 
 
 /**
