@@ -1356,9 +1356,9 @@ VersionSet::UpdatePenalty(
 	        // how many compaction behind
                 value=(level_bytes-gLevelTraits[level].m_MaxBytesForLevel) / options_->write_buffer_size;
                 value+=1;
-                increment=3;
-                // Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
-                //        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
+                increment=2;
+                Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
+                        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
             }   // if
 
             // this penalty is about reducing write amplification, its
@@ -1378,10 +1378,10 @@ VersionSet::UpdatePenalty(
                 // only throttle if backlog on the horizon
                 if (count < 0)
                     value=0;
-                //else
-                //Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, level_bytes: %llu",
-                //        value, count, options_->write_buffer_size, level_bytes);
-                increment=3;
+                else
+                Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, level_bytes: %llu",
+                        value, count, options_->write_buffer_size, level_bytes);
+                increment=2;
             }   // else if
 
         }   // else
@@ -1400,13 +1400,13 @@ VersionSet::UpdatePenalty(
     uint64_t temp_min;
     temp_min=GetTimeMinutes();
 
-    if (temp_min!=last_penalty_minutes_ || 0==penalty)
+    if (temp_min!=last_penalty_minutes_/* || 0==penalty*/)
     {
         last_penalty_minutes_=temp_min;
 
-        if (0==penalty)
+        /*if (0==penalty)
             prev_write_penalty_=0;
-        else if (prev_write_penalty_<penalty)
+            else*/ if (prev_write_penalty_<penalty)
             prev_write_penalty_+=(penalty - prev_write_penalty_)/17;
         else
             prev_write_penalty_-=(prev_write_penalty_ - penalty)/17;
@@ -1415,7 +1415,7 @@ VersionSet::UpdatePenalty(
     v->write_penalty_=prev_write_penalty_;
 
 // mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
-//    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d", penalty);
+    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d, %d", penalty, prev_write_penalty_);
 
     return;
 
