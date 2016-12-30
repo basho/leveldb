@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include "leveldb/env.h"
 #include "util/logging.h"
 
 namespace leveldb {
@@ -16,6 +17,7 @@ namespace port {
 static void PthreadCall(const char* label, int result) {
   if (result != 0) {
     fprintf(stderr, "pthread %s: %s\n", label, strerror(result));
+    Log(NULL, "pthread %s: %s\n", label, strerror(result));
     abort();
   }
 }
