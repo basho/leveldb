@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include "leveldb/env.h"
+#include "leveldb/options.h"
 #include "util/refobject_base.h"
 
 namespace leveldb {
@@ -37,6 +38,16 @@ class SstCounters;
 class Version;
 class VersionEdit;
 struct FileMetaData;
+
+
+enum EleveldbRouterActions_t
+{
+    eGetBucketProperties=1
+};  // enum EleveldbRouterActions_t
+
+
+typedef bool (* EleveldbRouter_t)(EleveldbRouterActions_t Action, int ParamCount, const void ** Params);
+
 
 class ExpiryModule : public RefObjectBase
 {
@@ -92,7 +103,7 @@ public:
 
     // Creates derived ExpiryModule object that matches compile time
     //  switch for open source or Basho enterprise edition features.
-    static ExpiryModule * CreateExpiryModule();
+    static ExpiryModule * CreateExpiryModule(EleveldbRouter_t Router);
 
     // Cleans up global objects related to expiry
     //  switch for open source or Basho enterprise edition features.
