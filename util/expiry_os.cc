@@ -48,9 +48,9 @@ void
 ExpiryModuleOS::Dump(
     Logger * log) const
 {
-    Log(log," ExpiryModuleOS.expiry_enabled: %s", expiry_enabled ? "true" : "false");
-    Log(log," ExpiryModuleOS.expiry_minutes: %" PRIu64, expiry_minutes);
-    Log(log,"    ExpiryModuleOS.whole_files: %s", whole_file_expiry ? "true" : "false");
+    Log(log,"  ExpiryModuleOS.expiry_enabled: %s", expiry_enabled ? "true" : "false");
+    Log(log,"  ExpiryModuleOS.expiry_minutes: %" PRIu64, expiry_minutes);
+    Log(log,"     ExpiryModuleOS.whole_files: %s", whole_file_expiry ? "true" : "false");
 
     return;
 
