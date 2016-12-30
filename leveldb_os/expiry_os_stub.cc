@@ -31,7 +31,8 @@ namespace leveldb {
  *  an open source version of object expiry
  */
 ExpiryModule *
-ExpiryModule::CreateExpiryModule()
+ExpiryModule::CreateExpiryModule(
+    EleveldbRouter_t Router)
 {
 
     return(new leveldb::ExpiryModuleOS);
