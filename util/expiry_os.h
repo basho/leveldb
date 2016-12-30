@@ -40,6 +40,7 @@ public:
     ExpiryModuleOS()
         : expiry_enabled(false), expiry_minutes(0), whole_file_expiry(false)
     {};
+
     ~ExpiryModuleOS() {};
 
     // Print expiry options to LOG file
@@ -97,7 +98,6 @@ public:
     // disables expiry by age feature.
     uint64_t expiry_minutes;
 
-    // configuration values
     // Riak specific option authorizing leveldb to eliminate entire
     // files that contain expired data (delete files instead of
     // removing expired data during compactions).
