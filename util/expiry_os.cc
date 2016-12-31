@@ -240,21 +240,21 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
 {
     bool ret_flag(false);
 
-//?? error if expiry_minutes is zero?
-
-    if (expiry_enabled && whole_file_expiry)
+    // only test expiry_enable since it is "global" on/off switch.
+    //  other parameters might change if bucket level expiry uses
+    //  different ExpiryModuleOS object.
+    if (expiry_enabled)
     {
         bool expired_file(false);
-        ExpiryTime now, aged;
+        ExpiryTime now;
         const std::vector<FileMetaData*> & files(Ver.GetFileList(Level));
         std::vector<FileMetaData*>::const_iterator it;
 
         now=GetTimeMinutes();
-        aged=now - expiry_minutes*60*port::UINT64_ONE_SECOND;
         for (it=files.begin(); (!expired_file || WantAll) && files.end()!=it; ++it)
         {
             // First, is file eligible?
-            expired_file=IsFileExpired(*(*it), now, aged);
+            expired_file=IsFileExpired(*(*it), now);
 
             // identified an expired file, do any higher levels overlap
             //  its key range?
@@ -295,10 +295,16 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
 bool
 ExpiryModuleOS::IsFileExpired(
     const FileMetaData & SstFile,
-    ExpiryTime Now,
-    ExpiryTime Aged) const
+    ExpiryTime Now) const
 {
     bool expired_file;
+    ExpiryTime aged;
+
+    aged=Now - expiry_minutes*60*port::UINT64_ONE_SECOND;
+
+    // must test whole_file_expiry here since this could be
+    //  a bucket's ExpiryModuleOS object, not the default in Options
+    expired_file = (expiry_enabled && whole_file_expiry && 0!=expiry_minutes);
 
     //  - if exp_write_low is zero, game over -  contains non-expiry records
     //  - if exp_write_high is below current aged time and aging enabled,
@@ -306,8 +312,9 @@ ExpiryModuleOS::IsFileExpired(
     //  - highest explicit expiry (exp_explicit_high) is non-zero and below now
     //  Note:  say file only contained deleted records:  ... still delete file
     //      exp_write_low would be ULONG_MAX, exp_write_high would be 0, exp_explicit_high would be zero
-    expired_file = (0!=SstFile.exp_write_low) && (0!=SstFile.exp_write_high || 0!=SstFile.exp_explicit_high);
-    expired_file = expired_file && ((SstFile.exp_write_high<=Aged && 0!=expiry_minutes)
+    expired_file = expired_file && (0!=SstFile.exp_write_low)
+                   && (0!=SstFile.exp_write_high || 0!=SstFile.exp_explicit_high);
+    expired_file = expired_file && ((SstFile.exp_write_high<=aged && 0!=expiry_minutes)
                                     || 0==SstFile.exp_write_high);
 
     expired_file = expired_file && (0==SstFile.exp_explicit_high

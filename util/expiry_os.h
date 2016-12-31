@@ -84,6 +84,10 @@ public:
         int Level,                     // input: level to review for expiry
         VersionEdit * Edit) const;     // output: NULL or destination of delete list
 
+    // utility to CompactionFinalizeCallback to review
+    //  characteristics of one SstFile to see if entirely expired
+    virtual bool IsFileExpired(const FileMetaData & SstFile, ExpiryTime Now) const;
+
 public:
     // NOTE: option names below are intentionally public and lowercase with underscores.
     //       This is to match style of options within include/leveldb/options.h.
@@ -104,10 +108,6 @@ public:
     bool whole_file_expiry;
 
 protected:
-    // utility to CompactionFinalizeCallback to review
-    //  characteristics of one SstFile to see if entirely expired
-    virtual bool IsFileExpired(const FileMetaData & SstFile, ExpiryTime Now, ExpiryTime Aged) const;
-
     // When "creating" write time, chose its source based upon
     //  open source versus enterprise edition
     virtual uint64_t GenerateWriteTime(const Slice & Key, const Slice & Value) const;
