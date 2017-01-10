@@ -364,9 +364,9 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     module.expiry_minutes=0;
     ver.SetFileList(level, files);
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
-    ASSERT_EQ(flag, true);
+    ASSERT_EQ(flag, false);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
-    ASSERT_EQ(flag, true);
+    ASSERT_EQ(flag, false);
 
     // remove explicit
     files.pop_back();
