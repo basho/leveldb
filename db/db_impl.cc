@@ -47,6 +47,17 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
+#include <iostream>
+#include <fstream>
+#include <sstream>
+
+#define FOUT(text) {                                                    \
+        std::fstream outfile;                                           \
+        outfile.open("/tmp/eleveldb.txt", std::fstream::out|std::fstream::app); \
+        outfile << text << std::endl;                                   \
+        outfile.close();                                                \
+    }
+
 namespace leveldb {
 
 // Information kept for every waiting writer
@@ -910,6 +921,8 @@ Status DBImpl::CompactMemTableSynchronous() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
+  FOUT("Calling MaybeScheduleCompaction");
+  
   if (!shutting_down_.Acquire_Load())
   {
       if (NULL==manual_compaction_)
