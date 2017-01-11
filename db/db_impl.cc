@@ -921,8 +921,6 @@ Status DBImpl::CompactMemTableSynchronous() {
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
 
-  FOUT("Calling MaybeScheduleCompaction");
-  
   if (!shutting_down_.Acquire_Load())
   {
       if (NULL==manual_compaction_)
@@ -936,6 +934,7 @@ void DBImpl::MaybeScheduleCompaction() {
           // support manual compaction under hot threads
           versions_->SetCompactionSubmitted(manual_compaction_->level);
           ThreadTask * task=new CompactionTask(this, NULL);
+          FOUT("Submitting manual compaction");
           gCompactionThreads->Submit(task, true);
       }   // else if
   }   // if
