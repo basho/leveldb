@@ -1748,10 +1748,10 @@ VersionSet::PickCompaction(
           ThreadTask * task=new CompactionTask(db_impl, c);
 
           if (0==level) {
-              FOUT("Submitting level0 compaction: grooming = " << current_->compaction_grooming);
+              FOUT("Submitting level0 compaction: grooming = " << current_->compaction_grooming_);
               submit_flag=gLevel0Threads->Submit(task, !current_->compaction_grooming_);
           } else {
-              FOUT("Submitting level" << level << " compaction: grooming = " << current_->compaction_grooming);
+              FOUT("Submitting level" << level << " compaction: grooming = " << current_->compaction_grooming_);
               submit_flag=gCompactionThreads->Submit(task, !current_->compaction_grooming_);
           }
       }   // if

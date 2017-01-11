@@ -47,17 +47,6 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
-#include <iostream>
-#include <fstream>
-#include <sstream>
-
-#define FOUT(text) {                                                    \
-        std::fstream outfile;                                           \
-        outfile.open("/tmp/eleveldb.txt", std::fstream::out|std::fstream::app); \
-        outfile << text << std::endl;                                   \
-        outfile.close();                                                \
-    }
-
 namespace leveldb {
 
 // Information kept for every waiting writer

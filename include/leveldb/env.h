@@ -21,6 +21,17 @@
 #include "leveldb/perf_count.h"
 #include "leveldb/status.h"
 
+#include <iostream>
+#include <fstream>
+#include <sstream>
+
+#define FOUT(text) {                                                    \
+        std::fstream outfile;                                           \
+        outfile.open("/tmp/eleveldb.txt", std::fstream::out|std::fstream::app); \
+        outfile << text << std::endl;                                   \
+        outfile.close();                                                \
+    }
+
 namespace leveldb {
 
 class AppendableFile;
