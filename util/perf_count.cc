@@ -360,11 +360,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
             uint32_t ret_32, * ptr_32;
 
             ptr_32=(uint32_t *)&val_ptr;
-            ret_32=inc_and_fetch(ptr_32, 1);
+            ret_32=inc_and_fetch(ptr_32);
             if (0==ret_32)
             {
                 ++ptr_32;
-                inc_and_fetch(ptr_32, 1);
+                inc_and_fetch(ptr_32);
             }   // if
 #endif
             ret_val=*val_ptr;
@@ -432,11 +432,11 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
 
             ptr_32=(uint32_t *)&val_ptr;
             old_32=*ptr_32;
-            ret_32=add_and_fetch(ptr_32, Amount);
+            ret_32=add_and_fetch(ptr_32, (uint32_t)Amount);
             if (ret_32<old_32)
             {
                 ++ptr_32;
-                add_and_fetch(ptr_32, 1);
+                add_and_fetch(ptr_32, (uint32_t)1);
             }   // if
 
             ret_val=*val_ptr;
