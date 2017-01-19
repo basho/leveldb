@@ -101,6 +101,10 @@ public:
         VersionEdit * Edit) const     // output: NULL or destination of delete list
     {return(false);};
 
+    // yep, sometimes we want to expiry this expiry module object.
+    //  mostly for bucket level properties in Riak EE
+    virtual uint64_t ExpiryModuleExpiry() {return(0);};
+
     // Creates derived ExpiryModule object that matches compile time
     //  switch for open source or Basho enterprise edition features.
     static ExpiryModule * CreateExpiryModule(EleveldbRouter_t Router);
@@ -108,6 +112,9 @@ public:
     // Cleans up global objects related to expiry
     //  switch for open source or Basho enterprise edition features.
     static void ShutdownExpiryModule();
+
+    // Riak EE:  stash a user created module with settings
+    virtual void NoteUserExpirySettings() {};
 
 protected:
     ExpiryModule() {};
