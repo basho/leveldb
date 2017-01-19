@@ -168,6 +168,8 @@ Options SanitizeOptions(const std::string& dbname,
   // remove anything expiry if this is an internal database
   if (result.is_internal_db)
       result.expiry_module.reset();
+  else if (NULL!=result.expiry_module.get())
+      result.expiry_module.get()->NoteUserExpirySettings();
 
   return result;
 }
