@@ -23,6 +23,7 @@
 #ifndef EXPIRY_H
 #define EXPIRY_H
 
+#include <limits.h>
 #include <stdint.h>
 #include "leveldb/env.h"
 #include "leveldb/options.h"
@@ -57,6 +58,10 @@ public:
     // Print expiry options to LOG file
     virtual void Dump(Logger * log) const
     {Log(log,"                        Expiry: (none)");};
+
+    // close to UULONG_MAX, but not equal.  UULONG_MAX has meaning
+    //   for expiry in FileMetaData object (db/version_edit.h)
+    static const uint64_t kExpiryUnlimited = ULLONG_MAX-2;
 
     // Quick test to allow manifest logic and such know if
     //  extra expiry logic should be checked
