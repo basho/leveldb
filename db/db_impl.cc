@@ -76,7 +76,7 @@ struct DBImpl::CompactionState {
     InternalKey smallest, largest;
     uint64_t exp_write_low, exp_write_high, exp_explicit_high;
 
-    Output() : number(0), file_size(0), exp_write_low(ULONG_MAX), exp_write_high(0), exp_explicit_high(0) {}
+    Output() : number(0), file_size(0), exp_write_low(ULLONG_MAX), exp_write_high(0), exp_explicit_high(0) {}
   };
   std::vector<Output> outputs;
 
