@@ -2,7 +2,7 @@
 //
 // expiry_os.cc
 //
-// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2016-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -57,6 +57,10 @@ ExpiryModuleOS::Dump(
 }   // ExpiryModuleOS::Dump
 
 
+/**
+ * db/write_batch.cc MemTableInserter() uses this to initialize
+ *   expiry info.
+ */
 bool
 ExpiryModuleOS::MemTableInserterCallback(
     const Slice & Key,   // input: user's key about to be written
@@ -102,7 +106,8 @@ ExpiryModuleOS::GenerateWriteTime(
 
 /**
  * Returns true if key is expired.  False if key is NOT expired
- *  (used by MemtableCallback() too)
+ *  (used by MemtableCallback() too).
+ *  Used within dbformat.cc, db_iter.cc, & version_set.cc
  */
 bool ExpiryModuleOS::KeyRetirementCallback(
     const ParsedInternalKey & Ikey) const
@@ -121,7 +126,8 @@ bool ExpiryModuleOS::KeyRetirementCallback(
                 break;
 
             case kTypeValueWriteTime:
-                if (0!=expiry_minutes && 0!=Ikey.expiry)
+                if (0!=expiry_minutes && 0!=Ikey.expiry &&
+                    kExpiryUnlimited!=expiry_minutes)
                 {
                     now=GetTimeMinutes();
                     expires=expiry_minutes*60*port::UINT64_ONE_SECOND + Ikey.expiry;
@@ -151,8 +157,10 @@ bool ExpiryModuleOS::KeyRetirementCallback(
  *  - Increments delete counter for things already
  *     expired (to aid in starting compaction for
  *     keys tombstoning for higher levels).
+ *  (called from table/table_builder.cc)
  */
-bool ExpiryModuleOS::TableBuilderCallback(
+bool             // return value ignored
+ExpiryModuleOS::TableBuilderCallback(
     const Slice & Key,
     SstCounters & Counters) const
 {
@@ -166,7 +174,7 @@ bool ExpiryModuleOS::TableBuilderCallback(
 
     // make really high so that everything is less than it
     if (1==Counters.Value(eSstCountKeys))
-        Counters.Set(eSstCountExpiry1, ULONG_MAX);
+        Counters.Set(eSstCountExpiry1, ULLONG_MAX);
 
     // only updating counters.  do this even if
     //  expiry disabled
@@ -304,7 +312,8 @@ ExpiryModuleOS::IsFileExpired(
 
     // must test whole_file_expiry here since this could be
     //  a bucket's ExpiryModuleOS object, not the default in Options
-    expired_file = (expiry_enabled && whole_file_expiry && 0!=expiry_minutes);
+    expired_file = (expiry_enabled && whole_file_expiry
+                    && 0!=expiry_minutes && kExpiryUnlimited!=expiry_minutes);
 
     //  - if exp_write_low is zero, game over -  contains non-expiry records
     //  - if exp_write_high is below current aged time and aging enabled,
