@@ -622,6 +622,7 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         {"BackupError", false},
         {"PropCacheHit", true},
         {"PropCacheMiss", true},
+        {"PropCacheError", false},
     };
 
 
