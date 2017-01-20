@@ -172,12 +172,16 @@ PropertyCache::LookupInternal(
             ret_handle=LookupWait(CompositeBucket);
             gPerfCounters->Inc(ePerfPropCacheMiss);
         }   // if
-        else
+        else if (NULL!=ret_handle)
         {
             // cached or no router
             gPerfCounters->Inc(ePerfPropCacheHit);
-        }   // else
+        }   // else if
     }   // if
+
+    // never supposed to be missing if property cache in play
+    if (NULL==ret_handle)
+        gPerfCounters->Inc(ePerfPropCacheError);
 
     return(ret_handle);
 
