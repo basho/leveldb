@@ -312,18 +312,18 @@ ExpiryModuleOS::IsFileExpired(
 
     // must test whole_file_expiry here since this could be
     //  a bucket's ExpiryModuleOS object, not the default in Options
-    expired_file = (expiry_enabled && whole_file_expiry
-                    && 0!=expiry_minutes && kExpiryUnlimited!=expiry_minutes);
+    expired_file = (expiry_enabled && whole_file_expiry);
 
     //  - if exp_write_low is zero, game over -  contains non-expiry records
     //  - if exp_write_high is below current aged time and aging enabled,
     //       or no exp_write_high keys (is zero)
     //  - highest explicit expiry (exp_explicit_high) is non-zero and below now
     //  Note:  say file only contained deleted records:  ... still delete file
-    //      exp_write_low would be ULONG_MAX, exp_write_high would be 0, exp_explicit_high would be zero
+    //      exp_write_low would be ULLONG_MAX, exp_write_high would be 0, exp_explicit_high would be zero
     expired_file = expired_file && (0!=SstFile.exp_write_low)
                    && (0!=SstFile.exp_write_high || 0!=SstFile.exp_explicit_high);
-    expired_file = expired_file && ((SstFile.exp_write_high<=aged && 0!=expiry_minutes)
+    expired_file = expired_file && ((SstFile.exp_write_high<=aged
+                                     && 0!=expiry_minutes && kExpiryUnlimited!=expiry_minutes)
                                     || 0==SstFile.exp_write_high);
 
     expired_file = expired_file && (0==SstFile.exp_explicit_high
