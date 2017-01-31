@@ -2,7 +2,7 @@
 //
 // expiry_os_tests.cc
 //
-// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2016-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -126,6 +126,18 @@ TEST(ExpiryTester, MemTableInserterCallback)
     ASSERT_EQ(type, kTypeValueWriteTime);
     ASSERT_TRUE(before <= expiry && expiry <=after && 0!=expiry);
 
+    // plain value, needs expiry
+    type=kTypeValue;
+    expiry=0;
+    module.expiry_minutes=ExpiryModule::kExpiryUnlimited;
+    before=port::TimeUint64();
+    SetTimeMinutes(before);
+    flag=module.MemTableInserterCallback(key, value, type, expiry);
+    after=port::TimeUint64();
+    ASSERT_EQ(flag, true);
+    ASSERT_EQ(type, kTypeValueWriteTime);
+    ASSERT_TRUE(before <= expiry && expiry <=after && 0!=expiry);
+
     // plain value, expiry disabled
     type=kTypeValue;
     expiry=0;
@@ -241,6 +253,11 @@ TEST(ExpiryTester, MemTableCallback)
     module.expiry_enabled=false;
     flag=module.MemTableCallback(key4.internal_key());
     ASSERT_EQ(flag, false);
+    // switch to unlimited
+    module.expiry_enabled=true;
+    module.expiry_minutes=ExpiryModule::kExpiryUnlimited;
+    flag=module.MemTableCallback(key4.internal_key());
+    ASSERT_EQ(flag, false);
 
 }   // test MemTableCallback
 
@@ -326,7 +343,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     file_ptr=new FileMetaData;
     file_ptr->smallest.SetFrom(ParsedInternalKey("GG1", 0, 5, kTypeValue));
     file_ptr->largest.SetFrom(ParsedInternalKey("HH1", 0, 6, kTypeValue));
-    file_ptr->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    file_ptr->exp_write_low=ULLONG_MAX;  // sign of no aged expiry, or plain keys
     file_ptr->exp_explicit_high=now + 60*port::UINT64_ONE_SECOND;
     files.push_back(file_ptr);
 
@@ -364,9 +381,19 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     module.expiry_minutes=0;
     ver.SetFileList(level, files);
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
-    ASSERT_EQ(flag, false);
+    ASSERT_EQ(flag, true);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
-    ASSERT_EQ(flag, false);
+    ASSERT_EQ(flag, true);
+
+    // enable file, minutes as unlimited
+    //   ... but file without aged expiries or plain keys
+    module.whole_file_expiry=true;
+    module.expiry_minutes=ExpiryModule::kExpiryUnlimited;
+    ver.SetFileList(level, files);
+    flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
+    ASSERT_EQ(flag, true);
+    flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
+    ASSERT_EQ(flag, true);
 
     // remove explicit
     files.pop_back();
@@ -409,6 +436,14 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     // enable file, but not expiry minutes (disable)
     module.whole_file_expiry=true;
     module.expiry_minutes=0;
+    flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
+    ASSERT_EQ(flag, false);
+    flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
+    ASSERT_EQ(flag, false);
+
+    // enable file, but unlimited minutes
+    module.whole_file_expiry=true;
+    module.expiry_minutes=ExpiryModule::kExpiryUnlimited;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, false);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -486,13 +521,13 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
 
     // variations on Bug 1 test.  Put singleton expired file in
     //  first, second, then third position.  Other two no expiry
-    files[0]->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    files[0]->exp_write_low=ULLONG_MAX;  // sign of no aged expiry, or plain keys
     files[0]->exp_write_high=0;
     files[0]->exp_explicit_high=now +90*port::UINT64_ONE_SECOND;
-    files[1]->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    files[1]->exp_write_low=ULLONG_MAX;  // sign of no aged expiry, or plain keys
     files[1]->exp_write_high=0;
     files[1]->exp_explicit_high=0;
-    files[2]->exp_write_low=ULONG_MAX;  // sign of no aged expiry, or plain keys
+    files[2]->exp_write_low=ULLONG_MAX;  // sign of no aged expiry, or plain keys
     files[2]->exp_write_high=0;
     files[2]->exp_explicit_high=0;
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
@@ -569,7 +604,7 @@ CreateMetaArray(
         file_ptr->largest.SetFrom(ParsedInternalKey(cursor->m_Largest, 0, cursor->m_Number, kTypeValue));
         if (0!=cursor->m_Expiry1)
         {
-            if (ULONG_MAX!=cursor->m_Expiry1)
+            if (ULLONG_MAX!=cursor->m_Expiry1)
                 file_ptr->exp_write_low=now + cursor->m_Expiry1*60000000;
             else
                 file_ptr->exp_write_low=cursor->m_Expiry1;
@@ -605,13 +640,13 @@ TestFileMetaData levelB[]=
 TestFileMetaData levelC[]=
 {
     {200, "CA", "DA", 1, 3, 0},
-    {201, "SA", "TA", ULONG_MAX, 0, 4}
+    {201, "SA", "TA", ULLONG_MAX, 0, 4}
 };  // levelC
 
 TestFileMetaData levelD[]=
 {
     {200, "CA", "DA", 1, 2, 0},
-    {201, "SA", "TA", ULONG_MAX, 0, 2}
+    {201, "SA", "TA", ULLONG_MAX, 0, 2}
 };  // levelD
 
 
@@ -673,6 +708,14 @@ TEST(ExpiryTester, OverlapTests)
     flag=module.CompactionFinalizeCallback(true, ver, sorted1, &edit);
     ASSERT_EQ(flag, true);
     ASSERT_EQ(edit.DeletedFileCount(), 2);
+
+    // retest sorted1 with unlimited
+    module.expiry_minutes=ExpiryModule::kExpiryUnlimited;
+    flag=module.CompactionFinalizeCallback(true, ver, sorted1, &edit);
+    ASSERT_EQ(flag, true);
+    ASSERT_EQ(edit.DeletedFileCount(), 2);
+
+    // cleanup
     ver.SetFileList(sorted0, level_clear);
     ver.SetFileList(sorted1, level_clear);
 
@@ -975,7 +1018,7 @@ public:
                                                          (*it)->largest.internal_key()));
 
             // create our idea of the expiry settings
-            exp_write_low=ULONG_MAX;
+            exp_write_low=ULLONG_MAX;
             exp_write_high=0;
             exp_explicit_high=0;
 
@@ -1492,6 +1535,15 @@ TEST(ExpiryDBTester, Simple)
         ASSERT_TRUE(s.IsNotFound());
     }   // for
 
+    // make it reappear
+    m_Expiry->expiry_minutes=ExpiryModule::kExpiryUnlimited;
+    for (loop=0, cursor=SimpleData; loop<obj_count; ++loop, ++cursor)
+    {
+        s=m_DB->Get(ReadOptions(), cursor->m_Key, &buffer);
+        ASSERT_OK(s);
+    }   // for
+
+    m_Expiry->expiry_minutes=2;
     iterator.reset(m_DB->NewIterator(ReadOptions()));
     iterator->SeekToFirst();
     ASSERT_EQ(iterator->Valid(), false);
