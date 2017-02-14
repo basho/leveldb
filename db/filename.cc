@@ -281,7 +281,12 @@ MakeTieredDbname(
     const std::string & dbname,    // input ... original dbname from DBImpl constructor
     Options & options)             // input/output ... writable Options, tiered values changed
 {
-    if (0<(int)options.tiered_slow_level && (int)options.tiered_slow_level<config::kNumLevels
+    // case for "", used with internal calls to DestroyDB
+    if (0==dbname.length() && 0!=options.tiered_fast_prefix.length())
+    {
+        // do NOTHING ... options already initialized
+    }   // if
+    else if (0<(int)options.tiered_slow_level && (int)options.tiered_slow_level<config::kNumLevels
         && 0!=options.tiered_fast_prefix.size() && 0!=options.tiered_slow_prefix.size())
     {
         options.tiered_fast_prefix.append("/");
@@ -289,7 +294,7 @@ MakeTieredDbname(
 
         options.tiered_slow_prefix.append("/");
         options.tiered_slow_prefix.append(dbname);
-    }
+    }   // else if
     else
     {
         options.tiered_slow_level=0;
