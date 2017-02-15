@@ -282,7 +282,7 @@ MakeTieredDbname(
     Options & options)             // input/output ... writable Options, tiered values changed
 {
     // case for "", used with internal calls to DestroyDB
-    if (0==dbname.length() && 0!=options.tiered_fast_prefix.length())
+    if (0==dbname.size() && 0!=options.tiered_fast_prefix.size())
     {
         // do NOTHING ... options already initialized
     }   // if
