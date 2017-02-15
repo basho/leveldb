@@ -178,6 +178,12 @@ TEST(FileNameTest, Construction) {
   ASSERT_EQ("//mnt/fast/riak/data/leveldb", options.tiered_fast_prefix);
   ASSERT_EQ("//mnt/slow/riak/data/leveldb", options.tiered_slow_prefix);
 
+  // special case with no dbname given, should have no changes
+  fname=MakeTieredDbname("", options);
+  ASSERT_EQ("//mnt/fast/riak/data/leveldb", fname);
+  ASSERT_EQ("//mnt/fast/riak/data/leveldb", options.tiered_fast_prefix);
+  ASSERT_EQ("//mnt/slow/riak/data/leveldb", options.tiered_slow_prefix);
+
 }
 
 }  // namespace leveldb

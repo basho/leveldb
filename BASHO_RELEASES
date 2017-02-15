@@ -1,3 +1,10 @@
+github.com tag 2.0.34 - February 15, 2017
+-----------------------------------------
+mv-hot-backup2:  - correct MakeTieredDbname() within db/filename.cc
+                   for case where dbname input is blank and fast/slow
+                   already populated in options.  Corrects issue
+                   with hot backup in non-tiered storage situations
+
 github.com tag 2.0.33 - November 21, 2016
 -----------------------------------------
 mv-bucket-expiry:  - partial branch to enable X-Riak-Meta-Expiry-Base-Seconds
