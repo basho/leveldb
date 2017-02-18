@@ -18,6 +18,7 @@
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include "util/db_list.h"
 #include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
@@ -1192,6 +1193,7 @@ VersionSet::Finalize(Version* v)
                 //  only occurs if no other compactions running on groomer thread
                 //  (no grooming if landing level is still overloaded)
                 if (0==score && grooming_trigger<=v->files_[level].size()
+                    && 2<DBList()->GetDBCount(false)   // for non-Riak use cases, helps throughput
                     && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels])
 		    < gLevelTraits[config::kNumOverlapLevels].m_DesiredBytesForLevel)
                 {
@@ -1386,16 +1388,18 @@ VersionSet::UpdatePenalty(
 
         }   // else
 
-        for (loop=0; loop<count; ++loop)
-            value*=increment;
+//        for (loop=0; loop<count; ++loop)
+//            value*=increment;
 
+            value*=count;
+        
         penalty+=value;
 
     }   // for
 
     // put a ceiling on the value
-    if (100000<penalty || penalty<0)
-        penalty=100000;
+    if (1000<penalty || penalty<0)
+        penalty=1000;
 
     uint64_t temp_min;
     temp_min=GetTimeMinutes();
