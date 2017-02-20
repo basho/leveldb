@@ -238,14 +238,21 @@ ThrottleThread(
             }   // else
 
             // change the throttle slowly
-            if (gThrottleRate < new_throttle)
-                gThrottleRate+=(new_throttle - gThrottleRate)/THROTTLE_SCALING;
+            //  (+1 & +2 keep throttle moving toward goal when difference new and
+            //   old is less than THROTTLE_SCALING)
+            int temp_rate;
+
+            temp_rate=gThrottleRate;
+            if (temp_rate < new_throttle)
+                temp_rate+=(new_throttle - temp_rate)/THROTTLE_SCALING +1;
             else
-                gThrottleRate-=(gThrottleRate - new_throttle)/THROTTLE_SCALING;
+                temp_rate-=(temp_rate - new_throttle)/THROTTLE_SCALING +2;
 
-            if (0==gThrottleRate)
-                gThrottleRate=1;   // throttle must always have an effect
+            // +2 can make this go negative
+            if (temp_rate<1)
+                temp_rate=1;   // throttle must always have an effect
 
+            gThrottleRate=temp_rate;
             gUnadjustedThrottleRate=new_unadjusted;
 
 	    // Log(NULL, "ThrottleRate %" PRIu64 ", UnadjustedThrottleRate %" PRIu64, gThrottleRate, gUnadjustedThrottleRate);
