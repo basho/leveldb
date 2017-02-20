@@ -98,7 +98,10 @@ static int FLAGS_bloom_bits = -1;
 static int FLAGS_bloom2_bits = -1;
 
 // Riak param for total memory allocation (flex_cache)
-static int FLAGS_leveldb_memory = -1;
+static uint64_t FLAGS_leveldb_memory = -1;
+
+// Riak param for compression setting
+static int FLAGS_compression = 2;
 
 // If true, do not destroy the existing database.  If you set this
 // flag and also specify a benchmark that wants a fresh database, that
@@ -702,6 +705,7 @@ class Benchmark {
     options.block_cache = cache_;
     options.write_buffer_size = FLAGS_write_buffer_size;
     options.filter_policy = filter_policy_;
+    options.compression = (leveldb::CompressionType)FLAGS_compression;
     options.total_leveldb_mem = FLAGS_leveldb_memory;
     Status s = DB::Open(options, FLAGS_db, &db_);
     if (!s.ok()) {
@@ -934,11 +938,13 @@ class Benchmark {
 int main(int argc, char** argv) {
   FLAGS_write_buffer_size = leveldb::Options().write_buffer_size;
   FLAGS_open_files = leveldb::Options().max_open_files;
+  FLAGS_leveldb_memory = 25000000000LL;
   std::string default_db_path;
 
   for (int i = 1; i < argc; i++) {
     double d;
     int n;
+    uint64_t u;
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
@@ -967,9 +973,11 @@ int main(int argc, char** argv) {
     } else if (sscanf(argv[i], "--bloom_bits2=%d%c", &n, &junk) == 1) {
       FLAGS_bloom2_bits = n;
     } else if (sscanf(argv[i], "--leveldb_memory=%d%c", &n, &junk) == 1) {
-      FLAGS_leveldb_memory = n;
+      FLAGS_leveldb_memory = n * 1024 * 1024LL;
     } else if (sscanf(argv[i], "--open_files=%d%c", &n, &junk) == 1) {
       FLAGS_open_files = n;
+    } else if (sscanf(argv[i], "--compression=%d%c", &n, &junk) == 1) {
+      FLAGS_compression = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
     } else {
