@@ -1335,13 +1335,12 @@ VersionSet::UpdatePenalty(
                     //  heavy penalty
                     if (0==level)
                     {   // non-linear penalty
-                        value=5;
-                        increment=8;
+                        value=2;
+                        increment=8;  // currently unused
                     }   // if
                     else
                     {   // slightly less penalty
-                        value=count;
-                        count=0;
+                        value=1;
                     }   // else
                 }   // else
             }   // if
@@ -1391,7 +1390,7 @@ VersionSet::UpdatePenalty(
 //        for (loop=0; loop<count; ++loop)
 //            value*=increment;
 
-            value*=count;
+//            value*=count;
         
         penalty+=value;
 
@@ -1402,24 +1401,28 @@ VersionSet::UpdatePenalty(
         penalty=1000;
 
     uint64_t temp_min;
-    temp_min=GetTimeMinutes();
+//    temp_min=GetTimeMinutes();
+    temp_min=env_->NowMicros();
 
-    if (temp_min!=last_penalty_minutes_/* || 0==penalty*/)
+    if (last_penalty_minutes_<temp_min/* || 0==penalty*/)
     {
-        last_penalty_minutes_=temp_min;
-
-        /*if (0==penalty)
-            prev_write_penalty_=0;
-            else*/ if (prev_write_penalty_<penalty)
-            prev_write_penalty_+=(penalty - prev_write_penalty_)/17;
+        Log(options_->info_log,"UpdatePenalty timer: %d, %d", penalty, prev_write_penalty_);
+        last_penalty_minutes_=temp_min+15*1000000;
+        
+#if 1
+        if (prev_write_penalty_<penalty)
+            prev_write_penalty_+=(penalty - prev_write_penalty_)/7 +1;
         else
-            prev_write_penalty_-=(prev_write_penalty_ - penalty)/17;
+            prev_write_penalty_-=(prev_write_penalty_ - penalty)/5 +1;
+#endif
+        if (prev_write_penalty_ < 0)
+            prev_write_penalty_ = 0;
     }   // if
 
     v->write_penalty_=prev_write_penalty_;
 
 // mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
-    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d, %d", penalty, prev_write_penalty_);
+    if (0!=penalty || 0!=prev_write_penalty_) Log(options_->info_log,"UpdatePenalty: %d, %d", penalty, prev_write_penalty_);
 
     return;
 
