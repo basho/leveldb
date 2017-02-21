@@ -115,6 +115,8 @@ protected:
 
 };  // ExpiryModuleOS
 
+uint64_t CuttlefishDurationMinutes(const char * Buf);
+
 }  // namespace leveldb
 
 #endif // ifndef

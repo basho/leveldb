@@ -2,7 +2,7 @@
 //
 // expiry_os_stub.cc
 //
-// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2016-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -48,5 +48,15 @@ ExpiryModule::ShutdownExpiryModule()
 
 }   // ExpiryModule::ShutdownExpiryModule
 
+
+uint64_t
+CuttlefishDurationMinutes(
+    const char * Buffer)
+{
+
+    // zero is safe return since it implies "disable write time expiry"
+    return(0);
+
+}   // CuttlefishDurationMinutes
 
 }  // namespace leveldb
