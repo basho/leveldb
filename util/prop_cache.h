@@ -25,13 +25,14 @@
 
 #include "leveldb/cache.h"
 #include "util/expiry_os.h"
+#include "util/refobject_base.h"
 #include "port/port.h"
 
 
 namespace leveldb
 {
 
-class PropertyCache
+class PropertyCache : public RefObjectBase
 {
 public:
     /**
@@ -99,6 +100,12 @@ private:
     PropertyCache operator=(const PropertyCache &);
 
 }; // class PropertyCache
+
+
+/**
+ * This temple wraps the entire property cache
+ */
+typedef RefPtr<PropertyCache> PropertyCachePtr_t;
 
 
 /**

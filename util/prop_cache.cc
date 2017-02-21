@@ -2,7 +2,7 @@
 //
 // prop_cache.cc
 //
-// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2016-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -23,17 +23,16 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "port/port.h"
 #include "util/prop_cache.h"
-//#include "leveldb_ee/riak_object.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/throttle.h"
 
 namespace leveldb {
 
-// initialize the static variable in hopes we do not later
-//  attempt a shutdown against an uninitialized value (could still happen)
-static PropertyCache * lPropCache(NULL);
+static port::Spin lPropCacheLock;
+static PropertyCachePtr_t lPropCache;
 
 /**
  * Create the cache.  Called only once upon
@@ -54,8 +53,9 @@ PropertyCache::InitPropertyCache(
 void
 PropertyCache::ShutdownPropertyCache()
 {
-    delete lPropCache;
-    lPropCache=NULL;
+
+    SpinLock l(&lPropCacheLock);
+    lPropCache.reset();
 
 }  // PropertyCache::ShutdownPropertyCache
 
@@ -85,10 +85,11 @@ PropertyCache::GetCache()
 }   // PropertyCache::GetCache
 
 
+// unit test usage, not thread safe
 PropertyCache *
 PropertyCache::GetPropertyCachePtr()
 {
-    return(lPropCache);
+    return(lPropCache.get());
 }   // PropertyCache::GetPropertyCachePtr
 
 
@@ -121,10 +122,18 @@ PropertyCache::Lookup(
     const Slice & CompositeBucket)
 {
     Cache::Handle * ret_handle(NULL);
+    PropertyCachePtr_t ptr;
 
-    if (NULL!=lPropCache)
+    // race condition ... lPropCache going away as ptr assigned
+    //   (unlikely here, but seen in Insert)
     {
-        ret_handle=lPropCache->LookupInternal(CompositeBucket);
+        SpinLock l(&lPropCacheLock);
+        ptr=lPropCache;
+    }   // lock
+
+    if (NULL!=ptr.get())
+    {
+        ret_handle=ptr->LookupInternal(CompositeBucket);
     }   // if
 
     return(ret_handle);
@@ -215,12 +224,19 @@ PropertyCache::Insert(
     void * Props,
     Cache::Handle ** OutputPtr)
 {
+    PropertyCachePtr_t ptr;
     bool ret_flag(false);
     Cache::Handle * ret_handle(NULL);
 
-    if (NULL!=lPropCache && NULL!=lPropCache->GetCachePtr())
+    // race condition ... lPropCache going away as ptr assigned
     {
-        ret_handle=lPropCache->InsertInternal(CompositeBucket, Props);
+        SpinLock l(&lPropCacheLock);
+        ptr=lPropCache;
+    }   // lock
+
+    if (NULL!=ptr.get() && NULL!=ptr->GetCachePtr())
+    {
+        ret_handle=ptr->InsertInternal(CompositeBucket, Props);
 
         if (NULL!=OutputPtr)
             *OutputPtr=ret_handle;
