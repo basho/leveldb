@@ -67,11 +67,11 @@ ExpiryModuleOS::MemTableInserterCallback(
 {
     bool good(true);
 
-    // only update the expiry time if explicit type
-    //  without expiry, OR ExpiryMinutes set and not internal key
+    // only update the expiry time if:
+    //   a. expiry write time set without time
+    //   b. expiry enabled and normal key
     if ((kTypeValueWriteTime==ValType && 0==Expiry)
         || (kTypeValue==ValType
-            && 0!=expiry_minutes
             && expiry_enabled
             && (Key.size()<lRiakMetaDataKeyLen
                 || 0!=memcmp(lRiakMetaDataKey,Key.data(),lRiakMetaDataKeyLen))))
@@ -240,7 +240,9 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
 {
     bool ret_flag(false);
 
-    if (expiry_enabled && whole_file_expiry)
+    // expiry_minutes of zero disables whole_file_expiry
+    if (expiry_enabled && whole_file_expiry
+        && 0!=expiry_minutes)
     {
         bool expired_file(false);
         ExpiryTime now, aged;

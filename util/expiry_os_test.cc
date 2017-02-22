@@ -129,6 +129,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
     // plain value, expiry disabled
     type=kTypeValue;
     expiry=0;
+    module.expiry_enabled=false;
     module.expiry_minutes=0;
     before=port::TimeUint64();
     SetTimeMinutes(before);
@@ -137,6 +138,19 @@ TEST(ExpiryTester, MemTableInserterCallback)
     ASSERT_EQ(flag, true);
     ASSERT_EQ(type, kTypeValue);
     ASSERT_EQ(expiry, 0);
+
+    // plain value, expiry enabled, minutes = 0
+    type=kTypeValue;
+    expiry=0;
+    module.expiry_enabled=true;
+    module.expiry_minutes=0;
+    before=port::TimeUint64();
+    SetTimeMinutes(before);
+    flag=module.MemTableInserterCallback(key, value, type, expiry);
+    after=port::TimeUint64();
+    ASSERT_EQ(flag, true);
+    ASSERT_EQ(type, kTypeValueWriteTime);
+    ASSERT_TRUE(before <= expiry && expiry <=after && 0!=expiry);
 
     // write time value, needs expiry
     type=kTypeValueWriteTime;
@@ -364,9 +378,9 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     module.expiry_minutes=0;
     ver.SetFileList(level, files);
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
-    ASSERT_EQ(flag, true);
+    ASSERT_EQ(flag, false);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
-    ASSERT_EQ(flag, true);
+    ASSERT_EQ(flag, false);
 
     // remove explicit
     files.pop_back();
