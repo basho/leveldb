@@ -50,7 +50,8 @@ Options::Options()
       delete_threshold(1000),
       fadvise_willneed(false),
       tiered_slow_level(0),
-      cache_object_warming(true)
+      cache_object_warming(true),
+      disable_recovery_log(false)
 {
 
 }
@@ -89,6 +90,7 @@ Options::Dump(
     Log(log,"    Options.tiered_slow_prefix: %s", tiered_slow_prefix.c_str());
     Log(log,"                        crc32c: %s", crc32c::IsHardwareCRC() ? "hardware" : "software");
     Log(log,"  Options.cache_object_warming: %s", cache_object_warming ? "true" : "false");
+    Log(log,"  Options.disable_recovery_log: %s", disable_recovery_log ? "true" : "false");
     Log(log,"       Options.ExpiryActivated: %s", ExpiryActivated() ? "true" : "false");
 
     if (NULL!=expiry_module.get())

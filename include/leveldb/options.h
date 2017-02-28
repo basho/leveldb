@@ -249,6 +249,12 @@ struct Options {
   // upon restart.
   bool cache_object_warming;
 
+  // Riak specific option to disable writing of recovery log
+  //  during DB::Write() / Put() calls.  This speeds performance
+  //  but can lead to loss of tens of megabytes of data if
+  //  system crashes.  Used in Riak for temporary tables only.
+  bool disable_recovery_log;
+
   // Riak specific object that defines expiry policy for data
   // written to leveldb.
   ExpiryPtr_t expiry_module;
