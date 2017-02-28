@@ -153,6 +153,7 @@ class DBTest {
     kDefault,
     kFilter,
     kUncompressed,
+    kDisableRecovery,
     kEnd
   };
   int option_config_;
@@ -201,6 +202,9 @@ class DBTest {
         break;
       case kUncompressed:
         options.compression = kNoCompression;
+        break;
+      case kDisableRecovery:
+        options.disable_recovery_log = true;
         break;
       default:
         break;
@@ -1073,7 +1077,10 @@ TEST(DBTest, ApproximateSizes) {
       }
 
       ASSERT_EQ(NumTableFilesAtLevel(0), 0);
-      ASSERT_GT(NumTableFilesAtLevel(1), 0);
+      if (!CurrentOptions().disable_recovery_log)
+          ASSERT_GT(NumTableFilesAtLevel(1), 0);
+      else
+          ASSERT_GT(NumTableFilesAtLevel(3), 0); // code path uses move
     }
   } while (ChangeOptions());
 }
