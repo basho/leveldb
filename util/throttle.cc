@@ -71,7 +71,7 @@ struct ThrottleData_t
 //  most recent interval statistics for last hour.
 ThrottleData_t gThrottleData[THROTTLE_INTERVALS];
 
-uint64_t gThrottleRate, gUnadjustedThrottleRate;
+volatile uint64_t gThrottleRate, gUnadjustedThrottleRate;
 
 static volatile bool gThrottleRunning=false;
 static pthread_t gThrottleThreadId;
@@ -111,6 +111,7 @@ ThrottleThread(
     uint64_t tot_micros, tot_keys, tot_backlog, tot_compact;
     int replace_idx, loop, ret_val;
     uint64_t new_throttle, new_unadjusted;
+    int64_t temp_throttle;
     time_t now_seconds, cache_expire;
     struct timespec wait_time;
 
@@ -238,18 +239,25 @@ ThrottleThread(
             }   // else
 
             // change the throttle slowly
+            //  (+1 & +2 keep throttle moving toward goal when difference new and
+            //   old is less than THROTTLE_SCALING)
+            temp_throttle=gThrottleRate;
+
             if (gThrottleRate < new_throttle)
-                gThrottleRate+=(new_throttle - gThrottleRate)/THROTTLE_SCALING;
+                temp_throttle+=(new_throttle - gThrottleRate)/THROTTLE_SCALING +1;
             else
-                gThrottleRate-=(gThrottleRate - new_throttle)/THROTTLE_SCALING;
+                temp_throttle-=(gThrottleRate - new_throttle)/THROTTLE_SCALING +2;
 
-            if (0==gThrottleRate)
-                gThrottleRate=1;   // throttle must always have an effect
+            // +2 can make this go negative
+            if (temp_throttle<1)
+                temp_throttle=1;   // throttle must always have an effect
 
-            gUnadjustedThrottleRate=new_unadjusted;
+            // use sync operation to force full barrier assignment
+            compare_and_swap(&gThrottleRate, (uint64_t)gThrottleRate, (uint64_t)temp_throttle);
+            compare_and_swap(&gUnadjustedThrottleRate, (uint64_t)gUnadjustedThrottleRate, new_unadjusted);
 
 	    // Log(NULL, "ThrottleRate %" PRIu64 ", UnadjustedThrottleRate %" PRIu64, gThrottleRate, gUnadjustedThrottleRate);
-	    
+
             gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
             gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
             gPerfCounters->Set(ePerfThrottleUnadjusted, gUnadjustedThrottleRate);
@@ -277,7 +285,7 @@ ThrottleThread(
         // This is a second non-throttle task added to this one minute loop.  Pattern forming.
         //  See if hot backup wants to initiate.
         //
-	CheckHotBackupTrigger();
+        CheckHotBackupTrigger();
 
         // nudge compaction logic of potential grooming
         if (0==gCompactionThreads->m_WorkQueueAtomic)  // user databases
@@ -331,8 +339,9 @@ void SetThrottleWriteRate(uint64_t Micros, uint64_t Keys, bool IsLevel0)
     return;
 };
 
-uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
-uint64_t GetUnadjustedThrottleWriteRate() {return(gUnadjustedThrottleRate);};
+// add_and_fetch() used to force memory barrier operations
+uint64_t GetThrottleWriteRate() {return(add_and_fetch(&gThrottleRate, (uint64_t)0));};
+uint64_t GetUnadjustedThrottleWriteRate() {return(add_and_fetch(&gUnadjustedThrottleRate,(uint64_t)0));};
 
 // clock_gettime but only updated once every 60 seconds (roughly)
 uint64_t GetTimeMinutes() {return(gCurrentTime);};

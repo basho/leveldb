@@ -1189,11 +1189,11 @@ VersionSet::Finalize(Version* v)
                 //  only occurs if no other compactions running on groomer thread
                 //  (no grooming if landing level is still overloaded)
                 if (0==score && grooming_trigger<=v->files_[level].size()
-                    && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels]) 
+                    && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels])
 		    < gLevelTraits[config::kNumOverlapLevels].m_DesiredBytesForLevel)
                 {
                     // secondary test, don't push too much to next Overlap too soon
-                    if (!gLevelTraits[level+1].m_OverlappedFiles 
+                    if (!gLevelTraits[level+1].m_OverlappedFiles
                          || v->files_[level+1].size()<=config::kL0_CompactionTrigger)
                     {
                         score=1;
@@ -1300,7 +1300,7 @@ VersionSet::UpdatePenalty(
     for (int level = 0; level < config::kNumLevels-1; ++level)
     {
         int loop, count, value, increment;
-        
+
         value=0;
         count=0;
         increment=0;
@@ -1660,6 +1660,7 @@ VersionSet::PickCompaction(
 
   // perform this once per call ... since Finalize now loops
   UpdatePenalty(current_);
+  db_impl->SetLastPenalty(current_->write_penalty_);
 
   // submit a work object for every valid compaction needed
   current_->compaction_level_=-1;
@@ -1669,7 +1670,7 @@ VersionSet::PickCompaction(
 
       Log(options_->info_log,"Finalize level: %d, grooming %d",
 	  current_->compaction_level_, current_->compaction_grooming_);
-      
+
       c=NULL;
 
       // We prefer compactions triggered by too much data in a level over
