@@ -73,7 +73,7 @@ public:
         const Slice & Key,   // input: user's key about to be written
         const Slice & Value, // input: user's value object
         ValueType & ValType,   // input/output: key type. call might change
-        ExpiryTime & Expiry) const  // input/output: 0 or specific expiry. call might change
+        ExpiryTimeMicros & Expiry) const  // input/output: 0 or specific expiry. call might change
     {return(true);};
 
     // db/dbformat.cc KeyRetirement::operator() calls this.
@@ -108,7 +108,7 @@ public:
 
     // yep, sometimes we want to expiry this expiry module object.
     //  mostly for bucket level properties in Riak EE
-    virtual uint64_t ExpiryModuleExpiry() {return(0);};
+    virtual uint64_t ExpiryModuleExpiryMicros() {return(0);};
 
     // Creates derived ExpiryModule object that matches compile time
     //  switch for open source or Basho enterprise edition features.

@@ -165,8 +165,8 @@ PropertyCache::LookupInternal(
             mod_ptr=(ExpiryModule *)m_Cache->Value(ret_handle);
 
             // some unit tests of mod_ptr of NULL
-            if (NULL!=mod_ptr && 0!=mod_ptr->ExpiryModuleExpiry()
-                && mod_ptr->ExpiryModuleExpiry()<now)
+            if (NULL!=mod_ptr && 0!=mod_ptr->ExpiryModuleExpiryMicros()
+                && mod_ptr->ExpiryModuleExpiryMicros()<now)
             {
                 m_Cache->Release(ret_handle);
                 m_Cache->Erase(CompositeBucket);

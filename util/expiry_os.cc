@@ -70,7 +70,7 @@ ExpiryModuleOS::MemTableInserterCallback(
     const Slice & Key,   // input: user's key about to be written
     const Slice & Value, // input: user's value object
     ValueType & ValType,   // input/output: key type. call might change
-    ExpiryTime & Expiry)   // input/output: 0 or specific expiry. call might change
+    ExpiryTimeMicros & Expiry)   // input/output: 0 or specific expiry. call might change
     const
 {
     bool good(true);
@@ -85,7 +85,7 @@ ExpiryModuleOS::MemTableInserterCallback(
                 || 0!=memcmp(lRiakMetaDataKey,Key.data(),lRiakMetaDataKeyLen))))
     {
         ValType=kTypeValueWriteTime;
-        Expiry=GenerateWriteTime(Key, Value);
+        Expiry=GenerateWriteTimeMicros(Key, Value);
     }   // if
 
     return(good);
@@ -99,14 +99,14 @@ ExpiryModuleOS::MemTableInserterCallback(
  *  only updates every 60 seconds or so.
  */
 uint64_t
-ExpiryModuleOS::GenerateWriteTime(
+ExpiryModuleOS::GenerateWriteTimeMicros(
     const Slice & Key,
     const Slice & Value) const
 {
 
     return(GetTimeMinutes());
 
-}  // ExpiryModuleOS::GenerateWriteTime()
+}  // ExpiryModuleOS::GenerateWriteTimeMicros()
 
 /**
  * Returns true if key is expired.  False if key is NOT expired
@@ -117,7 +117,7 @@ bool ExpiryModuleOS::KeyRetirementCallback(
     const ParsedInternalKey & Ikey) const
 {
     bool is_expired(false);
-    uint64_t now, expires;
+    uint64_t now_micros, expires_micros;
 
     if (expiry_enabled)
     {
@@ -133,17 +133,18 @@ bool ExpiryModuleOS::KeyRetirementCallback(
                 if (0!=expiry_minutes && 0!=Ikey.expiry &&
                     kExpiryUnlimited!=expiry_minutes)
                 {
-                    now=GetTimeMinutes();
-                    expires=expiry_minutes*60*port::UINT64_ONE_SECOND + Ikey.expiry;
-                    is_expired=(expires<=now);
+                    now_micros=GetTimeMinutes();
+                    expires_micros=expiry_minutes*60*port::UINT64_ONE_SECOND_MICROS
+                        + Ikey.expiry;
+                    is_expired=(expires_micros<=now_micros);
                 }   // if
                 break;
 
             case kTypeValueExplicitExpiry:
                 if (0!=Ikey.expiry)
                 {
-                    now=GetTimeMinutes();
-                    is_expired=(Ikey.expiry<=now);
+                    now_micros=GetTimeMinutes();
+                    is_expired=(Ikey.expiry<=now_micros);
                 }   // if
                 break;
         }   // switch
@@ -169,12 +170,12 @@ ExpiryModuleOS::TableBuilderCallback(
     SstCounters & Counters) const
 {
     bool good(true);
-    ExpiryTime expires, temp;
+    ExpiryTimeMicros expires_micros, temp;
 
     if (IsExpiryKey(Key))
-        expires=ExtractExpiry(Key);
+        expires_micros=ExtractExpiry(Key);
     else
-        expires=0;
+        expires_micros=0;
 
     // make really high so that everything is less than it
     if (1==Counters.Value(eSstCountKeys))
@@ -188,10 +189,10 @@ ExpiryModuleOS::TableBuilderCallback(
         // exp_write_high set to largest (most recent) write time
         case kTypeValueWriteTime:
             temp=Counters.Value(eSstCountExpiry1);
-            if (expires<temp)
-                Counters.Set(eSstCountExpiry1, expires);
-            if (Counters.Value(eSstCountExpiry2)<expires)
-                Counters.Set(eSstCountExpiry2, expires);
+            if (expires_micros<temp)
+                Counters.Set(eSstCountExpiry1, expires_micros);
+            if (Counters.Value(eSstCountExpiry2)<expires_micros)
+                Counters.Set(eSstCountExpiry2, expires_micros);
             // add to delete count if expired already
             //   i.e. acting as a tombstone
             if (0!=expiry_minutes && MemTableCallback(Key))
@@ -199,8 +200,8 @@ ExpiryModuleOS::TableBuilderCallback(
             break;
 
         case kTypeValueExplicitExpiry:
-            if (Counters.Value(eSstCountExpiry3)<expires)
-                Counters.Set(eSstCountExpiry3, expires);
+            if (Counters.Value(eSstCountExpiry3)<expires_micros)
+                Counters.Set(eSstCountExpiry3, expires_micros);
             // add to delete count if expired already
             //   i.e. acting as a tombstone
             if (0!=expiry_minutes && MemTableCallback(Key))
@@ -258,15 +259,15 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
     if (expiry_enabled)
     {
         bool expired_file(false);
-        ExpiryTime now;
+        ExpiryTimeMicros now_micros;
         const std::vector<FileMetaData*> & files(Ver.GetFileList(Level));
         std::vector<FileMetaData*>::const_iterator it;
 
-        now=GetTimeMinutes();
+        now_micros=GetTimeMinutes();
         for (it=files.begin(); (!expired_file || WantAll) && files.end()!=it; ++it)
         {
             // First, is file eligible?
-            expired_file=IsFileExpired(*(*it), now);
+            expired_file=IsFileExpired(*(*it), now_micros);
 
             // identified an expired file, do any higher levels overlap
             //  its key range?
@@ -307,12 +308,12 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
 bool
 ExpiryModuleOS::IsFileExpired(
     const FileMetaData & SstFile,
-    ExpiryTime Now) const
+    ExpiryTimeMicros NowMicros) const
 {
     bool expired_file;
-    ExpiryTime aged;
+    ExpiryTimeMicros aged_micros;
 
-    aged=Now - expiry_minutes*60*port::UINT64_ONE_SECOND;
+    aged_micros=NowMicros - expiry_minutes*60*port::UINT64_ONE_SECOND_MICROS;
 
     // must test whole_file_expiry here since this could be
     //  a bucket's ExpiryModuleOS object, not the default in Options
@@ -326,12 +327,13 @@ ExpiryModuleOS::IsFileExpired(
     //      exp_write_low would be ULLONG_MAX, exp_write_high would be 0, exp_explicit_high would be zero
     expired_file = expired_file && (0!=SstFile.exp_write_low)
                    && (0!=SstFile.exp_write_high || 0!=SstFile.exp_explicit_high);
-    expired_file = expired_file && ((SstFile.exp_write_high<=aged
+    expired_file = expired_file && ((SstFile.exp_write_high<=aged_micros
                                      && 0!=expiry_minutes && kExpiryUnlimited!=expiry_minutes)
                                     || 0==SstFile.exp_write_high);
 
     expired_file = expired_file && (0==SstFile.exp_explicit_high
-                                    || (0!=SstFile.exp_explicit_high && SstFile.exp_explicit_high<=Now));
+                                    || (0!=SstFile.exp_explicit_high
+                                        && SstFile.exp_explicit_high<=NowMicros));
 
     return(expired_file);
 

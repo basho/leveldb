@@ -23,11 +23,11 @@ struct FileMetaData {
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
   int level;
-  ExpiryTime exp_write_low;     // oldest write time in file:
+  ExpiryTimeMicros exp_write_low;     // oldest write time in file:
                                 //  0 - non-expiry keys exist too
                                 //  ULLONG_MAX - no write time expiry & no plain keys
-  ExpiryTime exp_write_high;    // most recent write time in file
-  ExpiryTime exp_explicit_high; // most recent/furthest into future explicit expiry
+  ExpiryTimeMicros exp_write_high;    // most recent write time in file
+  ExpiryTimeMicros exp_explicit_high; // most recent/furthest into future explicit expiry
 
   FileMetaData()
   : refs(0), /*allowed_seeks(1 << 30),*/ file_size(0),

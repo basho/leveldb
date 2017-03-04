@@ -50,7 +50,7 @@ enum ValueType {
 
 //  Originally located in db/dbformat.h
 typedef uint64_t SequenceNumber;
-typedef uint64_t ExpiryTime;
+typedef uint64_t ExpiryTimeMicros;
 
 };  // namespace leveldb
 
@@ -364,7 +364,7 @@ struct KeyMetaData
 {
     ValueType m_Type;          // see above
     SequenceNumber m_Sequence; // output only, leveldb internal
-    ExpiryTime m_Expiry;       // microseconds since Epoch, UTC
+    ExpiryTimeMicros m_Expiry; // microseconds since Epoch, UTC
 
     KeyMetaData()
     : m_Type(kTypeValue), m_Sequence(0), m_Expiry(0)

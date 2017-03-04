@@ -51,7 +51,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
 
   input.remove_prefix(kHeader);
   Slice key, value;
-  ExpiryTime expiry;
+  ExpiryTimeMicros expiry;
   int found = 0;
   while (!input.empty()) {
     found++;
@@ -142,9 +142,9 @@ class MemTableInserter : public WriteBatch::Handler {
 
   MemTableInserter() : mem_(NULL), options_(NULL) {};
 
-  virtual void Put(const Slice& key, const Slice& value, const ValueType &type, const ExpiryTime &expiry) {
+  virtual void Put(const Slice& key, const Slice& value, const ValueType &type, const ExpiryTimeMicros &expiry) {
     ValueType type_use(type);
-    ExpiryTime expiry_use(expiry);
+    ExpiryTimeMicros expiry_use(expiry);
 
     if (NULL!=options_ && options_->ExpiryActivated())
         options_->expiry_module->MemTableInserterCallback(key, value, type_use, expiry_use);

@@ -1760,7 +1760,8 @@ class ModelDB: public DB {
     class Handler : public WriteBatch::Handler {
      public:
       KVMap* map_;
-      virtual void Put(const Slice& key, const Slice& value, const ValueType & type, const ExpiryTime & expiry) {
+      virtual void Put(const Slice& key, const Slice& value,
+                       const ValueType & type, const ExpiryTimeMicros & expiry) {
         KVEntry ent;
         ent.m_Value=value.ToString();
         ent.m_Meta.m_Type=type;

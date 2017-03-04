@@ -56,7 +56,7 @@ public:
         const Slice & Key,   // input: user's key about to be written
         const Slice & Value, // input: user's value object
         ValueType & ValType,   // input/output: key type. call might change
-        ExpiryTime & Expiry) const;  // input/output: 0 or specific expiry. call might change
+        ExpiryTimeMicros & Expiry) const;  // input/output: 0 or specific expiry. call might change
 
     // db/dbformat.cc KeyRetirement::operator() calls this.
     // db/version_set.cc SaveValue() calls this too.
@@ -86,7 +86,7 @@ public:
 
     // utility to CompactionFinalizeCallback to review
     //  characteristics of one SstFile to see if entirely expired
-    virtual bool IsFileExpired(const FileMetaData & SstFile, ExpiryTime Now) const;
+    virtual bool IsFileExpired(const FileMetaData & SstFile, ExpiryTimeMicros Now) const;
 
 public:
     // NOTE: option names below are intentionally public and lowercase with underscores.
@@ -110,7 +110,7 @@ public:
 protected:
     // When "creating" write time, chose its source based upon
     //  open source versus enterprise edition
-    virtual uint64_t GenerateWriteTime(const Slice & Key, const Slice & Value) const;
+    virtual uint64_t GenerateWriteTimeMicros(const Slice & Key, const Slice & Value) const;
 
 
 };  // ExpiryModuleOS
