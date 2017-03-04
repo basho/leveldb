@@ -59,10 +59,6 @@ public:
     virtual void Dump(Logger * log) const
     {Log(log,"                        Expiry: (none)");};
 
-    // close to UULONG_MAX, but not equal.  UULONG_MAX has meaning
-    //   for expiry in FileMetaData object (db/version_edit.h)
-    static const uint64_t kExpiryUnlimited = ULLONG_MAX-2;
-
     // Quick test to allow manifest logic and such know if
     //  extra expiry logic should be checked
     virtual bool ExpiryActivated() const {return(false);};

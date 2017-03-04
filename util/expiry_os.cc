@@ -48,13 +48,10 @@ void
 ExpiryModuleOS::Dump(
     Logger * log) const
 {
-    Log(log,"  ExpiryModuleOS.expiry_enabled: %s", expiry_enabled ? "true" : "false");
-    if (0==expiry_minutes || kExpiryUnlimited==expiry_minutes)
-        Log(log,"  ExpiryModuleOS.expiry_minutes: %s",
-            (0==expiry_minutes ? "off" : "unlimited"));
-    else
-        Log(log,"  ExpiryModuleOS.expiry_minutes: %" PRIu64, expiry_minutes);
-    Log(log,"     ExpiryModuleOS.whole_files: %s", whole_file_expiry ? "true" : "false");
+    Log(log,"  ExpiryModuleOS.expiry_enabled: %s", IsExpiryEnabled() ? "true" : "false");
+    Log(log,"  ExpiryModuleOS.expiry_minutes: %" PRIu64, GetExpiryMinutes());
+    Log(log,"ExpiryModuleOS.expiry_unlimited: %s", IsExpiryUnlimited() ? "true" : "false");
+    Log(log,"     ExpiryModuleOS.whole_files: %s", IsWholeFileExpiryEnabled() ? "true" : "false");
 
     return;
 
@@ -79,8 +76,8 @@ ExpiryModuleOS::MemTableInserterCallback(
     //  without expiry, OR ExpiryMinutes set and not internal key
     if ((kTypeValueWriteTime==ValType && 0==Expiry)
         || (kTypeValue==ValType
-            && 0!=expiry_minutes
-            && expiry_enabled
+            && 0!=GetExpiryMinutes()
+            && IsExpiryEnabled()
             && (Key.size()<lRiakMetaDataKeyLen
                 || 0!=memcmp(lRiakMetaDataKey,Key.data(),lRiakMetaDataKeyLen))))
     {
@@ -119,7 +116,7 @@ bool ExpiryModuleOS::KeyRetirementCallback(
     bool is_expired(false);
     uint64_t now_micros, expires_micros;
 
-    if (expiry_enabled)
+    if (IsExpiryEnabled())
     {
         switch(Ikey.type)
         {
@@ -130,11 +127,11 @@ bool ExpiryModuleOS::KeyRetirementCallback(
                 break;
 
             case kTypeValueWriteTime:
-                if (0!=expiry_minutes && 0!=Ikey.expiry &&
-                    kExpiryUnlimited!=expiry_minutes)
+                if (0!=GetExpiryMinutes() && 0!=Ikey.expiry &&
+                    !IsExpiryUnlimited())
                 {
                     now_micros=GetTimeMinutes();
-                    expires_micros=expiry_minutes*60*port::UINT64_ONE_SECOND_MICROS
+                    expires_micros=GetExpiryMinutes()*60*port::UINT64_ONE_SECOND_MICROS
                         + Ikey.expiry;
                     is_expired=(expires_micros<=now_micros);
                 }   // if
@@ -195,7 +192,7 @@ ExpiryModuleOS::TableBuilderCallback(
                 Counters.Set(eSstCountExpiry2, expires_micros);
             // add to delete count if expired already
             //   i.e. acting as a tombstone
-            if (0!=expiry_minutes && MemTableCallback(Key))
+            if (0!=GetExpiryMinutes() && MemTableCallback(Key))
                 Counters.Inc(eSstCountDeleteKey);
             break;
 
@@ -204,7 +201,7 @@ ExpiryModuleOS::TableBuilderCallback(
                 Counters.Set(eSstCountExpiry3, expires_micros);
             // add to delete count if expired already
             //   i.e. acting as a tombstone
-            if (0!=expiry_minutes && MemTableCallback(Key))
+            if (0!=GetExpiryMinutes() && MemTableCallback(Key))
                 Counters.Inc(eSstCountDeleteKey);
             break;
 
@@ -256,7 +253,7 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
     // only test expiry_enable since it is "global" on/off switch.
     //  other parameters might change if bucket level expiry uses
     //  different ExpiryModuleOS object.
-    if (expiry_enabled)
+    if (IsExpiryEnabled())
     {
         bool expired_file(false);
         ExpiryTimeMicros now_micros;
@@ -313,11 +310,11 @@ ExpiryModuleOS::IsFileExpired(
     bool expired_file;
     ExpiryTimeMicros aged_micros;
 
-    aged_micros=NowMicros - expiry_minutes*60*port::UINT64_ONE_SECOND_MICROS;
+    aged_micros=NowMicros - GetExpiryMinutes()*60*port::UINT64_ONE_SECOND_MICROS;
 
     // must test whole_file_expiry here since this could be
     //  a bucket's ExpiryModuleOS object, not the default in Options
-    expired_file = (expiry_enabled && whole_file_expiry);
+    expired_file = (IsExpiryEnabled() && IsWholeFileExpiryEnabled());
 
     //  - if exp_write_low is zero, game over -  contains non-expiry records
     //  - if exp_write_high is below current aged time and aging enabled,
@@ -328,7 +325,7 @@ ExpiryModuleOS::IsFileExpired(
     expired_file = expired_file && (0!=SstFile.exp_write_low)
                    && (0!=SstFile.exp_write_high || 0!=SstFile.exp_explicit_high);
     expired_file = expired_file && ((SstFile.exp_write_high<=aged_micros
-                                     && 0!=expiry_minutes && kExpiryUnlimited!=expiry_minutes)
+                                     && 0!=GetExpiryMinutes() && !IsExpiryUnlimited())
                                     || 0==SstFile.exp_write_high);
 
     expired_file = expired_file && (0==SstFile.exp_explicit_high
