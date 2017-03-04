@@ -161,7 +161,7 @@ PropertyCache::LookupInternal(
             uint64_t now;
             ExpiryModule * mod_ptr;
 
-            now=GetTimeMinutes();
+            now=GetCachedTimeMicros();
             mod_ptr=(ExpiryModule *)m_Cache->Value(ret_handle);
 
             // some unit tests of mod_ptr of NULL

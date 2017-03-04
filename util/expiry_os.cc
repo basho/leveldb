@@ -91,7 +91,7 @@ ExpiryModuleOS::MemTableInserterCallback(
 
 
 /**
- * Use Basho's GetTimeMinutes() as write time source.
+ * Use Basho's GetCachedTimeMicros() as write time source.
  *  This clock returns microseconds since epoch, but
  *  only updates every 60 seconds or so.
  */
@@ -101,7 +101,7 @@ ExpiryModuleOS::GenerateWriteTimeMicros(
     const Slice & Value) const
 {
 
-    return(GetTimeMinutes());
+    return(GetCachedTimeMicros());
 
 }  // ExpiryModuleOS::GenerateWriteTimeMicros()
 
@@ -130,7 +130,7 @@ bool ExpiryModuleOS::KeyRetirementCallback(
                 if (0!=GetExpiryMinutes() && 0!=Ikey.expiry &&
                     !IsExpiryUnlimited())
                 {
-                    now_micros=GetTimeMinutes();
+                    now_micros=GetCachedTimeMicros();
                     expires_micros=GetExpiryMinutes()*60*port::UINT64_ONE_SECOND_MICROS
                         + Ikey.expiry;
                     is_expired=(expires_micros<=now_micros);
@@ -140,7 +140,7 @@ bool ExpiryModuleOS::KeyRetirementCallback(
             case kTypeValueExplicitExpiry:
                 if (0!=Ikey.expiry)
                 {
-                    now_micros=GetTimeMinutes();
+                    now_micros=GetCachedTimeMicros();
                     is_expired=(Ikey.expiry<=now_micros);
                 }   // if
                 break;
@@ -260,7 +260,7 @@ bool ExpiryModuleOS::CompactionFinalizeCallback(
         const std::vector<FileMetaData*> & files(Ver.GetFileList(Level));
         std::vector<FileMetaData*>::const_iterator it;
 
-        now_micros=GetTimeMinutes();
+        now_micros=GetCachedTimeMicros();
         for (it=files.begin(); (!expired_file || WantAll) && files.end()!=it; ++it)
         {
             // First, is file eligible?

@@ -120,7 +120,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
     expiry=0;
     module.SetExpiryMinutes(30);
     before=port::TimeMicros();
-    SetTimeMinutes(before);
+    SetCachedTimeMicros(before);
     flag=module.MemTableInserterCallback(key, value, type, expiry);
     after=port::TimeMicros();
     ASSERT_EQ(flag, true);
@@ -132,7 +132,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
     expiry=0;
     module.SetExpiryUnlimited(true);
     before=port::TimeMicros();
-    SetTimeMinutes(before);
+    SetCachedTimeMicros(before);
     flag=module.MemTableInserterCallback(key, value, type, expiry);
     after=port::TimeMicros();
     ASSERT_EQ(flag, true);
@@ -144,7 +144,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
     expiry=0;
     module.SetExpiryMinutes(0);
     before=port::TimeMicros();
-    SetTimeMinutes(before);
+    SetCachedTimeMicros(before);
     flag=module.MemTableInserterCallback(key, value, type, expiry);
     after=port::TimeMicros();
     ASSERT_EQ(flag, true);
@@ -156,7 +156,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
     expiry=0;
     module.SetExpiryMinutes(30);
     before=port::TimeMicros();
-    SetTimeMinutes(before);
+    SetCachedTimeMicros(before);
     flag=module.MemTableInserterCallback(key, value, type, expiry);
     after=port::TimeMicros();
     ASSERT_EQ(flag, true);
@@ -168,7 +168,7 @@ TEST(ExpiryTester, MemTableInserterCallback)
     module.SetExpiryMinutes(30);
     before=port::TimeMicros();
     expiry=before - 1000;
-    SetTimeMinutes(before);
+    SetCachedTimeMicros(before);
     flag=module.MemTableInserterCallback(key, value, type, expiry);
     after=port::TimeMicros();
     ASSERT_EQ(flag, true);
@@ -207,7 +207,7 @@ TEST(ExpiryTester, MemTableCallback)
     ASSERT_EQ(module.ExpiryActivated(), true);
 
     before=port::TimeMicros();
-    SetTimeMinutes(before);
+    SetCachedTimeMicros(before);
 
     // deletion, do nothing
     InternalKey key1("DeleteMeKey", 0, 0, kTypeDeletion);
@@ -220,12 +220,12 @@ TEST(ExpiryTester, MemTableCallback)
     ASSERT_EQ(flag, false);
 
     // explicit, but time in the future
-    after=GetTimeMinutes() + 60*port::UINT64_ONE_SECOND_MICROS;
+    after=GetCachedTimeMicros() + 60*port::UINT64_ONE_SECOND_MICROS;
     InternalKey key3("ExplicitKey", after, 0, kTypeValueExplicitExpiry);
     flag=module.MemTableCallback(key3.internal_key());
     ASSERT_EQ(flag, false);
     // advance the clock
-    SetTimeMinutes(after + 60*port::UINT64_ONE_SECOND_MICROS);
+    SetCachedTimeMicros(after + 60*port::UINT64_ONE_SECOND_MICROS);
     flag=module.MemTableCallback(key3.internal_key());
     ASSERT_EQ(flag, true);
     // disable expiry
@@ -239,15 +239,15 @@ TEST(ExpiryTester, MemTableCallback)
     module.SetExpiryEnabled(true);
     ASSERT_EQ(module.ExpiryActivated(), true);
     module.SetExpiryMinutes(2);
-    after=GetTimeMinutes();
+    after=GetCachedTimeMicros();
     InternalKey key4("AgeKey", after, 0, kTypeValueWriteTime);
     flag=module.MemTableCallback(key4.internal_key());
     ASSERT_EQ(flag, false);
     // advance the clock
-    SetTimeMinutes(after + 60*port::UINT64_ONE_SECOND_MICROS);
+    SetCachedTimeMicros(after + 60*port::UINT64_ONE_SECOND_MICROS);
     flag=module.MemTableCallback(key4.internal_key());
     ASSERT_EQ(flag, false);
-    SetTimeMinutes(after + 120*port::UINT64_ONE_SECOND_MICROS);
+    SetCachedTimeMicros(after + 120*port::UINT64_ONE_SECOND_MICROS);
     flag=module.MemTableCallback(key4.internal_key());
     ASSERT_EQ(flag, true);
     // disable expiry
@@ -305,7 +305,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     level=config::kNumOverlapLevels;
 
     now=port::TimeMicros();
-    SetTimeMinutes(now);
+    SetCachedTimeMicros(now);
 
     // put two files into the level, no expiry
     file_ptr=new FileMetaData;
@@ -332,7 +332,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     module.SetExpiryEnabled(true);
     module.SetWholeFileExpiryEnabled(true);
     module.SetExpiryMinutes(1);
-    SetTimeMinutes(now + 120*port::UINT64_ONE_SECOND_MICROS);
+    SetCachedTimeMicros(now + 120*port::UINT64_ONE_SECOND_MICROS);
     ver.SetFileList(level, files);
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, false);
@@ -461,7 +461,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     // file_ptr at 1min, setting at 1m, clock at 30 seconds
     module.SetWholeFileExpiryEnabled(true);
     module.SetExpiryMinutes(1);
-    SetTimeMinutes(now + 30*port::UINT64_ONE_SECOND_MICROS);
+    SetCachedTimeMicros(now + 30*port::UINT64_ONE_SECOND_MICROS);
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, false);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -470,7 +470,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     // file_ptr at 1min, setting at 1m, clock at 1.5minutes
     module.SetWholeFileExpiryEnabled(true);
     module.SetExpiryMinutes(1);
-    SetTimeMinutes(now + 90*port::UINT64_ONE_SECOND_MICROS);
+    SetCachedTimeMicros(now + 90*port::UINT64_ONE_SECOND_MICROS);
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, false);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -479,7 +479,7 @@ TEST(ExpiryTester, CompactionFinalizeCallback1)
     // file_ptr at 1min, setting at 1m, clock at 2minutes
     module.SetWholeFileExpiryEnabled(true);
     module.SetExpiryMinutes(1);
-    SetTimeMinutes(now + 120*port::UINT64_ONE_SECOND_MICROS);
+    SetCachedTimeMicros(now + 120*port::UINT64_ONE_SECOND_MICROS);
     flag=module.CompactionFinalizeCallback(true, ver, level, NULL);
     ASSERT_EQ(flag, true);
     flag=module.CompactionFinalizeCallback(false, ver, level, NULL);
@@ -595,7 +595,7 @@ CreateMetaArray(
     ExpiryTimeMicros now;
 
     ClearMetaArray(Output);
-    now=GetTimeMinutes();
+    now=GetCachedTimeMicros();
 
     for (loop=0, cursor=Data; loop<Count; ++loop, ++cursor)
     {
@@ -666,7 +666,7 @@ TEST(ExpiryTester, OverlapTests)
     module.SetExpiryMinutes(2);
 
     now=port::TimeMicros();
-    SetTimeMinutes(now);
+    SetCachedTimeMicros(now);
 
 
     /** case: two levels, no overlap, no expiry **/
@@ -697,10 +697,10 @@ TEST(ExpiryTester, OverlapTests)
     ver.SetFileList(sorted1, level_clear);
 
     /** case: two levels, 100% overlap, both levels expired **/
-    SetTimeMinutes(now);
+    SetCachedTimeMicros(now);
     CreateMetaArray(level1, levelC, 2);
     CreateMetaArray(level2, levelD, 2);
-    SetTimeMinutes(now + 5*60000000);
+    SetCachedTimeMicros(now + 5*60000000);
     ver.SetFileList(sorted0, level1);
     ver.SetFileList(sorted1, level2);
     flag=module.CompactionFinalizeCallback(true, ver, sorted0, &edit);
@@ -779,14 +779,14 @@ public:
     };  // OneCompaction
 
     void SetClock(uint64_t Time)
-        {SetTimeMinutes(Time);};
+        {SetCachedTimeMicros(Time);};
 
     void ShiftClockMinutes(int Min)
     {
         uint64_t shift;
 
         shift=Min * 60 * port::UINT64_ONE_SECOND_MICROS;
-        SetTimeMinutes(GetTimeMinutes() + shift);
+        SetCachedTimeMicros(GetCachedTimeMicros() + shift);
     };
 };  // class ExpDB
 

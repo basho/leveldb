@@ -335,8 +335,8 @@ uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
 uint64_t GetUnadjustedThrottleWriteRate() {return(gUnadjustedThrottleRate);};
 
 // clock_gettime but only updated once every 60 seconds (roughly)
-uint64_t GetTimeMinutes() {return(gCurrentTime);};
-void SetTimeMinutes(uint64_t Time) {gCurrentTime=Time;};
+uint64_t GetCachedTimeMicros() {return(gCurrentTime);};
+void SetCachedTimeMicros(uint64_t Time) {gCurrentTime=Time;};
 /**
  * ThrottleStopThreads() is the first step in a two step shutdown.
  * This stops the 1 minute throttle calculation loop that also
