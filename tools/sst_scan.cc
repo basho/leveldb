@@ -277,26 +277,11 @@ main(
                                         printf("\n");
 
                                         cursor_slice=parsed.user_key;
-#if 0
-                                        std::string type, bucket;
-                                        if (KeyGetBucket(cursor_slice, type, bucket))
-                                            printf("     type: %s, bucket: %s\n", type.c_str(), bucket.c_str());
-                                        else
-                                            printf("     *** KeyGetBucket() failed. ***\n");
-#endif
                                     }   // if
 
                                     if (value_dump)
                                     {
-
                                         printf("  %s\n", HexString(it2->value()).c_str());
-#if 0
-                                        uint64_t mod_time;
-                                        if (ValueGetLastModTime(it2->value(), mod_time))
-                                            printf("  last mod time: %" PRIu64 "\n", mod_time);
-                                        else
-                                            printf("   *** ValueGetLastModTime() failed. ***\n");
-#endif
                                     }   // if
                                 }   // if
                             }   // if
@@ -449,17 +434,6 @@ PrintSextKey(
                 printf(">>");
                 break;
             }   // atom
-
-#if 0
-            case(11):   // big positive int
-            {
-                Cursor.remove_prefix(1);
-                printf("<<");
-                good=PrintSextAtom(Cursor);
-                printf(">>");
-                break;
-            }   // atom
-#endif
         }   // switch
     }   // for
 
