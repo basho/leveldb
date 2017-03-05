@@ -76,6 +76,10 @@ PropertyCache::SetGlobalPropertyCache(
 }   // PropertyCache::SetGlobalPropertyCache
 
 
+/**
+ * Unit test support.  Allows use of derived versions
+ *  of PropertyCache that easy testing
+ */
 Cache &
 PropertyCache::GetCache()
 {
@@ -83,14 +87,6 @@ PropertyCache::GetCache()
     return(*lPropCache->GetCachePtr());
 
 }   // PropertyCache::GetCache
-
-
-// unit test usage, not thread safe
-PropertyCache *
-PropertyCache::GetPropertyCachePtr()
-{
-    return(lPropCache.get());
-}   // PropertyCache::GetPropertyCachePtr
 
 
 /**

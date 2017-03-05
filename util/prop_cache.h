@@ -72,9 +72,6 @@ protected:
     // accessor to m_Cache pointer (really bad if NULL m_Cache)
     Cache * GetCachePtr() {return(m_Cache);};
 
-    // give unit tests access to global property cache object
-    static PropertyCache * GetPropertyCachePtr();
-
     // internal equivalent to static Lookup() function
     Cache::Handle * LookupInternal(const Slice & CompositeBucket);
 
