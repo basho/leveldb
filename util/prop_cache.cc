@@ -31,6 +31,11 @@
 
 namespace leveldb {
 
+/**
+ * lPropCacheLock and lPropCache exist to address race condition
+ *  where Erlang respond to an information request after telling
+ *  leveldb to shutdown.
+ */
 static port::Spin lPropCacheLock;
 static PropertyCachePtr_t lPropCache;
 

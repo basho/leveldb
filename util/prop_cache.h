@@ -2,7 +2,7 @@
 //
 // prop_cache.h
 //
-// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2016-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -91,6 +91,8 @@ protected:
     port::Mutex m_Mutex;
     port::CondVar m_Cond;
 
+// The follow explicitly disable use of default constructor, copy constructor,
+//  and assignment operator.
 private:
     PropertyCache();
     PropertyCache(const PropertyCache &);
