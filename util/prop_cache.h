@@ -57,6 +57,9 @@ public:
     // static retrieval of active cache
     static Cache & GetCache();
 
+    // test if cache is running (so OS builds know to ignore)
+    static bool Valid();
+
     // virtual destructor to facilitate unit tests
     virtual ~PropertyCache();
 
@@ -132,6 +135,7 @@ public:
 
     ~CachePtr() {Release();};
 
+    // unprotected if GetCache is NULL
     void Release()
     {
         if (NULL!=m_Ptr)
@@ -150,9 +154,17 @@ public:
         }   // if
     }
 
-    Object * get() {return((Object *)PropertyCache::GetCache().Value(m_Ptr));};
 
-    const Object * get() const {return((const Object *)PropertyCache::GetCache().Value(m_Ptr));};
+    Object * get()
+    {return(PropertyCache::Valid()
+            ? (Object *)PropertyCache::GetCache().Value(m_Ptr)
+            : NULL);};
+
+    // unprotected if GetCache is NULL
+    const Object * get() const
+    {return(PropertyCache::Valid()
+            ? (const Object *)PropertyCache::GetCache().Value(m_Ptr)
+            : NULL);};
 
     Object * operator->() {return(get());};
     const Object * operator->() const {return(get());};
@@ -169,23 +181,21 @@ public:
 
     bool Insert(const Slice & Key, Object * Value)
     {
+        bool ret_flag(false);
         Release();
-        m_Ptr=PropertyCache::GetCache().Insert(Key, (void *)Value, 1, &Deleter);
-        return(NULL!=m_Ptr);
+        ret_flag=PropertyCache::Insert(Key, (void *)Value, &m_Ptr);
+        return(ret_flag);
     };
 
+    // unprotected if GetCache is NULL
     void Erase(const Slice & Key)
     {
         Release();
-        PropertyCache::GetCache().Erase(Key);
+        if (PropertyCache::Valid())
+            PropertyCache::GetCache().Erase(Key);
         return;
     };
 
-    static void Deleter(const Slice& Key, void * Value)
-    {
-        Object * ptr((Object *)Value);
-        delete ptr;
-    };
 protected:
 
 private:

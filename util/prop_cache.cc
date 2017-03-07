@@ -143,6 +143,33 @@ PropertyCache::Lookup(
 
 
 /**
+ * Test if global cache is running,
+ *  does NOT imply it will stay valid
+ */
+bool
+PropertyCache::Valid()
+{
+    PropertyCachePtr_t ptr;
+    bool ret_flag(false);
+
+    // race condition ... lPropCache going away as ptr assigned
+    //   (unlikely here, but seen in Insert)
+    {
+        SpinLock l(&lPropCacheLock);
+        ptr=lPropCache;
+    }   // lock
+
+    if (NULL!=ptr.get())
+    {
+        ret_flag=(NULL!=ptr->m_Cache);
+    }   // if
+
+    return(ret_flag);
+
+}   // PropertyCache::Valid
+
+
+/**
  * Retrieve property from cache if available,
  *  else call out to Riak to get properties
  */
