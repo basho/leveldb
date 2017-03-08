@@ -76,7 +76,7 @@ struct DBImpl::CompactionState {
     InternalKey smallest, largest;
     uint64_t exp_write_low, exp_write_high, exp_explicit_high;
 
-    Output() : number(0), file_size(0), exp_write_low(ULONG_MAX), exp_write_high(0), exp_explicit_high(0) {}
+    Output() : number(0), file_size(0), exp_write_low(ULLONG_MAX), exp_write_high(0), exp_explicit_high(0) {}
   };
   std::vector<Output> outputs;
 
@@ -168,6 +168,8 @@ Options SanitizeOptions(const std::string& dbname,
   // remove anything expiry if this is an internal database
   if (result.is_internal_db)
       result.expiry_module.reset();
+  else if (NULL!=result.expiry_module.get())
+      result.expiry_module.get()->NoteUserExpirySettings();
 
   return result;
 }

@@ -23,8 +23,10 @@
 #ifndef EXPIRY_H
 #define EXPIRY_H
 
+#include <limits.h>
 #include <stdint.h>
 #include "leveldb/env.h"
+#include "leveldb/options.h"
 #include "util/refobject_base.h"
 
 namespace leveldb {
@@ -37,6 +39,16 @@ class SstCounters;
 class Version;
 class VersionEdit;
 struct FileMetaData;
+
+
+enum EleveldbRouterActions_t
+{
+    eGetBucketProperties=1
+};  // enum EleveldbRouterActions_t
+
+
+typedef bool (* EleveldbRouter_t)(EleveldbRouterActions_t Action, int ParamCount, const void ** Params);
+
 
 class ExpiryModule : public RefObjectBase
 {
@@ -57,7 +69,7 @@ public:
         const Slice & Key,   // input: user's key about to be written
         const Slice & Value, // input: user's value object
         ValueType & ValType,   // input/output: key type. call might change
-        ExpiryTime & Expiry) const  // input/output: 0 or specific expiry. call might change
+        ExpiryTimeMicros & Expiry) const  // input/output: 0 or specific expiry. call might change
     {return(true);};
 
     // db/dbformat.cc KeyRetirement::operator() calls this.
@@ -90,9 +102,20 @@ public:
         VersionEdit * Edit) const     // output: NULL or destination of delete list
     {return(false);};
 
+    // yep, sometimes we want to expiry this expiry module object.
+    //  mostly for bucket level properties in Riak EE
+    virtual uint64_t ExpiryModuleExpiryMicros() {return(0);};
+
     // Creates derived ExpiryModule object that matches compile time
     //  switch for open source or Basho enterprise edition features.
-    static ExpiryModule * CreateExpiryModule();
+    static ExpiryModule * CreateExpiryModule(EleveldbRouter_t Router);
+
+    // Cleans up global objects related to expiry
+    //  switch for open source or Basho enterprise edition features.
+    static void ShutdownExpiryModule();
+
+    // Riak EE:  stash a user created module with settings
+    virtual void NoteUserExpirySettings() {};
 
 protected:
     ExpiryModule() {};

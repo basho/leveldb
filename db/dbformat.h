@@ -72,7 +72,7 @@ class InternalKey;
 static const ValueType kValueTypeForSeek = kTypeValue;
 
 typedef uint64_t SequenceNumber;
-typedef uint64_t ExpiryTime;
+typedef uint64_t ExpiryTimeMicros;
 
 // We leave eight bits empty at the bottom so a type and sequence#
 // can be packed together into 64-bits.
@@ -81,12 +81,12 @@ static const SequenceNumber kMaxSequenceNumber =
 
 struct ParsedInternalKey {
   Slice user_key;
-  ExpiryTime expiry;
+  ExpiryTimeMicros expiry;
   SequenceNumber sequence;
   ValueType type;
 
   ParsedInternalKey() { }  // Intentionally left uninitialized (for speed)
-  ParsedInternalKey(const Slice& u, const ExpiryTime & exp, const SequenceNumber& seq, ValueType t)
+  ParsedInternalKey(const Slice& u, const ExpiryTimeMicros & exp, const SequenceNumber& seq, ValueType t)
       : user_key(u), expiry(exp), sequence(seq), type(t) { }
   std::string DebugString() const;
   std::string DebugStringHex() const;
@@ -121,7 +121,7 @@ inline size_t KeySuffixSize(ValueType val_type) {
 
       case kTypeValueWriteTime:
       case kTypeValueExplicitExpiry:
-          ret_val=sizeof(SequenceNumber) + sizeof(ExpiryTime);
+          ret_val=sizeof(SequenceNumber) + sizeof(ExpiryTimeMicros);
           break;
 
       default:
@@ -167,7 +167,7 @@ inline bool IsExpiryKey(const Slice & internal_key) {
 }
 
 // Riak: extracts expiry value
-inline ExpiryTime ExtractExpiry(const Slice& internal_key) {
+inline ExpiryTimeMicros ExtractExpiry(const Slice& internal_key) {
   assert(internal_key.size() >= KeySuffixSize(kTypeValueWriteTime));
   assert(IsExpiryKey(internal_key));
   return(DecodeFixed64(internal_key.data() + internal_key.size() - KeySuffixSize(kTypeValueWriteTime)));
@@ -217,7 +217,7 @@ class InternalKey {
   std::string rep_;
  public:
   InternalKey() { }   // Leave rep_ as empty to indicate it is invalid
-  InternalKey(const Slice& user_key, ExpiryTime exp, SequenceNumber s, ValueType t) {
+  InternalKey(const Slice& user_key, ExpiryTimeMicros exp, SequenceNumber s, ValueType t) {
     AppendInternalKey(&rep_, ParsedInternalKey(user_key, exp, s, t));
   }
 
@@ -283,7 +283,7 @@ class LookupKey {
   // did requestor have metadata object?
   bool WantsKeyMetaData() const {return(NULL!=meta_);};
 
-  void SetKeyMetaData(ValueType type, SequenceNumber seq, ExpiryTime expiry) const
+  void SetKeyMetaData(ValueType type, SequenceNumber seq, ExpiryTimeMicros expiry) const
   {if (NULL!=meta_)
     {
       meta_->m_Type=type;

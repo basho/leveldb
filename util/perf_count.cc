@@ -620,6 +620,9 @@ PerformanceCounters * gPerfCounters(&LocalStartupCounters);
         {"SyslogWrite", false},
         {"BackupStarted", false},
         {"BackupError", false},
+        {"PropCacheHit", true},
+        {"PropCacheMiss", true},
+        {"PropCacheError", false},
     };
 
 

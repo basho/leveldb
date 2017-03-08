@@ -9,7 +9,7 @@
 namespace leveldb {
 
 static std::string IKey(const std::string& user_key,
-                        ExpiryTime exp,
+                        ExpiryTimeMicros exp,
                         uint64_t seq,
                         ValueType vt) {
   std::string encoded;
@@ -30,7 +30,7 @@ static std::string ShortSuccessor(const std::string& s) {
 }
 
 static void TestKey(const std::string& key,
-                    ExpiryTime exp,
+                    ExpiryTimeMicros exp,
                     uint64_t seq,
                     ValueType vt) {
   std::string encoded = IKey(key, exp, seq, vt);

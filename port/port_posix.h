@@ -220,8 +220,8 @@ inline void SetCurrentThreadName(const char* threadName) {
   }
 #if defined(OS_MACOSX)
   pthread_setname_np(threadName);
-//#elif defined(OS_LINUX) 
-#elif defined(__GLIBC__) 
+//#elif defined(OS_LINUX)
+#elif defined(__GLIBC__)
 #if  __GLIBC_PREREQ(2,12)
   pthread_setname_np(pthread_self(), threadName);
 #endif
@@ -237,9 +237,9 @@ inline void SetCurrentThreadName(const char* threadName) {
 
 // similar to Env::NowMicros except guaranteed to return "time" instead
 //  of potentially only ticks since reboot
-const uint64_t UINT64_ONE_SECOND=1000000;
+const uint64_t UINT64_ONE_SECOND_MICROS=1000000;
 
-inline uint64_t TimeUint64() {
+inline uint64_t TimeMicros() {
 #if _POSIX_TIMERS >= 200801L
     struct timespec ts;
 
@@ -251,7 +251,7 @@ inline uint64_t TimeUint64() {
     gettimeofday(&tv, NULL);
     return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
 #endif
-} // TimeUint64
+} // TimeMicros
 
 } // namespace port
 } // namespace leveldb

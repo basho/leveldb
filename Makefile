@@ -9,6 +9,8 @@ INSTALL_PATH ?= $(CURDIR)
 # Uncomment exactly one of the lines labelled (A), (B), and (C) below
 # to switch between compilation modes.
 #  NOTE: targets "debug" and "prof" provide same functionality
+#  NOTE 2: -DNDEBUG disables assert() statements within C code,
+#            i.e. no assert()s in production code
 
 OPT ?= -O2 -g -DNDEBUG    # (A) Production use (optimized mode)
 # OPT ?= -g2              # (B) Debug mode, w/ full line-level debugging symbols

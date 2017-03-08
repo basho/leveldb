@@ -85,7 +85,7 @@ Iterator* MemTable::NewIterator() {
 void MemTable::Add(SequenceNumber s, ValueType type,
                    const Slice& key,
                    const Slice& value,
-                   const ExpiryTime & expiry) {
+                   const ExpiryTimeMicros & expiry) {
   // Format of an entry is concatenation of:
   //  key_size     : varint32 of internal_key.size()
   //  key bytes    : char[internal_key.size()]

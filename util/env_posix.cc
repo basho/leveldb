@@ -1121,6 +1121,8 @@ void Env::Shutdown()
         default_env=NULL;
     }   // if
 
+    ExpiryModule::ShutdownExpiryModule();
+
     // wait until compaction threads complete before
     //  releasing comparator object (else segfault possible)
     ComparatorShutdown();

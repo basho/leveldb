@@ -2,7 +2,7 @@
 //
 // expiry_os_stub.cc
 //
-// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2016-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -31,11 +31,32 @@ namespace leveldb {
  *  an open source version of object expiry
  */
 ExpiryModule *
-ExpiryModule::CreateExpiryModule()
+ExpiryModule::CreateExpiryModule(
+    EleveldbRouter_t Router)
 {
 
     return(new leveldb::ExpiryModuleOS);
 
 }   // ExpiryModule::CreateExpiryModule()
+
+
+void
+ExpiryModule::ShutdownExpiryModule()
+{
+
+    return;
+
+}   // ExpiryModule::ShutdownExpiryModule
+
+
+uint64_t
+CuttlefishDurationMinutes(
+    const char * Buffer)
+{
+
+    // zero is safe return since it implies "disable write time expiry"
+    return(0);
+
+}   // CuttlefishDurationMinutes
 
 }  // namespace leveldb

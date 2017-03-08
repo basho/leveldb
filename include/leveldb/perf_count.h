@@ -244,6 +244,10 @@ enum PerformanceCountersEnum
     ePerfBackupStarted=97,    //!< hot backup initiated
     ePerfBackupError=98,      //!< hot backup had an error
 
+    ePerfPropCacheHit=99,     //!< property cache had data
+    ePerfPropCacheMiss=100,   //!< property cache had to look up data
+    ePerfPropCacheError=101,  //!< no property cache entry built/located
+
     // must follow last index name to represent size of array
     //  (ASSUMES previous enum is highest value)
     ePerfCountEnumSize,     //!< size of the array described by the enum values

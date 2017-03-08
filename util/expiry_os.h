@@ -2,7 +2,7 @@
 //
 // expiry_os.h
 //
-// Copyright (c) 2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2016-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -38,8 +38,10 @@ class ExpiryModuleOS : public ExpiryModule
 {
 public:
     ExpiryModuleOS()
-        : expiry_enabled(false), expiry_minutes(0), whole_file_expiry(false)
+        : expiry_enabled(false), expiry_minutes(0),
+        expiry_unlimited(false), whole_file_expiry(false)
     {};
+
     ~ExpiryModuleOS() {};
 
     // Print expiry options to LOG file
@@ -55,7 +57,7 @@ public:
         const Slice & Key,   // input: user's key about to be written
         const Slice & Value, // input: user's value object
         ValueType & ValType,   // input/output: key type. call might change
-        ExpiryTime & Expiry) const;  // input/output: 0 or specific expiry. call might change
+        ExpiryTimeMicros & Expiry) const;  // input/output: 0 or specific expiry. call might change
 
     // db/dbformat.cc KeyRetirement::operator() calls this.
     // db/version_set.cc SaveValue() calls this too.
@@ -83,6 +85,23 @@ public:
         int Level,                     // input: level to review for expiry
         VersionEdit * Edit) const;     // output: NULL or destination of delete list
 
+    // utility to CompactionFinalizeCallback to review
+    //  characteristics of one SstFile to see if entirely expired
+    virtual bool IsFileExpired(const FileMetaData & SstFile, ExpiryTimeMicros Now) const;
+
+    // Accessors to option parameters
+    bool IsExpiryEnabled() const {return(expiry_enabled);};
+    void SetExpiryEnabled(bool Flag=true) {expiry_enabled=Flag;};
+
+    bool IsExpiryUnlimited() const {return(expiry_unlimited);};
+    void SetExpiryUnlimited(bool Flag=true) {expiry_unlimited=Flag;};
+
+    uint64_t GetExpiryMinutes() const {return(expiry_minutes);};
+    void SetExpiryMinutes(uint64_t Minutes) {expiry_minutes=Minutes; expiry_unlimited=false;};
+
+    bool IsWholeFileExpiryEnabled() const {return(whole_file_expiry);};
+    void SetWholeFileExpiryEnabled(bool Flag=true) {whole_file_expiry=Flag;};
+
 public:
     // NOTE: option names below are intentionally public and lowercase with underscores.
     //       This is to match style of options within include/leveldb/options.h.
@@ -96,8 +115,8 @@ public:
     // may stay within the database before automatic deletion.  Zero
     // disables expiry by age feature.
     uint64_t expiry_minutes;
+    bool expiry_unlimited;
 
-    // configuration values
     // Riak specific option authorizing leveldb to eliminate entire
     // files that contain expired data (delete files instead of
     // removing expired data during compactions).
@@ -106,10 +125,12 @@ public:
 protected:
     // When "creating" write time, chose its source based upon
     //  open source versus enterprise edition
-    virtual uint64_t GenerateWriteTime(const Slice & Key, const Slice & Value) const;
+    virtual uint64_t GenerateWriteTimeMicros(const Slice & Key, const Slice & Value) const;
 
 
 };  // ExpiryModuleOS
+
+uint64_t CuttlefishDurationMinutes(const char * Buf);
 
 }  // namespace leveldb
 

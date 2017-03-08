@@ -2,7 +2,7 @@
 //
 // throttle.cc
 //
-// Copyright (c) 2011-2016 Basho Technologies, Inc. All Rights Reserved.
+// Copyright (c) 2011-2017 Basho Technologies, Inc. All Rights Reserved.
 //
 // This file is provided to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file
@@ -130,7 +130,7 @@ ThrottleThread(
     {
         // update our global clock, not intended to be a precise
         //  60 second interval.
-        gCurrentTime=port::TimeUint64();
+        gCurrentTime=port::TimeMicros();
 
         //
         // This is code polls for existance of /etc/riak/perf_counters and sets
@@ -249,7 +249,7 @@ ThrottleThread(
             gUnadjustedThrottleRate=new_unadjusted;
 
 	    // Log(NULL, "ThrottleRate %" PRIu64 ", UnadjustedThrottleRate %" PRIu64, gThrottleRate, gUnadjustedThrottleRate);
-	    
+
             gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
             gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
             gPerfCounters->Set(ePerfThrottleUnadjusted, gUnadjustedThrottleRate);
@@ -335,8 +335,8 @@ uint64_t GetThrottleWriteRate() {return(gThrottleRate);};
 uint64_t GetUnadjustedThrottleWriteRate() {return(gUnadjustedThrottleRate);};
 
 // clock_gettime but only updated once every 60 seconds (roughly)
-uint64_t GetTimeMinutes() {return(gCurrentTime);};
-void SetTimeMinutes(uint64_t Time) {gCurrentTime=Time;};
+uint64_t GetCachedTimeMicros() {return(gCurrentTime);};
+void SetCachedTimeMicros(uint64_t Time) {gCurrentTime=Time;};
 /**
  * ThrottleStopThreads() is the first step in a two step shutdown.
  * This stops the 1 minute throttle calculation loop that also
