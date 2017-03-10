@@ -14,6 +14,7 @@
 //    data: uint8[len]
 
 #include <stdint.h>
+#include <endian.h>
 
 #include "leveldb/db.h"
 #include "leveldb/env.h"
@@ -148,7 +149,31 @@ class MemTableInserter : public WriteBatch::Handler {
 
     if (NULL!=options_ && options_->ExpiryActivated())
         options_->expiry_module->MemTableInserterCallback(key, value, type_use, expiry_use);
-    mem_->Add(sequence_, (ValueType)type_use, key, value, expiry_use);
+//    mem_->Add(sequence_, (ValueType)type_use, key, value, expiry_use);
+
+    if (value.size()<4096)
+    {
+        mem_->Add(sequence_, (ValueType)type_use, key, value, expiry_use);
+    }   // if
+    else
+    {
+        struct
+        {
+            uint64_t time_be;
+            uint64_t seq_be;
+        } new_key;
+        Slice new_slice((char *)&new_key, 16);
+
+        assert(sizeof(new_key)==16);
+
+        new_key.time_be=htobe64(GetCachedTimeMicros());
+        new_key.seq_be=htobe64(sequence_);
+
+        // need to update type_use
+        mem_->Add(sequence_, (ValueType)type_use, key, new_slice, expiry_use);
+        mem_->Add(sequence_, (ValueType)type_use, new_slice, value, expiry_use);
+    }   // else
+
     sequence_++;
   }
   virtual void Delete(const Slice& key) {
