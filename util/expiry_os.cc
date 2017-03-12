@@ -76,7 +76,7 @@ ExpiryModuleOS::MemTableInserterCallback(
     //  without expiry, OR ExpiryMinutes set and not internal key
     if ((kTypeValueWriteTime==ValType && 0==Expiry)
         || (kTypeValue==ValType
-            && 0!=GetExpiryMinutes()
+            && (0!=GetExpiryMinutes() || IsExpiryUnlimited())
             && IsExpiryEnabled()
             && (Key.size()<lRiakMetaDataKeyLen
                 || 0!=memcmp(lRiakMetaDataKey,Key.data(),lRiakMetaDataKeyLen))))
@@ -192,7 +192,7 @@ ExpiryModuleOS::TableBuilderCallback(
                 Counters.Set(eSstCountExpiry2, expires_micros);
             // add to delete count if expired already
             //   i.e. acting as a tombstone
-            if (0!=GetExpiryMinutes() && MemTableCallback(Key))
+            if (MemTableCallback(Key))
                 Counters.Inc(eSstCountDeleteKey);
             break;
 
@@ -201,7 +201,7 @@ ExpiryModuleOS::TableBuilderCallback(
                 Counters.Set(eSstCountExpiry3, expires_micros);
             // add to delete count if expired already
             //   i.e. acting as a tombstone
-            if (0!=GetExpiryMinutes() && MemTableCallback(Key))
+            if (MemTableCallback(Key))
                 Counters.Inc(eSstCountDeleteKey);
             break;
 
