@@ -95,6 +95,30 @@ PropertyCache::GetCache()
 
 
 /**
+ * Unit test support.  Destroy current cache, start new ond
+ */
+void
+PropertyCache::Flush()
+{
+    PropertyCachePtr_t ptr;
+
+    // stablize the object by locking it and
+    //  getting a reference count.  Flush while
+    //  holding lock to keep others away
+    //  ... anyone already using the object may segfault
+    //      this is so dangerous ... only for testing
+    {
+        SpinLock l(&lPropCacheLock);
+        ptr=lPropCache;
+
+        if (NULL!=ptr.get())
+            ptr->FlushInternal();
+    }
+
+}   // PropertyCache::Flush
+
+
+/**
  * Construct property cache object (likely singleton)
  */
 PropertyCache::PropertyCache(
@@ -112,6 +136,21 @@ PropertyCache::~PropertyCache()
     delete m_Cache;
     m_Cache=NULL;
 }   // PropertyCache::~PropertyCache
+
+
+/**
+ * used by unit & integration tests, must protect against
+ *  background AAE operation requests
+ */
+void
+PropertyCache::FlushInternal()
+{
+    delete m_Cache;
+    m_Cache = NewLRUCache2(GetCacheLimit());
+
+    return;
+
+}   // PropertyCache::FlushInternal
 
 
 /**
