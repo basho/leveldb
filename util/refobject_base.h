@@ -30,7 +30,9 @@
 
 #include <stdint.h>
 
+#include "port/port.h"
 #include "leveldb/atomics.h"
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
@@ -94,6 +96,7 @@ template<typename Object> class RefPtr
 public:
 
 protected:
+    port::Spin m_Spin;
     Object * m_Ptr;            // NULL or object being reference counted
 
 private:
@@ -125,6 +128,7 @@ public:
 
     void reset(Object * ObjectPtr=NULL)
     {
+        SpinLock l(&m_Spin);
         Object * old_ptr;
 
         // increment new before decrement old in case
