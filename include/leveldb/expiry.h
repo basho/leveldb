@@ -53,7 +53,7 @@ typedef bool (* EleveldbRouter_t)(EleveldbRouterActions_t Action, int ParamCount
 class ExpiryModule : public RefObjectBase
 {
 public:
-    ~ExpiryModule() {};
+    virtual ~ExpiryModule() {};
 
     // Print expiry options to LOG file
     virtual void Dump(Logger * log) const
