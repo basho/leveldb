@@ -198,7 +198,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       throttle_end(0),
       running_compactions_(0),
       block_size_changed_(0), last_low_mem_(0),
-      hotbackup_pending_(false)
+      hotbackup_pending_(false),
+      non_block_tickets_(0), last_penalty_(0), est_mem_usage_(0)
 {
   current_block_size_=options_.block_size;
 
@@ -1818,7 +1819,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   }
 
   // May temporarily unlock and wait.
-  status = MakeRoomForWrite(my_batch == NULL);
+  if (0==add_and_fetch(&non_block_tickets_, (uint32_t)0))
+      status = MakeRoomForWrite(my_batch == NULL);
+
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
@@ -1844,6 +1847,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     if (updates == tmp_batch_) tmp_batch_->Clear();
 
     versions_->SetLastSequence(last_sequence);
+
+    // cache this value while mutex held
+    est_mem_usage_=mem_->ApproximateMemoryUsage();
   }
 
   while (true) {
@@ -1865,7 +1871,19 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   gPerfCounters->Inc(ePerfApiWrite);
 
   // protect use of versions_ ... still within scope of mutex_ lock
-  throttle=versions_->WriteThrottleUsec(IsCompactionScheduled());
+  if (0==add_and_fetch(&non_block_tickets_, (uint32_t)0))
+  {
+      throttle=versions_->WriteThrottleUsec(IsCompactionScheduled());
+      gPerfCounters->Inc(ePerfDebug0);
+  }   // if
+  else
+  {
+      // only reduce count for operations that were marked
+      if (options.non_blocking)
+          dec_and_fetch(&non_block_tickets_);
+      throttle=0;
+      gPerfCounters->Inc(ePerfDebug1);
+  }   // else
   }  // release  MutexLock l(&mutex_)
 
 
@@ -1977,6 +1995,34 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   return result;
 }
 
+
+/**
+ * Test 3 biggest things that cause a thread to block
+ * or delay.  There are other reasons in MakeRoomForWrite()
+ * but those are ignored since penalty and such will reflect them.
+ */
+bool
+DBImpl::RequestNonBlockTicket()
+{
+    bool ret_flag(false);
+
+    // assume ticket succeeds
+    inc_and_fetch(&non_block_tickets_);
+
+    // est_mem_usage_ is last known mem_->ApproximateMemoryUsage(), write_buffer_size is constant
+    ret_flag = (est_mem_usage_ <= options_.write_buffer_size);
+    ret_flag = ret_flag && 1==GetThrottleWriteRate();
+    ret_flag = ret_flag && 0==GetLastPenalty();
+
+    // remove ticket
+    if (!ret_flag)
+        dec_and_fetch(&non_block_tickets_);
+
+    return(ret_flag);
+
+}   // DBImpl::RequestNonBlockTicket
+
+
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
 Status DBImpl::MakeRoomForWrite(bool force) {
@@ -1985,7 +2031,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   bool allow_delay = !force;
   Status s;
 
-  while (true) {
+  while (0==add_and_fetch(&non_block_tickets_, (uint32_t)0)) {
     if (!bg_error_.ok()) {
       // Yield previous error
         gPerfCounters->Inc(ePerfWriteError);

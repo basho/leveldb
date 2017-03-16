@@ -171,6 +171,12 @@ class DB {
   // eleveldb, access to leveldb's logging routines.
   virtual Logger* GetLogger() const { return NULL; }
 
+  // Riak specific function:  Request a "ticket" that allows
+  // bypass of most wait / blocking activity in a Write() call.
+  // Used by eleveldb to potential skip a thread switch prior
+  // to leveldb call.  Returned bool set in WriteOptions::non_blocking.
+  virtual bool RequestNonBlockTicket() {return(false);};
+
  private:
   // No copying allowed
   DB(const DB&);

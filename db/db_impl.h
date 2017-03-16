@@ -49,6 +49,7 @@ class DBImpl : public DB {
   virtual Status VerifyLevels();
   virtual void CheckAvailableCompactions();
   virtual Logger* GetLogger() const { return options_.info_log; }
+  virtual bool RequestNonBlockTicket();
 
   // Extra methods (for testing) that are not in the public DB interface
 
@@ -88,7 +89,12 @@ class DBImpl : public DB {
   bool IsCompactionScheduled();
   uint32_t RunningCompactionCount() {mutex_.AssertHeld(); return(running_compactions_);};
 
- protected:
+  // memory barrier set/retrieval of last_penalty_
+  uint64_t GetLastPenalty() {return(add_and_fetch(&last_penalty_, (uint64_t)0));};
+  void SetLastPenalty(uint64_t NewPenalty)
+  {compare_and_swap(&last_penalty_, (uint64_t)last_penalty_, NewPenalty);};
+
+protected:
   friend class DB;
   struct CompactionState;
   struct Writer;
@@ -223,12 +229,14 @@ class DBImpl : public DB {
   volatile size_t current_block_size_;    // last dynamic block size computed
   volatile uint64_t block_size_changed_;  // NowMicros() when block size computed
   volatile uint64_t last_low_mem_;        // NowMicros() when low memory last seen
+  volatile bool hotbackup_pending_;       // true if hotbackup cycle initiated, blocks close
+  volatile uint32_t non_block_tickets_;   // how many non-blocking writes promised?
+  volatile uint64_t est_mem_usage_;       // cached mem->ApproximateMemoryUsage()
+  volatile uint64_t last_penalty_;        // most recent Version->penalty_ value seen
 
   // accessor to new, dynamic block_cache
   Cache * block_cache() {return(double_cache.GetBlockCache());};
   Cache * file_cache() {return(double_cache.GetFileCache());};
-
-  volatile bool hotbackup_pending_;
 
   // No copying allowed
   DBImpl(const DBImpl&);
