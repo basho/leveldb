@@ -42,7 +42,7 @@ public:
         expiry_unlimited(false), whole_file_expiry(false)
     {};
 
-    ~ExpiryModuleOS() {};
+    virtual ~ExpiryModuleOS() {};
 
     // Print expiry options to LOG file
     virtual void Dump(Logger * log) const;
