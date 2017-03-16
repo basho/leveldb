@@ -18,6 +18,7 @@
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include "util/db_list.h"
 #include "util/hot_threads.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
@@ -815,7 +816,10 @@ VersionSet::VersionSet(const std::string& dbname,
       descriptor_file_(NULL),
       descriptor_log_(NULL),
       dummy_versions_(this),
-      current_(NULL) {
+      current_(NULL),
+      last_penalty_minutes_(0),
+      prev_write_penalty_(0)
+{
   AppendVersion(new Version(this));
 }
 
@@ -1189,11 +1193,12 @@ VersionSet::Finalize(Version* v)
                 //  only occurs if no other compactions running on groomer thread
                 //  (no grooming if landing level is still overloaded)
                 if (0==score && grooming_trigger<=v->files_[level].size()
-                    && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels]) 
+                    && 2<DBList()->GetDBCount(false)   // for non-Riak use cases, helps throughput
+                    && (uint64_t)TotalFileSize(v->files_[config::kNumOverlapLevels])
 		    < gLevelTraits[config::kNumOverlapLevels].m_DesiredBytesForLevel)
                 {
                     // secondary test, don't push too much to next Overlap too soon
-                    if (!gLevelTraits[level+1].m_OverlappedFiles 
+                    if (!gLevelTraits[level+1].m_OverlappedFiles
                          || v->files_[level+1].size()<=config::kL0_CompactionTrigger)
                     {
                         score=1;
@@ -1299,11 +1304,10 @@ VersionSet::UpdatePenalty(
 
     for (int level = 0; level < config::kNumLevels-1; ++level)
     {
-        int loop, count, value, increment;
-        
+        int loop, count, value;
+
         value=0;
         count=0;
-        increment=0;
 
         if (gLevelTraits[level].m_OverlappedFiles)
         {
@@ -1330,13 +1334,11 @@ VersionSet::UpdatePenalty(
                     //  heavy penalty
                     if (0==level)
                     {   // non-linear penalty
-                        value=5;
-                        increment=8;
+                        value=2;
                     }   // if
                     else
                     {   // slightly less penalty
-                        value=count;
-                        count=0;
+                        value=1;
                     }   // else
                 }   // else
             }   // if
@@ -1353,9 +1355,6 @@ VersionSet::UpdatePenalty(
 	        // how many compaction behind
                 value=(level_bytes-gLevelTraits[level].m_MaxBytesForLevel) / options_->write_buffer_size;
                 value+=1;
-                increment=3;
-                // Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
-                //        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
             }   // if
 
             // this penalty is about reducing write amplification, its
@@ -1365,7 +1364,6 @@ VersionSet::UpdatePenalty(
                 && gLevelTraits[level].m_DesiredBytesForLevel < level_bytes)
             {
                 // this approximates the number of compactions needed, no other penalty
-//                value=(level_bytes / gLevelTraits[level].m_DesiredBytesForLevel);
                 value=(int)(static_cast<double>(level_bytes-gLevelTraits[level].m_DesiredBytesForLevel) / options_->write_buffer_size);
 
 		// how urgent is the need to clear this level before next flood
@@ -1375,29 +1373,36 @@ VersionSet::UpdatePenalty(
                 // only throttle if backlog on the horizon
                 if (count < 0)
                     value=0;
-                //else
-                //Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, level_bytes: %llu",
-                //        value, count, options_->write_buffer_size, level_bytes);
-                increment=3;
             }   // else if
 
         }   // else
-
-        for (loop=0; loop<count; ++loop)
-            value*=increment;
 
         penalty+=value;
 
     }   // for
 
     // put a ceiling on the value
-    if (100000<penalty || penalty<0)
-        penalty=100000;
+    if (1000<penalty || penalty<0)
+        penalty=1000;
 
-    v->write_penalty_ = penalty;
+    uint64_t temp_min;
+    temp_min=port::TimeMicros();
 
-// mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
-//    if (0!=penalty) Log(options_->info_log,"UpdatePenalty: %d", penalty);
+    if (last_penalty_minutes_<temp_min)
+    {
+        last_penalty_minutes_=temp_min+15*1000000;
+
+
+        if (prev_write_penalty_<penalty)
+            prev_write_penalty_+=(penalty - prev_write_penalty_)/7 +1;
+        else
+            prev_write_penalty_-=(prev_write_penalty_ - penalty)/5 +1;
+
+        if (prev_write_penalty_ < 0)
+            prev_write_penalty_ = 0;
+    }   // if
+
+    v->write_penalty_=prev_write_penalty_;
 
     return;
 
@@ -1669,7 +1674,7 @@ VersionSet::PickCompaction(
 
       Log(options_->info_log,"Finalize level: %d, grooming %d",
 	  current_->compaction_level_, current_->compaction_grooming_);
-      
+
       c=NULL;
 
       // We prefer compactions triggered by too much data in a level over

@@ -94,6 +94,15 @@ static int FLAGS_open_files = 0;
 // Negative means use default settings.
 static int FLAGS_bloom_bits = -1;
 
+// Riak bloom adaptation
+static int FLAGS_bloom2_bits = -1;
+
+// Riak param for total memory allocation (flex_cache)
+static uint64_t FLAGS_leveldb_memory = -1;
+
+// Riak param for compression setting
+static int FLAGS_compression = 2;
+
 // If true, do not destroy the existing database.  If you set this
 // flag and also specify a benchmark that wants a fresh database, that
 // benchmark will fail.
@@ -390,7 +399,7 @@ class Benchmark {
   : cache_(FLAGS_cache_size >= 0 ? NewLRUCache(FLAGS_cache_size) : NULL),
     filter_policy_(FLAGS_bloom_bits >= 0
                    ? NewBloomFilterPolicy(FLAGS_bloom_bits)
-                   : NULL),
+                   : (FLAGS_bloom2_bits >=0 ? NewBloomFilterPolicy2(FLAGS_bloom2_bits) : NULL)),
     db_(NULL),
     num_(FLAGS_num),
     value_size_(FLAGS_value_size),
@@ -696,6 +705,8 @@ class Benchmark {
     options.block_cache = cache_;
     options.write_buffer_size = FLAGS_write_buffer_size;
     options.filter_policy = filter_policy_;
+    options.compression = (leveldb::CompressionType)FLAGS_compression;
+    options.total_leveldb_mem = FLAGS_leveldb_memory;
     Status s = DB::Open(options, FLAGS_db, &db_);
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
@@ -927,11 +938,13 @@ class Benchmark {
 int main(int argc, char** argv) {
   FLAGS_write_buffer_size = leveldb::Options().write_buffer_size;
   FLAGS_open_files = leveldb::Options().max_open_files;
+  FLAGS_leveldb_memory = 25000000000LL;
   std::string default_db_path;
 
   for (int i = 1; i < argc; i++) {
     double d;
     int n;
+    uint64_t u;
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
@@ -957,8 +970,14 @@ int main(int argc, char** argv) {
       FLAGS_cache_size = n;
     } else if (sscanf(argv[i], "--bloom_bits=%d%c", &n, &junk) == 1) {
       FLAGS_bloom_bits = n;
+    } else if (sscanf(argv[i], "--bloom_bits2=%d%c", &n, &junk) == 1) {
+      FLAGS_bloom2_bits = n;
+    } else if (sscanf(argv[i], "--leveldb_memory=%d%c", &n, &junk) == 1) {
+      FLAGS_leveldb_memory = n * 1024 * 1024LL;
     } else if (sscanf(argv[i], "--open_files=%d%c", &n, &junk) == 1) {
       FLAGS_open_files = n;
+    } else if (sscanf(argv[i], "--compression=%d%c", &n, &junk) == 1) {
+      FLAGS_compression = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
     } else {

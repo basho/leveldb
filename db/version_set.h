@@ -258,7 +258,7 @@ class VersionSet {
           ret_val=(int)throttle;
       else if (0!=penalty)
       {
-          if (throttle<GetUnadjustedThrottleWriteRate())
+          if (1==throttle)
               throttle=GetUnadjustedThrottleWriteRate();
           ret_val=(int)penalty * throttle;
       }   // else if
@@ -390,6 +390,11 @@ protected:
   // Riak allows multiple compaction threads, this mutex allows
   //  only one to write to manifest at a time.  Only used in LogAndApply
   port::Mutex manifest_mutex_;
+
+  volatile uint64_t last_penalty_minutes_;
+  volatile int prev_write_penalty_;
+
+
 
   struct CompactionStatus_s
   {
