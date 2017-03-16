@@ -57,6 +57,9 @@ public:
     // static retrieval of active cache
     static Cache & GetCache();
 
+    // for unit tests, "flush" cache
+    static void Flush();
+
     // test if cache is running (so OS builds know to ignore)
     static bool Valid();
 
@@ -74,6 +77,9 @@ protected:
 
     // accessor to m_Cache pointer (really bad if NULL m_Cache)
     Cache * GetCachePtr() {return(m_Cache);};
+
+    // unit & integration test support to get rid of current cache entries
+    void FlushInternal();
 
     // internal equivalent to static Lookup() function
     Cache::Handle * LookupInternal(const Slice & CompositeBucket);
