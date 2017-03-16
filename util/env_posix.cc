@@ -98,30 +98,45 @@ private:
 class PosixSequentialFile: public SequentialFile {
  private:
   std::string filename_;
-  FILE* file_;
+  int  fd_;
 
  public:
-  PosixSequentialFile(const std::string& fname, FILE* f)
-      : filename_(fname), file_(f) { }
-  virtual ~PosixSequentialFile() { fclose(file_); }
+  PosixSequentialFile(const std::string& fname, int fd)
+      : filename_(fname), fd_(fd) { }
+  virtual ~PosixSequentialFile() { close(fd_); }
 
   virtual Status Read(size_t n, Slice* result, char* scratch) {
     Status s;
-    size_t r = fread_unlocked(scratch, 1, n, file_);
-    *result = Slice(scratch, r);
+    size_t r = 0;
+    size_t remaining = n;
+    ssize_t n_read = 0;
+    while((n - remaining) != n) {
+      n_read = read(fd_, scratch + r, remaining);
+      if(n_read > 0) {
+        r += n_read;
+        remaining -= n_read;
+      } else {
+        if(n_read == -1 && errno == EINTR){
+          continue;
+        } else {
+          break;
+        }
+      }
+    }
     if (r < n) {
-      if (feof(file_)) {
+      if (n_read == 0) {
         // We leave status as ok if we hit the end of the file
       } else {
         // A partial read with an error: return a non-ok status
         s = IOError(filename_, errno);
       }
     }
+    *result = Slice(scratch, r);
     return s;
   }
 
   virtual Status Skip(uint64_t n) {
-    if (fseek(file_, n, SEEK_CUR)) {
+    if (lseek(fd_, n, SEEK_CUR)) {
       return IOError(filename_, errno);
     }
     return Status::OK();
@@ -551,12 +566,12 @@ class PosixEnv : public Env {
 
   virtual Status NewSequentialFile(const std::string& fname,
                                    SequentialFile** result) {
-    FILE* f = fopen(fname.c_str(), "r");
-    if (f == NULL) {
+    int fd = open(fname.c_str(), O_RDONLY);
+    if (fd == -1) {
       *result = NULL;
       return IOError(fname, errno);
     } else {
-      *result = new PosixSequentialFile(fname, f);
+      *result = new PosixSequentialFile(fname, fd);
       return Status::OK();
     }
   }
@@ -773,12 +788,13 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewLogger(const std::string& fname, Logger** result) {
-    FILE* f = fopen(fname.c_str(), "w");
-    if (f == NULL) {
+    int fd = open(fname.c_str(), O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP |
+               S_IWGRP | S_IROTH | S_IWOTH);
+    if (fd == -1) {
       *result = NULL;
       return IOError(fname, errno);
     } else {
-      *result = new PosixLogger(f, &PosixEnv::gettid);
+      *result = new PosixLogger(fd, &PosixEnv::gettid);
       return Status::OK();
     }
   }
