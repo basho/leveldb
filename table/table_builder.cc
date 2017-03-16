@@ -6,12 +6,14 @@
 
 #include <assert.h>
 #include "db/dbformat.h"
+#include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/expiry.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
 #include "leveldb/perf_count.h"
+#include "table/block.h"
 #include "table/block_builder.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -34,7 +36,6 @@ struct TableBuilder::Rep {
   bool closed;          // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
   SstCounters sst_counters;
-
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
   // keys in the index block.  For example, consider a block boundary
@@ -45,11 +46,12 @@ struct TableBuilder::Rep {
   //
   // Invariant: r->pending_index_entry is true only if data_block is empty.
   bool pending_index_entry;
+  uint64_t cache_id;
   BlockHandle pending_handle;  // Handle to add to index block
 
   std::string compressed_output;
 
-  Rep(const Options& opt, WritableFile* f)
+  Rep(const Options& opt, WritableFile* f, uint64_t _cache_id = 0)
       : options(opt),
         index_block_options(opt),
         file(f),
@@ -60,13 +62,14 @@ struct TableBuilder::Rep {
         closed(false),
         filter_block(opt.filter_policy == NULL ? NULL
                      : new FilterBlockBuilder(opt.filter_policy)),
-        pending_index_entry(false) {
+        pending_index_entry(false),
+        cache_id(_cache_id) {
     index_block_options.block_restart_interval = 1;
   }
 };
 
-TableBuilder::TableBuilder(const Options& options, WritableFile* file)
-    : rep_(new Rep(options, file)) {
+TableBuilder::TableBuilder(const Options& options, WritableFile* file, uint64_t cache_id)
+    : rep_(new Rep(options, file, cache_id)) {
   if (rep_->filter_block != NULL) {
     rep_->filter_block->StartBlock(0);
   }
@@ -174,6 +177,12 @@ void TableBuilder::Flush() {
   }
 }
 
+static void DeleteCachedBlock(const Slice& key, void* value) {
+  Block* block = reinterpret_cast<Block*>(value);
+  delete block;
+}
+
+    
 void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]
@@ -186,6 +195,28 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   r->sst_counters.Inc(eSstCountBlocks);
   r->sst_counters.Add(eSstCountBlockSize, raw.size());
 
+  if (0!=r->cache_id)
+  {
+      char cache_key_buffer[16];
+      char * new_mem;
+      Cache::Handle* cache_handle = NULL;
+
+      new_mem=new char[raw.size()];
+      memcpy(new_mem, raw.data(), raw.size());
+      Slice new_slice(new_mem, raw.size());
+      Block * new_block = new Block(new_slice);
+      
+      EncodeFixed64(cache_key_buffer, r->cache_id);
+      EncodeFixed64(cache_key_buffer+8, r->offset);
+      Slice key(cache_key_buffer, sizeof(cache_key_buffer));
+
+      cache_handle = r->options.block_cache->Insert(key, new_block,
+                                                     new_block->size()+key.size(),
+                                                     &DeleteCachedBlock);
+      r->options.block_cache->Release(cache_handle);
+
+  }   // if
+  
   Slice block_contents;
   CompressionType type = r->options.compression;
   // TODO(postrelease): Support more compression options: zlib?
@@ -231,7 +262,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
           block_contents = *compressed;
       }
       else {
-        // Snappy not supported, or compressed less than 12.5%, so just
+        // LZ4 not supported, or compressed less than 12.5%, so just
         // store uncompressed form
         block_contents = raw;
         type = kNoCompression;
@@ -387,4 +418,7 @@ uint64_t TableBuilder::GetExpiryExplicitHigh() const {
   return rep_->sst_counters.Value(eSstCountExpiry3);
 }
 
+uint64_t TableBuilder::GetCacheId() const {
+  return rep_->cache_id;
+}
 }  // namespace leveldb

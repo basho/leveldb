@@ -134,6 +134,11 @@ Options SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.write_buffer_size,         64<<10, 1<<30);
   ClipToRange(&result.block_size,                1<<10,  4<<20);
 
+  // to support precaching of level-0 files, adjust block cache reserved size
+  uint64_t cache_min(src.write_buffer_size * 6);
+  if (src.block_cache_threshold < cache_min)
+      result.block_cache_threshold = cache_min;
+
   // alternate means to change gMapSize ... more generic
   if (0!=src.mmap_size)
       gMapSize=src.mmap_size;
@@ -709,7 +714,8 @@ Status DBImpl::WriteLevel0Table(volatile MemTable* mem, VersionEdit* edit,
     local_options=options_;
     // matthewv Nov 2, 2016 local_options.compression=kNoCompression;
     local_options.block_size=current_block_size_;
-    s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter, &meta, smallest_snapshot);
+    s = BuildTable(dbname_, env_, local_options, user_comparator(), table_cache_, iter,
+                   &meta, smallest_snapshot, IsOkToPreCache(meta.level));
 
     Log(options_.info_log, "Level-0 table #%llu: %llu bytes, %llu keys %s",
         (unsigned long long) meta.number,
@@ -1272,7 +1278,16 @@ Status DBImpl::OpenCompactionOutputFile(
       //  reasonably possible
       if (pagecache_flag)
           compact->outfile->SetMetadataOffset(1);
-      compact->builder = new TableBuilder(options, compact->outfile);
+
+
+    uint64_t cache_id;
+
+    if (IsOkToPreCache(compact->compaction->level()+1))
+        cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
+    else
+        cache_id = 0;
+
+    compact->builder = new TableBuilder(options, compact->outfile, cache_id);
   }   // if
 
   return s;
@@ -1452,8 +1467,10 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->current_output()->exp_write_low = compact->builder->GetExpiryWriteLow();
   compact->current_output()->exp_write_high = compact->builder->GetExpiryWriteHigh();
   compact->current_output()->exp_explicit_high = compact->builder->GetExpiryExplicitHigh();
+#if 0
   delete compact->builder;
   compact->builder = NULL;
+#endif
 
   // Finish and check for file errors
   if (s.ok()) {
@@ -1466,6 +1483,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->outfile = NULL;
 
   if (s.ok() && current_entries > 0) {
+#if 0
     // Verify that the table is usable
     Table * table_ptr;
     Iterator* iter = table_cache_->NewIterator(ReadOptions(),
@@ -1481,6 +1499,17 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
     // table_ptr invalidated by this delete
     delete iter;
+#else
+    Cache::Handle * handle;
+    // use FindTable so as to give cache_id
+    s = table_cache_->FindTable(output_number, current_bytes, compact->compaction->level()+1,
+                               &handle, false, false, compact->builder->GetCacheId());
+    /// add code to read filter
+    table_cache_->Release(handle);
+    delete compact->builder;
+    compact->builder = NULL;
+
+#endif
 
     if (s.ok()) {
       Log(options_.info_log,
@@ -2412,5 +2441,43 @@ DBImpl::IsCompactionScheduled()
         flag=versions_->IsCompactionSubmitted(level);
     return(flag || NULL!=imm_ || hotbackup_pending_);
 }   // DBImpl::IsCompactionScheduled
+
+// Review size of write buffer and current size of
+//  block cache to see if reasonable to precache this
+//  this upcoming compaction
+bool
+DBImpl::IsOkToPreCache(
+    int Level)            // destination level
+{
+    bool ret_flag;
+
+    // currently only precaching into 0, 1, 2
+    //  (overlap levels and landing level)
+    ret_flag=(Level <= config::kNumOverlapLevels);
+
+    // now test size of block cache
+    if (ret_flag)
+    {
+        size_t est_limit;
+        int loop;
+
+        est_limit=options_.write_buffer_size;
+
+        // raise kLO_CompactionTrigger to power of level
+        for (loop=0; loop<Level; ++loop)
+            est_limit*=4; //config::kL0_CompactionTrigger;
+
+        ret_flag=(est_limit < double_cache.GetCapacity(false)/*/2*/);
+
+        if (ret_flag)
+            gPerfCounters->Inc(ePerfDebug1);
+        else
+            gPerfCounters->Inc(ePerfDebug2);
+
+    }   // if
+
+    return(ret_flag);
+
+}   // DBImpl::IsOkToPreCache
 
 }  // namespace leveldb

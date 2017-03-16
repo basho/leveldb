@@ -25,7 +25,8 @@ Status BuildTable(const std::string& dbname,
                   TableCache* table_cache,
                   Iterator* iter,
                   FileMetaData* meta,
-                  SequenceNumber smallest_snapshot) {
+                  SequenceNumber smallest_snapshot,
+                  bool pre_cache) {
   Status s;
   size_t keys_seen, keys_retired;
 
@@ -51,7 +52,14 @@ Status BuildTable(const std::string& dbname,
     //  (compaction of unsorted files causes severe cache misses)
     file->SetMetadataOffset(1);
 
-    TableBuilder* builder = new TableBuilder(options, file);
+    uint64_t cache_id;
+
+    if (pre_cache)
+        cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
+    else
+        cache_id = 0;
+
+    TableBuilder* builder = new TableBuilder(options, file, cache_id);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       ++keys_seen;
@@ -95,6 +103,7 @@ Status BuildTable(const std::string& dbname,
 
     if (s.ok()) {
       // Verify that the table is usable
+#if 0
       Table * table_ptr;
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
@@ -110,6 +119,14 @@ Status BuildTable(const std::string& dbname,
 
       // table_ptr is owned by it and therefore invalidated by this delete
       delete it;
+#else
+      Cache::Handle * handle;
+      // use FindTable so as to give cache_id
+      s = table_cache->FindTable(meta->number, meta->file_size, meta->level,
+                                 &handle, false, false, cache_id);
+      /// add code to read filter
+      table_cache->Release(handle);
+#endif      
     }
   }
 
