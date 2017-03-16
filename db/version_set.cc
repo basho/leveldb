@@ -1304,11 +1304,10 @@ VersionSet::UpdatePenalty(
 
     for (int level = 0; level < config::kNumLevels-1; ++level)
     {
-        int loop, count, value, increment;
+        int loop, count, value;
 
         value=0;
         count=0;
-        increment=0;
 
         if (gLevelTraits[level].m_OverlappedFiles)
         {
@@ -1336,7 +1335,6 @@ VersionSet::UpdatePenalty(
                     if (0==level)
                     {   // non-linear penalty
                         value=2;
-                        increment=8;  // currently unused
                     }   // if
                     else
                     {   // slightly less penalty
@@ -1357,9 +1355,6 @@ VersionSet::UpdatePenalty(
 	        // how many compaction behind
                 value=(level_bytes-gLevelTraits[level].m_MaxBytesForLevel) / options_->write_buffer_size;
                 value+=1;
-                increment=2;
-                Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, overflow: %llu",
-                        value, count, options_->write_buffer_size, level_bytes-gLevelTraits[level].m_MaxBytesForLevel);
             }   // if
 
             // this penalty is about reducing write amplification, its
@@ -1369,7 +1364,6 @@ VersionSet::UpdatePenalty(
                 && gLevelTraits[level].m_DesiredBytesForLevel < level_bytes)
             {
                 // this approximates the number of compactions needed, no other penalty
-//                value=(level_bytes / gLevelTraits[level].m_DesiredBytesForLevel);
                 value=(int)(static_cast<double>(level_bytes-gLevelTraits[level].m_DesiredBytesForLevel) / options_->write_buffer_size);
 
 		// how urgent is the need to clear this level before next flood
@@ -1379,19 +1373,10 @@ VersionSet::UpdatePenalty(
                 // only throttle if backlog on the horizon
                 if (count < 0)
                     value=0;
-                else
-                Log(options_->info_log,"UpdatePenalty: value: %d, count: %d, buffer: %zd, level_bytes: %llu",
-                        value, count, options_->write_buffer_size, level_bytes);
-                increment=2;
             }   // else if
 
         }   // else
 
-//        for (loop=0; loop<count; ++loop)
-//            value*=increment;
-
-//            value*=count;
-        
         penalty+=value;
 
     }   // for
@@ -1401,28 +1386,23 @@ VersionSet::UpdatePenalty(
         penalty=1000;
 
     uint64_t temp_min;
-//    temp_min=GetTimeMinutes();
-    temp_min=env_->NowMicros();
+    temp_min=port::TimeMicros();
 
-    if (last_penalty_minutes_<temp_min/* || 0==penalty*/)
+    if (last_penalty_minutes_<temp_min)
     {
-        Log(options_->info_log,"UpdatePenalty timer: %d, %d", penalty, prev_write_penalty_);
         last_penalty_minutes_=temp_min+15*1000000;
-        
-#if 1
+
+
         if (prev_write_penalty_<penalty)
             prev_write_penalty_+=(penalty - prev_write_penalty_)/7 +1;
         else
             prev_write_penalty_-=(prev_write_penalty_ - penalty)/5 +1;
-#endif
+
         if (prev_write_penalty_ < 0)
             prev_write_penalty_ = 0;
     }   // if
 
     v->write_penalty_=prev_write_penalty_;
-
-// mutex_ held.    Log(options_->info_log,"UpdatePenalty: %d", penalty);
-    if (0!=penalty || 0!=prev_write_penalty_) Log(options_->info_log,"UpdatePenalty: %d, %d", penalty, prev_write_penalty_);
 
     return;
 
