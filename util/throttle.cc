@@ -130,7 +130,7 @@ ThrottleThread(
     {
         // update our global clock, not intended to be a precise
         //  60 second interval.
-        gCurrentTime=port::TimeUint64();
+        gCurrentTime=port::TimeMicros();
 
         //
         // This is code polls for existance of /etc/riak/perf_counters and sets
@@ -256,7 +256,7 @@ ThrottleThread(
             gUnadjustedThrottleRate=new_unadjusted;
 
 	    // Log(NULL, "ThrottleRate %" PRIu64 ", UnadjustedThrottleRate %" PRIu64, gThrottleRate, gUnadjustedThrottleRate);
-	    
+
             gPerfCounters->Set(ePerfThrottleGauge, gThrottleRate);
             gPerfCounters->Add(ePerfThrottleCounter, gThrottleRate*THROTTLE_SECONDS);
             gPerfCounters->Set(ePerfThrottleUnadjusted, gUnadjustedThrottleRate);
