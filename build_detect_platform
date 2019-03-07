@@ -68,7 +68,7 @@ case "$TARGET_OS" in
         IFS="$oIFS"
         if [ "$1" -ge 13 ]; then
             # assume clang compiler
-            COMMON_FLAGS="-mmacosx-version-min=10.8 -DOS_MACOSX"
+            COMMON_FLAGS="-mmacosx-version-min=10.8 -DOS_MACOSX -stdlib=libc++"
             PLATFORM_LDFLAGS="-mmacosx-version-min=10.8"
         else
             COMMON_FLAGS="-fno-builtin-memcmp -DOS_MACOSX"
