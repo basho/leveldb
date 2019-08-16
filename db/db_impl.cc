@@ -226,6 +226,10 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 DBImpl::~DBImpl() {
   DBList()->ReleaseDB(this, options_.is_internal_db);
 
+  // maybe push memory buffer(s) to disk if recovery log disabled
+  if (options_.disable_recovery_log)
+      CompactMemTableSynchronous();
+
   // Wait for background work to finish
   mutex_.Lock();
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
@@ -1832,10 +1836,13 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     // into mem_.
     {
       mutex_.Unlock();
-      status = log_->AddRecord(WriteBatchInternal::Contents(updates));
-      if (status.ok() && options.sync) {
-        status = logfile_->Sync();
-      }
+      if (!options_.disable_recovery_log)
+      {
+        status = log_->AddRecord(WriteBatchInternal::Contents(updates));
+        if (status.ok() && options.sync) {
+          status = logfile_->Sync();
+        } // if
+      } // if
       if (status.ok()) {
         status = WriteBatchInternal::InsertInto(updates, mem_, &options_);
       }
@@ -2019,7 +2026,8 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "waiting 2...\n");
       gPerfCounters->Inc(ePerfWriteWaitImm);
       MaybeScheduleCompaction();
-      if (!shutting_down_.Acquire_Load())
+      while (imm_ != NULL && bg_error_.ok()
+             && !shutting_down_.Acquire_Load())
           bg_cv_.Wait();
       Log(options_.info_log, "running 2...\n");
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
@@ -2072,18 +2080,28 @@ Status DBImpl::NewRecoveryLog(
     Status s;
     WritableFile * lfile(NULL);
 
-    s = env_->NewWriteOnlyFile(LogFileName(dbname_, NewLogNumber), &lfile,
-                               options_.env->RecoveryMmapSize(&options_));
-    if (s.ok())
+    if (!options_.disable_recovery_log)
     {
-        // close any existing
-        delete log_;
-        delete logfile_;
+        s = env_->NewWriteOnlyFile(LogFileName(dbname_, NewLogNumber), &lfile,
+                               options_.env->RecoveryMmapSize(&options_));
+        if (s.ok())
+        {
+            // close any existing
+            delete log_;
+            delete logfile_;
 
-        logfile_ = lfile;
-        logfile_number_ = NewLogNumber;
-        log_ = new log::Writer(lfile);
+            logfile_ = lfile;
+            logfile_number_ = NewLogNumber;
+            log_ = new log::Writer(lfile);
+        }   // if
     }   // if
+
+    // keep asserts valid
+    else
+    {
+        logfile_number_ = NewLogNumber;
+    }   // else
+
 
     return(s);
 
