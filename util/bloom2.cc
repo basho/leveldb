@@ -111,7 +111,7 @@ const FilterPolicy* NewBloomFilterPolicy2(int bits_per_key) {
 // container to hold one bloom filter and auto destruct
 struct BloomInventoryItem2
 {
-    std::auto_ptr<const FilterPolicy> m_Item;
+    std::unique_ptr<const FilterPolicy> m_Item;
 
     BloomInventoryItem2()
     {
