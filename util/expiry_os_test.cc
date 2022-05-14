@@ -1451,7 +1451,7 @@ TEST(ExpiryDBTester, Simple)
     Status s;
     sExpiryDBObject * cursor;
     std::string buffer;
-    std::auto_ptr<leveldb::Iterator> iterator;
+    std::unique_ptr<leveldb::Iterator> iterator;
 
     // enable compaction expiry
     m_Expiry->expiry_enabled=true;
