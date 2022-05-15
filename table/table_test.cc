@@ -826,9 +826,9 @@ TEST(TableTest, ApproximateOffsetOfCompressed) {
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("abc"),       0,      0));
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("k01"),       0,      0));
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("k02"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k03"),    2000,   3000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k04"),    2000,   3000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"),    4000,   6000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k03"),    2000,   3500));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k04"),    2000,   3500));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"),    4000,   6500));
 }
 
 }  // namespace leveldb
