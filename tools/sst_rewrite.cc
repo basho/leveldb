@@ -223,8 +223,8 @@ main(
             {
                 leveldb::WritableFile * outfile;
                 leveldb::Status s;
-                std::auto_ptr<leveldb::Iterator> it;
-                std::auto_ptr<leveldb::TableBuilder> builder;
+                std::unique_ptr<leveldb::Iterator> it;
+                std::unique_ptr<leveldb::TableBuilder> builder;
 
                 LDbTable in_file(options, fname);
 
