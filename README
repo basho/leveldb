@@ -4,7 +4,7 @@ Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
 The original Google README is now README.GOOGLE.
 
 ** Introduction
-
+###
 This repository contains the Google source code as modified to benefit
 the Riak environment.  The typical Riak environment has two attributes
 that necessitate leveldb adjustments, both in options and code:
